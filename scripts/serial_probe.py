@@ -92,47 +92,92 @@ class Console:
         # write_timeout is what makes this safe: after a failed WiFi power-on
         # the tablet stops draining its endpoint, and a write with no timeout
         # blocks forever inside the kernel with no way out.
+        # Keep sweeping.  The 2008 window opening and the ttyACM nodes becoming
+        # usable are seconds apart: the gadget enumerates, then the ACM nodes
+        # appear, then the far-side shell actually starts reading them.  A single
+        # pass at window-open time reliably finds nothing.
+        deadline = time.time() + max(30, timeout)
+        while time.time() < deadline:
+            try:
+                if self._sweep():
+                    return True
+            except PermissionError:
+                return False
+        print("no answering console on %s after %ds"
+              % (", ".join(self._candidates()) or "no /dev/ttyACM*", max(30, timeout)))
+        return False
+
+    def _sweep(self):
+        """One pass over every ACM node; True if one of them answered.
+
+        This has to be FAST -- a pass used to take ~7s, most of it sleeps and a
+        3s listen per port, which is far too coarse to tell "not up yet" from
+        "not coming up" and too slow to catch the console early in a boot.  A
+        pass is now ~0.75s: nothing sleeps, the write timeout is short, and the
+        listen is a fraction of a second.  The loop just runs again.  All the
+        setup work (Ctrl-C, stty -echo) happens *after* a port answers, where it
+        costs nothing.
+        """
         for port in self._candidates():
             try:
-                s = serial.Serial(port, self.baud, timeout=1, write_timeout=5)
+                s = serial.Serial(port, self.baud, timeout=0.1, write_timeout=0.4)
             except Exception as e:
                 if "Permission" in str(e):
                     print("open %s failed: %s" % (port, e))
                     print("hint: run `make udev` once, then replug - avoids needing sudo")
-                    return False
+                    raise PermissionError(port)
                 continue
-            time.sleep(0.3)
+            answered = False
             try:
-                # Ctrl-C first: a previous run that died mid-chunk can leave the
-                # shell at a `> ` continuation prompt, where every later command
-                # is swallowed as the tail of an unterminated quoted string.
-                s.write(b"\x03\n")
-                s.flush()
-                time.sleep(0.2)
-                s.reset_input_buffer()
-                # echo off, so output isn't doubled back at us
-                s.write(b"stty -echo 2>/dev/null\n")
-                s.flush()
-                time.sleep(0.3)
                 s.reset_input_buffer()
                 s.write(b"\nprintf '%s%s\\n' __WPD _HELLO__\n")
                 s.flush()
+                answered = self._hears(s, "__WPD_HELLO__", timeout=0.4)
             except Exception:
-                try:
-                    s.close()
-                except Exception:
-                    pass
-                continue
-            if self._hears(s, "__WPD_HELLO__"):
+                answered = False
+            if answered:
+                self._settle(s)
                 self.port = port
                 self.s = s
                 return True
+            self._discard(s)
+        return False
+
+    @staticmethod
+    def _discard(s):
+        """Close a port that did not answer, without blocking on it.
+
+        A wedged endpoint has undelivered bytes sitting in the kernel's TX
+        buffer, and close() waits for those to drain -- forever, since nothing
+        on the far side is reading.  Drop them first.
+        """
+        for step in (s.cancel_write, s.reset_output_buffer, s.reset_input_buffer,
+                     s.close):
             try:
-                s.close()
+                step()
             except Exception:
                 pass
-        print("no answering console on %s" % ", ".join(self._candidates()))
-        return False
+
+    def _settle(self, s):
+        """Quiet a port that has just answered, before any real command runs."""
+        try:
+            # Ctrl-C first: a previous run that died mid-chunk can leave the
+            # shell at a `> ` continuation prompt, where every later command is
+            # swallowed as the tail of an unterminated quoted string.
+            s.write(b"\x03\n")
+            s.flush()
+            time.sleep(0.2)
+            s.reset_input_buffer()
+            # echo off, so output isn't doubled back at us
+            s.write(b"stty -echo 2>/dev/null\n")
+            s.flush()
+            time.sleep(0.3)
+            s.reset_input_buffer()
+        except Exception:
+            pass
+        # restore the working timeouts the command loop expects
+        s.timeout = 1
+        s.write_timeout = 5
 
     def _candidates(self):
         found = sorted(glob.glob("/dev/ttyACM*"))

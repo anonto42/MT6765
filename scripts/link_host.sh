@@ -30,6 +30,16 @@ case "$cmd" in
     ping -c 3 -W 2 "$DEV_RNDIS_IP" || echo "no RNDIS reply"
     echo "== ARP on $RNDIS_HOST_IF =="
     ip neigh show dev "$RNDIS_HOST_IF"
+    # The firmware starts telnetd (root, no password) and sometimes dropbear at
+    # boot.  Either one is a way in that does not involve the serial console,
+    # which wedges often enough that this is the more dependable path.
+    for ip in "$DEV_ECM_IP" "$DEV_RNDIS_IP"; do
+      for port in 23 22; do
+        if timeout 2 bash -c "exec 3<>/dev/tcp/$ip/$port" 2>/dev/null; then
+          echo "OPEN $ip:$port"
+        fi
+      done
+    done
     ;;
   down)
     ip addr flush dev "$ECM_HOST_IF" 2>/dev/null || true
