@@ -1,0 +1,23 @@
+# WalPad 8G (MT6765) — let the local user talk to the tablet without sudo.
+#
+# Install:  sudo cp scripts/99-walpad.rules /etc/udev/rules.d/
+#           sudo udevadm control --reload-rules && sudo udevadm trigger
+#           (no replug needed — trigger re-applies MODE to the live device)
+#
+# TAG+="uaccess" is the polite way (logind ACL for the seat user), but it only
+# fires for a real local seat session.  Over SSH / a non-seat session it does
+# nothing, which is exactly what stalled this project for two sessions.  So we
+# also set MODE="0666" outright: this is a single-user workstation and the
+# alternative is typing a sudo password inside a boot window that lasts seconds.
+
+# BROM
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="0003", MODE="0666", TAG+="uaccess"
+# preloader
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="2000", MODE="0666", TAG+="uaccess"
+# WalPad-Server gadget
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="2008", MODE="0666", TAG+="uaccess"
+# any MediaTek device, catch-all
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", MODE="0666", TAG+="uaccess"
+
+# the CDC-ACM consoles the server firmware exposes
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess"

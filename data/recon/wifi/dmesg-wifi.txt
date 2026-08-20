@@ -1,0 +1,11 @@
+# wifi/dmesg-wifi   2026-08-19 00:10:56
+# $ dmesg 2>/dev/null | grep -iE 'wlan|wifi|mt66|mt76|conn(sys|infra)|wmt|cfg80211' | tail -40
+
+dmesg 2>/dev/null | grep -iE 'wlan|wifi|mt66|mt76|conn(sys|infra)|wmt|cfg802
+11' | tail -40
+[    0.000000] -(0)[0:swapper]OF: reserved mem: initialized node wifi-reserve-memory, compatible id shared-dma-pool
+[    0.426033]  (2)[1:swapper/0]platform 18000000.wifi: assigned reserved memory node wifi-reserve-memory
+[    1.579173]  (3)[1:swapper/0]cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    1.580620]  (1)[1:swapper/0]cfg80211: Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    1.580725]  (1)[54:kworker/1:1]cfg80211: failed to load regulatory.db
+/ # echo

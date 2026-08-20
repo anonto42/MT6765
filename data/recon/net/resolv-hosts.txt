@@ -1,0 +1,5 @@
+# net/resolv-hosts   2026-08-19 00:12:42
+# $ cat /etc/resolv.conf /etc/hosts 2>&1
+
+cat: can't open '/etc/resolv.conf': No such file or directory
+cat: can't open '/etc/hosts': No such file or directory

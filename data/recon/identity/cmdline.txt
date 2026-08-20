@@ -1,0 +1,4 @@
+# identity/cmdline   2026-08-19 00:12:41
+# $ cat /proc/cmdline
+
+console=tty0 console=ttyS0,921600n1 vmalloc=400M slub_debug=OFZPU page_owner=on swiotlb=noforce androidboot.hardware=mt6765 maxcpus=8 loop.max_part=7 firmware_class.path=/vendor/firmware has_battery_removed=0 androidboot.boot_devices=bootdevice,soc/11230000.mmc,11230000.mmc ramoops.mem_address=0x47c90000 ramoops.mem_size=0xe0000 ramoops.pmsg_size=0x10000 ramoops.console_size=0x40000 bootopt=64S3,32N2,64N2 buildvariant=user root=/dev/ram  androidboot.slot_suffix=_a androidboot.slot=a androidboot.verifiedbootstate=orange androidboot.atm=disabled androidboot.force_normal_boot=1 androidboot.meta_log_disable=0 mtk_printk_ctrl.disable_uart=1 androidboot.serialno=WPXP2208SLF522199834 androidboot.bootreason=reboot_longkey gpt=1 usb2jtag_mode=0 androidboot.dtb_idx=0 androidboot.dtbo_idx=0

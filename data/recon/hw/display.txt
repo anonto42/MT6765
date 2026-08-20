@@ -1,0 +1,8 @@
+# hw/display   2026-08-19 00:12:42
+# $ ls /sys/class/graphics/ /sys/class/drm/ /dev/fb* 2>&1
+
+/dev/fb0
+/sys/class/drm/:
+card0       renderD128  ttm         version
+/sys/class/graphics/:
+fb0

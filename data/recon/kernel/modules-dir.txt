@@ -1,0 +1,6 @@
+# kernel/modules-dir   2026-08-19 00:10:55
+# $ ls -R /lib/modules 2>&1 | head -60
+
+ls -R /lib/modules 2>&1 | head -60
+ls: /lib/modules: No such file or directory
+/ # echo

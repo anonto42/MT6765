@@ -1,0 +1,23 @@
+# console access check  (2026-08-18T22:31:13+06:00)
+crw-rw---- 1 root uucp 166, 0 Aug 18 22:25 /dev/ttyACM0
+crw-rw---- 1 root uucp 166, 1 Aug 18 22:25 /dev/ttyACM1
+
+/dev/ttyACM0: NO ACCESS - run 'make udev' then replug
+    # file: dev/ttyACM0
+    # owner: root
+    # group: uucp
+    user::rw-
+    group::rw-
+    other::---
+    
+/dev/ttyACM1: NO ACCESS - run 'make udev' then replug
+    # file: dev/ttyACM1
+    # owner: root
+    # group: uucp
+    user::rw-
+    group::rw-
+    other::---
+    
+
+user groups: sohidul sys network docker nopasswdlogin rfkill users video storage lp audio wheel
+udev rule installed: NO

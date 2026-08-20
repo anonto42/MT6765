@@ -1,0 +1,9 @@
+# wifi/firmware-path   2026-08-19 00:10:56
+# $ cat /sys/module/firmware_class/parameters/path 2>&1; echo '--- /lib/firmware:'; ls -R /lib/firmware 2>&1 | head -40
+
+cat /sys/module/firmware_class/parameters/path 2>&1; echo '--- /lib/firmware
+:'; ls -R /lib/firmware 2>&1 | head -40
+/vendor/firmware
+--- /lib/firmware:
+ls: /lib/firmware: No such file or directory
+/ # echo

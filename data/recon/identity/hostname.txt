@@ -1,0 +1,5 @@
+# identity/hostname   2026-08-19 00:12:41
+# $ hostname 2>/dev/null; cat /proc/sys/kernel/hostname
+
+(none)
+(none)

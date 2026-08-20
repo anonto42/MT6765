@@ -1,0 +1,4 @@
+# identity/uname   2026-08-19 00:12:41
+# $ uname -a
+
+Linux (none) 4.19.127 #1 SMP PREEMPT Fri May 6 19:07:29 CST 2022 aarch64 GNU/Linux

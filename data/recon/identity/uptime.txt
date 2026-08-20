@@ -1,0 +1,5 @@
+# identity/uptime   2026-08-19 00:12:41
+# $ cat /proc/uptime; uptime 2>/dev/null
+
+197.15 1561.56
+ 13:35:56 up 3 min,  0 users,  load average: 10.95, 5.63, 2.24

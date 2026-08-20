@@ -1,0 +1,6 @@
+# storage/df   2026-08-19 00:12:42
+# $ df -h 2>&1
+
+Filesystem                Size      Used Available Use% Mounted on
+tmpfs                     1.9G         0      1.9G   0% /dev
+tmpfs                     1.9G         0      1.9G   0% /tmp

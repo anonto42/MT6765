@@ -1,0 +1,77 @@
+# userspace/bin   2026-08-19 00:12:42
+# $ ls /bin /sbin /usr/bin /usr/sbin 2>&1
+
+ls: /sbin: No such file or directory
+/bin:
+[                  fold               mkswap             svc
+[[                 free               mktemp             svok
+acpid              freeramdisk        modinfo            swapoff
+adjtimex           fsfreeze           modprobe           swapon
+ar                 fstrim             more               switch_root
+arch               ftpget             mount              sync
+arp                ftpput             mt                 sysctl
+arping             getopt             mv                 syslogd
+ascii              getty              nameif             tac
+ash                grep               nc                 tail
+awk                groups             netstat            tar
+base64             gunzip             nl                 taskset
+basename           gzip               nologin            tc
+bc                 halt               nproc              tee
+blkdiscard         head               nsenter            telnet
+blockdev           hexdump            nslookup           telnetd
+brctl              hostid             nuke               test
+bunzip2            hostname           od                 tftp
+busybox            httpd              openvt             time
+bzcat              hwclock            partprobe          timeout
+bzip2              i2cdetect          passwd             top
+cal                i2cdump            paste              touch
+cat                i2cget             patch              tr
+chgrp              i2cset             pidof              traceroute
+chmod              i2ctransfer        ping               traceroute6
+chown              id                 ping6              true
+chroot             ifconfig           pivot_root         truncate
+chvt               ifdown             poweroff           ts
+clear              ifup               printf             tty
+cmp                init               ps                 tunctl
+cp                 insmod             pwd                ubirename
+cpio               ionice             rdate              udhcpc
+crc32              ip                 readlink           udhcpd
+crond              ipcalc             realpath           uevent
+crontab            ipneigh            reboot             umount
+cttyhack           kill               renice             uname
+cut                killall            reset              uncompress
+date               klogd              resume             unexpand
+dc                 last               rev                uniq
+dd                 less               rm                 unix2dos
+deallocvt          link               rmdir              unlink
+depmod             linux32            rmmod              unlzma
+devmem             linux64            route              unshare
+df                 linuxrc            rpm                unxz
+diff               ln                 rpm2cpio           unzip
+dirname            loadfont           run-init           uptime
+dmesg              loadkmap           run-parts          usleep
+dnsdomainname      logger             sed                uudecode
+dos2unix           login              seq                uuencode
+dpkg               logname            setkeycodes        vconfig
+dpkg-deb           logread            setpriv            vi
+du                 losetup            setsid             w
+dumpkmap           ls                 sh                 watch
+dumpleases         lsmod              sha1sum            watchdog
+echo               lsscsi             sha256sum          wc
+ed                 lzcat              sha3sum            wget
+egrep              lzma               sha512sum          which
+env                lzop               shred              who
+expand             md5sum             shuf               whoami
+expr               mdev               sleep              xargs
+factor             microcom           sort               xxd
+fallocate          mim                ssl_client         xz
+false              mkdir              start-stop-daemon  xzcat
+fatattr            mkdosfs            stat               yes
+fdisk              mke2fs             strings            zcat
+fgrep              mkfifo             stty
+find               mknod              su
+findfs             mkpasswd           sulogin
+/usr/bin:
+dropbearkey
+/usr/sbin:
+dropbear

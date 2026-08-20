@@ -1,0 +1,83 @@
+# storage/mmc   2026-08-19 00:12:42
+# $ for d in /sys/class/mmc_host/*/*/; do echo "== $d"; for a in name type cid csd serial manfid oemid fwrev hwrev; do printf '  %-8s %s\n' $a "$(cat $d/$a 2>/dev/null)"; done; done
+
+== /sys/class/mmc_host/mmc0/device/
+  name
+  type
+  cid
+  csd
+  serial
+  manfid
+  oemid
+  fwrev
+  hwrev
+== /sys/class/mmc_host/mmc0/mmc0:0001/
+  name     HCG8a4
+  type     MMC
+  cid      90014a484347386134a429a355cc55c9
+  csd      d02701328f5903ffffffffef8a400027
+  serial   0x29a355cc
+  manfid   0x000090
+  oemid    0x014a
+  fwrev    0xa400000000000000
+  hwrev    0x0
+== /sys/class/mmc_host/mmc0/power/
+  name
+  type
+  cid
+  csd
+  serial
+  manfid
+  oemid
+  fwrev
+  hwrev
+== /sys/class/mmc_host/mmc0/subsystem/
+  name
+  type
+  cid
+  csd
+  serial
+  manfid
+  oemid
+  fwrev
+  hwrev
+== /sys/class/mmc_host/mmc1/device/
+  name
+  type
+  cid
+  csd
+  serial
+  manfid
+  oemid
+  fwrev
+  hwrev
+== /sys/class/mmc_host/mmc1/mmc1:0001/
+  name     SD16G
+  type     SD
+  cid      003432534431364720000005a001164b
+  csd      400e00325b590000749f7f800a400039
+  serial   0x000005a0
+  manfid   0x000000
+  oemid    0x3432
+  fwrev    0x0
+  hwrev    0x2
+== /sys/class/mmc_host/mmc1/power/
+  name
+  type
+  cid
+  csd
+  serial
+  manfid
+  oemid
+  fwrev
+  hwrev
+== /sys/class/mmc_host/mmc1/subsystem/
+  name
+  type
+  cid
+  csd
+  serial
+  manfid
+  oemid
+  fwrev
+  hwrev

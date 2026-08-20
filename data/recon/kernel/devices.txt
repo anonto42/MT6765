@@ -1,0 +1,82 @@
+# kernel/devices   2026-08-19 00:10:56
+# $ cat /proc/devices
+
+cat /proc/devices
+Character devices:
+  1 mem
+  4 ttyS
+  5 /dev/tty
+  5 /dev/console
+  5 /dev/ptmx
+ 10 misc
+ 13 input
+ 29 fb
+ 81 video4linux
+108 ppp
+116 alsa
+128 ptm
+136 pts
+160 Vcodec
+166 ttyACM
+180 usb
+182 sec
+189 usb_device
+226 drm
+234 ttyHS
+235 hall_dev
+236 ccu
+237 flashlight
+238 CAM_CAL_DRV
+239 camera-fdvt
+240 camera-dpe
+241 camera-isp
+242 mtk_disp_mgr
+243 bsg
+244 watchdog
+245 tee
+246 iio
+247 media
+248 rtc
+249 mtk_cmdq
+250 gz_ipc_mod
+251 ccci_md_sta
+252 sensor
+253 MTK_SMI
+254 gpiochip
+500 kd_camera_hw
+501 MT_pmic_adc_cali
+502 ccci
+503 ccci_fsm
+504 rpmb
+505 binder
+506 hidraw
+507 rpmb
+508 MAIN2AF
+509 MAINAF
+510 ttyGS
+511 uio
+Block devices:
+  1 ramdisk
+  7 loop
+  8 sd
+ 65 sd
+ 66 sd
+ 67 sd
+ 68 sd
+ 69 sd
+ 70 sd
+ 71 sd
+128 sd
+129 sd
+130 sd
+131 sd
+132 sd
+133 sd
+134 sd
+135 sd
+179 mmc
+252 device-mapper
+253 zram
+254 virtblk
+259 blkext
+/ # echo

@@ -1,0 +1,9 @@
+# power/charger   2026-08-19 00:12:42
+# $ ls /sys/class/power_supply/ 2>&1; cat /proc/mtk_battery_cmd/* 2>/dev/null | head -40
+
+ac                  mtk-master-charger  usb
+battery             mtk-slave-charger
+mtk-gauge           mtk_charger_type
+0 0
+1
+0

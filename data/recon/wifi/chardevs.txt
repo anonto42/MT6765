@@ -1,0 +1,11 @@
+# wifi/chardevs   2026-08-19 00:10:56
+# $ ls -l /dev/wmtWifi /dev/stpwmt /dev/conninfra_dev /dev/wmtdetect /dev/wmtBT 2>&1
+
+ls -l /dev/wmtWifi /dev/stpwmt /dev/conninfra_dev /dev/wmtdetect /dev/wmtBT
+2>&1
+ls: /dev/wmtWifi: No such file or directory
+ls: /dev/stpwmt: No such file or directory
+ls: /dev/conninfra_dev: No such file or directory
+ls: /dev/wmtdetect: No such file or directory
+ls: /dev/wmtBT: No such file or directory
+/ # echo

@@ -1,0 +1,30 @@
+# kernel/sysclass   2026-08-19 00:10:56
+# $ ls /sys/class/
+
+ls /sys/class/
+CAM_CALdrv1           graphics              rtc
+Charger Algorithm     gz_ipc_mod            scsi_device
+Charging Adapter      hall_info             scsi_disk
+DPEdrv                hidraw                scsi_host
+MTK_SMI               ieee80211             sec
+MT_pmic_adc_cali      input                 sensor
+Vcodec                iommu                 sensordrv
+Vcodec2               ispdrv                sound
+actuatordrv_main2_af  leds                  spi_master
+actuatordrv_main_af   mdio_bus              stm
+android_usb           mem                   stm_source
+bdi                   misc                  switching_charger
+block                 mmc_host              tee
+bluetooth             mtk_cmdq              thermal
+bsg                   mtk_disp_mgr          tty
+camera-fdvt           net                   udc
+ccci_md_sta           phy                   uio
+ccci_node             power_supply          usb_boost
+ccudrv                ppp                   usb_rawbulk
+devfreq               pwm                   video4linux
+dma                   regulator             virtio-ports
+drm                   rfkill                wakeup
+extcon                rpmb                  watchdog
+flashlight            rpmb_dummy            xt_idletimer
+flashlight_core       rt5509_cal            zram-control
+/ # echo

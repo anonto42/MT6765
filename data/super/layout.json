@@ -1,0 +1,84 @@
+{
+  "slot": 0,
+  "block_devices": [
+    {
+      "name": "super",
+      "first_logical_sector": 2048,
+      "size": 4294967296
+    }
+  ],
+  "partitions": [
+    {
+      "name": "product_a",
+      "attributes": 1,
+      "extents": [
+        {
+          "type": "linear",
+          "byte_offset": 1048576,
+          "byte_length": 1994551296
+        }
+      ],
+      "size": 1994551296,
+      "contiguous": true
+    },
+    {
+      "name": "product_b",
+      "attributes": 1,
+      "extents": [],
+      "size": 0,
+      "contiguous": false
+    },
+    {
+      "name": "vendor_a",
+      "attributes": 1,
+      "extents": [
+        {
+          "type": "linear",
+          "byte_offset": 1996488704,
+          "byte_length": 305889280
+        }
+      ],
+      "size": 305889280,
+      "contiguous": true
+    },
+    {
+      "name": "vendor_b",
+      "attributes": 1,
+      "extents": [],
+      "size": 0,
+      "contiguous": false
+    },
+    {
+      "name": "system_a",
+      "attributes": 1,
+      "extents": [
+        {
+          "type": "linear",
+          "byte_offset": 2302672896,
+          "byte_length": 1202814976
+        }
+      ],
+      "size": 1202814976,
+      "contiguous": true
+    },
+    {
+      "name": "system_b",
+      "attributes": 1,
+      "extents": [
+        {
+          "type": "linear",
+          "byte_offset": 3506438144,
+          "byte_length": 91815936
+        }
+      ],
+      "size": 91815936,
+      "contiguous": true
+    }
+  ],
+  "geometry": {
+    "metadata_max_size": 65536,
+    "metadata_slot_count": 3,
+    "logical_block_size": 4096,
+    "geometry_offset": 4096
+  }
+}

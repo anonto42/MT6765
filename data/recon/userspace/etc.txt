@@ -1,0 +1,11 @@
+# userspace/etc   2026-08-19 00:12:42
+# $ ls -la /etc/ 2>&1
+
+total 16
+drwxrwxr-x    3 1000     1000             0 Jun 18  2026 .
+drwxrwxr-x   13 1000     1000             0 Mar  5 13:32 ..
+drwxrwxr-x    2 1000     1000             0 Mar  5 13:32 dropbear
+-rw-rw-r--    1 1000     1000            10 Jun 18  2026 group
+-rw-rw-r--    1 1000     1000            30 Jun 18  2026 passwd
+-rw-rw-r--    1 1000     1000            26 Jun 18  2026 shadow
+-rw-rw-r--    1 1000     1000             8 Jun 18  2026 shells

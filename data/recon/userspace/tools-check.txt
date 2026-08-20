@@ -1,0 +1,26 @@
+# userspace/tools-check   2026-08-19 00:12:42
+# $ for t in iw iwconfig wpa_supplicant wpa_passphrase udhcpc dhcpcd ip ifconfig insmod modprobe dropbear dropbearkey ssh scp nginx smbd tar gzip base64 wget curl openssl python; do command -v $t >/dev/null 2>&1 && echo "OK   $t" || echo "MISS $t"; done
+
+MISS iw
+MISS iwconfig
+MISS wpa_supplicant
+MISS wpa_passphrase
+OK   udhcpc
+MISS dhcpcd
+OK   ip
+OK   ifconfig
+OK   insmod
+OK   modprobe
+OK   dropbear
+OK   dropbearkey
+MISS ssh
+MISS scp
+MISS nginx
+MISS smbd
+OK   tar
+OK   gzip
+OK   base64
+OK   wget
+MISS curl
+MISS openssl
+MISS python

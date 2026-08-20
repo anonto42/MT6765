@@ -1,0 +1,8 @@
+# storage/sdcard   2026-08-19 00:12:42
+# $ ls -la /mnt/ 2>&1; echo '--- sd contents:'; ls -la /mnt/sd/ 2>&1
+
+total 0
+drwxrwxr-x    2 1000     1000             0 Jun 18  2026 .
+drwxrwxr-x   13 1000     1000             0 Mar  5 13:32 ..
+--- sd contents:
+ls: /mnt/sd/: No such file or directory

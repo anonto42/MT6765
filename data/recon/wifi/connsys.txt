@@ -1,0 +1,7 @@
+# wifi/connsys   2026-08-19 00:10:56
+# $ ls /sys/bus/platform/devices/ 2>/dev/null | grep -iE 'conn|wmt|wifi|wlan|mt66|mt76' || echo '(none)'
+
+ls /sys/bus/platform/devices/ 2>/dev/null | grep -iE 'conn|wmt|wifi|wlan|mt6
+6|mt76' || echo '(none)'
+18000000.wifi
+/ # echo

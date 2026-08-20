@@ -1,0 +1,55 @@
+# host kernel log for the tablet  (2026-08-18T22:31:13+06:00)
+Aug 18 22:09:50 archlinux kernel: usb 3-2: new low-speed USB device number 2 using xhci_hcd
+Aug 18 22:09:50 archlinux kernel: usb 3-2: New USB device found, idVendor=30fa, idProduct=0400, bcdDevice= 1.00
+Aug 18 22:09:50 archlinux kernel: usb 3-2: New USB device strings: Mfr=0, Product=1, SerialNumber=0
+Aug 18 22:09:50 archlinux kernel: usb 3-2: Product: USB OPTICAL MOUSE 
+Aug 18 22:24:54 xyz86 kernel: usb 3-1: new high-speed USB device number 3 using xhci_hcd
+Aug 18 22:24:54 xyz86 kernel: usb 3-1: New USB device found, idVendor=0e8d, idProduct=2000, bcdDevice= 1.00
+Aug 18 22:24:54 xyz86 kernel: usb 3-1: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+Aug 18 22:24:54 xyz86 kernel: usb 3-1: Product: MT65xx Preloader
+Aug 18 22:24:54 xyz86 kernel: usb 3-1: Manufacturer: MediaTek
+Aug 18 22:24:55 xyz86 kernel: cdc_acm 3-1:1.1: Zero length descriptor references
+Aug 18 22:24:55 xyz86 kernel: cdc_acm 3-1:1.1: probe with driver cdc_acm failed with error -22
+Aug 18 22:24:55 xyz86 kernel: cdc_acm 3-1:1.0: ttyACM0: USB ACM device
+Aug 18 22:24:55 xyz86 kernel: usbcore: registered new interface driver cdc_acm
+Aug 18 22:24:55 xyz86 kernel: cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
+Aug 18 22:24:57 xyz86 kernel: usb 3-1: USB disconnect, device number 3
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: new high-speed USB device number 4 using xhci_hcd
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: device descriptor read/64, error -32
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: New USB device found, idVendor=0e8d, idProduct=2008, bcdDevice= 4.19
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: Product: WalPad-Server
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: Manufacturer: Walton
+Aug 18 22:25:08 xyz86 kernel: usb 3-1: SerialNumber: 0001
+Aug 18 22:25:09 xyz86 kernel: cdc_acm 3-1:1.0: ttyACM0: USB ACM device
+Aug 18 22:25:09 xyz86 kernel: cdc_acm 3-1:1.2: ttyACM1: USB ACM device
+Aug 18 22:25:09 xyz86 kernel: cdc_ether 3-1:1.4 usb0: register 'cdc_ether' at usb-0000:0a:00.3-1, CDC Ethernet Device, 02:11:22:33:42:02
+Aug 18 22:25:09 xyz86 kernel: usbcore: registered new interface driver cdc_ether
+Aug 18 22:25:09 xyz86 kernel: rndis_host 3-1:1.6 usb1: register 'rndis_host' at usb-0000:0a:00.3-1, RNDIS device, 02:11:22:33:43:02
+Aug 18 22:25:09 xyz86 kernel: usbcore: registered new interface driver rndis_host
+Aug 18 22:25:09 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: renamed from usb1
+Aug 18 22:25:09 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: renamed from usb0
+Aug 18 22:25:14 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5450 ms
+Aug 18 22:25:19 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 1: transmit queue 0 timed out 5120 ms
+Aug 18 22:25:24 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 0: transmit queue 0 timed out 5120 ms
+Aug 18 22:25:31 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 6144 ms
+Aug 18 22:25:36 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5632 ms
+Aug 18 22:25:41 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5120 ms
+Aug 18 22:25:46 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5121 ms
+Aug 18 22:25:53 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 6143 ms
+Aug 18 22:26:00 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 1: transmit queue 0 timed out 5671 ms
+Aug 18 22:26:00 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 9: transmit queue 0 timed out 5671 ms
+Aug 18 22:26:05 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 9: transmit queue 0 timed out 5248 ms
+Aug 18 22:26:05 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 3: transmit queue 0 timed out 5248 ms
+Aug 18 22:26:11 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5121 ms
+Aug 18 22:26:12 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 10: transmit queue 0 timed out 6144 ms
+Aug 18 22:26:16 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 3: transmit queue 0 timed out 5631 ms
+Aug 18 22:26:31 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 10: transmit queue 0 timed out 5006 ms
+Aug 18 22:26:45 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5008 ms
+Aug 18 22:26:46 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 11: transmit queue 0 timed out 5001 ms
+Aug 18 22:26:50 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5168 ms
+Aug 18 22:26:52 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 11: transmit queue 0 timed out 5277 ms
+Aug 18 22:26:57 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 6144 ms
+Aug 18 22:27:30 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 11: transmit queue 0 timed out 5906 ms
+Aug 18 22:27:32 xyz86 kernel: cdc_ether 3-1:1.4 enp10s0f3u1i4: NETDEV WATCHDOG: CPU: 6: transmit queue 0 timed out 5564 ms
+Aug 18 22:27:37 xyz86 kernel: rndis_host 3-1:1.6 enp10s0f3u1i6: NETDEV WATCHDOG: CPU: 11: transmit queue 0 timed out 6145 ms

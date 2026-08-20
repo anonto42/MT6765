@@ -1,0 +1,23 @@
+== mounts
+/dev/loop0 /vendor ext4 ro,relatime 0 0
+/dev/loop1 /system ext4 ro,relatime 0 0
+== /vendor/firmware wifi blobs
+-rw-r--r--    1 root     root        637592 Jan  1  2009 WIFI_RAM_CODE_soc1_0_1_1.bin
+-rw-r--r--    1 root     root          1092 Jan  1  2009 mt6631_fm_v1_coeff.bin
+-rw-r--r--    1 root     root          1028 Jan  1  2009 mt6631_fm_v1_patch.bin
+-rw-r--r--    1 root     root        196216 Jan  1  2009 soc1_0_ram_wifi_1_1_hdr.bin
+== wifi platform driver binding
+lrwxrwxrwx    1 root     root             0 Mar  5 21:37 /sys/bus/platform/devices/18000000.wifi/driver -> ../../../bus/platform/drivers/wlan
+== phy0 owner
+ls: /sys/class/ieee80211/phy0/device: No such file or directory
+== netdevs
+ccmni-lan  ccmni12    ccmni17    ccmni3     ccmni8     ip_vti0    usb0
+ccmni0     ccmni13    ccmni18    ccmni4     ccmni9     lo
+ccmni1     ccmni14    ccmni19    ccmni5     dummy0     rndis0
+ccmni10    ccmni15    ccmni2     ccmni6     ip6_vti0   sit0
+ccmni11    ccmni16    ccmni20    ccmni7     ip6tnl0    tunl0
+== wmt chardevs
+ls: /dev/stpwmt: No such file or directory
+ls: /dev/conninfra_dev: No such file or directory
+crw-rw----    1 root     root      499,   0 Mar  5 21:34 /dev/wmtWifi
+/vendor/lib/modules #

@@ -1,0 +1,42 @@
+# hw/input   2026-08-19 00:12:42
+# $ ls /sys/class/input/ 2>&1; echo '---'; cat /proc/bus/input/devices 2>&1 | head -40
+
+event0  event2  event4  input1  input3
+event1  event3  input0  input2  input4
+---
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="HALL_DEV"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input0
+U: Uniq=
+H: Handlers=event0
+B: PROP=0
+B: EV=3
+B: KEY=c000 0 0
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="mtk-kpd"
+P: Phys=
+S: Sysfs=/devices/platform/10010000.kp/input/input1
+U: Uniq=
+H: Handlers=event1
+B: PROP=0
+B: EV=3
+B: KEY=c000000000000 0
+I: Bus=0019 Vendor=0001 Product=0001 Version=0001
+N: Name="mtk-pmic-keys"
+P: Phys=
+S: Sysfs=/devices/platform/1000d000.pwrap/1000d000.pwrap:main_pmic/mtk-pmic-keys/input/input2
+U: Uniq=
+H: Handlers=event2
+B: PROP=0
+B: EV=3
+B: KEY=18000000000000 0
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="kxd-kxd"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input3
+U: Uniq=
+H: Handlers=event3
+B: PROP=0
+B: EV=3
+B: KEY=100000000000 0 0

@@ -1,0 +1,5 @@
+# kernel/modules-live   2026-08-19 00:10:55
+# $ cat /proc/modules 2>&1
+
+cat /proc/modules 2>&1
+/ # echo

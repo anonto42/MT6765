@@ -1,0 +1,28 @@
+# mtkclient clone + its venv (1 GB, installed by `make setup`)
+tools/mtk/
+__pycache__/
+*.pyc
+
+# WiFi credentials.  data/wifi/wifi.conf holds a live SSID and PSK -- it is
+# written by hand on the host and pushed to the tablet's SD card.  See
+# data/wifi/wifi.conf.example for the format.
+data/wifi/wifi.conf
+
+# Device-unique identifiers (MEID, SoC-ID) cached by mtkclient.  These identify
+# one physical tablet and are what MTK auth bypasses key off; keep them local.
+.state
+
+# Proprietary MediaTek userspace pulled out of the vendor image.  Needed to
+# bring the radio up, but not ours to redistribute -- scripts/vendor_up.py
+# mounts them straight off the device instead.
+data/vendor-bins/
+
+# Full 4.6 MB Alpine bundle: the trimmed wifi-userspace-min.tar.gz is committed
+# because it is what the bring-up actually uses; regenerate this one with
+# tools/build_wifi_userspace.sh if iw or wpa_passphrase are ever wanted.
+data/wifi-userspace/wifi-userspace-aarch64.tar.gz
+
+# Raw partition dumps -- multi-GB, never commit
+*.img
+*.bin.orig
+data/dumps/

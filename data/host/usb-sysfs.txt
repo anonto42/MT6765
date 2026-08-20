@@ -1,0 +1,109 @@
+# sysfs view of the WalPad-Server gadget  (2026-08-18T22:31:13+06:00)
+node: /sys/bus/usb/devices/3-1/
+
+## device attributes
+idVendor             0e8d
+idProduct            2008
+bcdDevice            0419
+manufacturer         Walton
+product              WalPad-Server
+serial               0001
+version               2.00
+speed                480
+maxchild             0
+bNumInterfaces        8
+bNumConfigurations   1
+bmAttributes         80
+bMaxPower            2mA
+devnum               4
+busnum               3
+
+## interfaces
+--- 3-1:1.0
+  bInterfaceNumber       00
+  bInterfaceClass        02
+  bInterfaceSubClass     02
+  bInterfaceProtocol     01
+  bNumEndpoints          01
+  interface              CDC Abstract Control Model (ACM)
+  driver:                cdc_acm
+  endpoints:             ep_82 
+  tty:                   ttyACM0 
+  net:                   
+--- 3-1:1.1
+  bInterfaceNumber       01
+  bInterfaceClass        0a
+  bInterfaceSubClass     00
+  bInterfaceProtocol     00
+  bNumEndpoints          02
+  interface              CDC ACM Data
+  driver:                cdc_acm
+  endpoints:             ep_01 ep_81 
+  tty:                   
+  net:                   
+--- 3-1:1.2
+  bInterfaceNumber       02
+  bInterfaceClass        02
+  bInterfaceSubClass     02
+  bInterfaceProtocol     01
+  bNumEndpoints          01
+  interface              CDC Abstract Control Model (ACM)
+  driver:                cdc_acm
+  endpoints:             ep_84 
+  tty:                   ttyACM1 
+  net:                   
+--- 3-1:1.3
+  bInterfaceNumber       03
+  bInterfaceClass        0a
+  bInterfaceSubClass     00
+  bInterfaceProtocol     00
+  bNumEndpoints          02
+  interface              CDC ACM Data
+  driver:                cdc_acm
+  endpoints:             ep_02 ep_83 
+  tty:                   
+  net:                   
+--- 3-1:1.4
+  bInterfaceNumber       04
+  bInterfaceClass        02
+  bInterfaceSubClass     06
+  bInterfaceProtocol     00
+  bNumEndpoints          01
+  interface              CDC Ethernet Control Model (ECM)
+  driver:                cdc_ether
+  endpoints:             ep_86 
+  tty:                   
+  net:                   enp10s0f3u1i4 
+--- 3-1:1.5
+  bInterfaceNumber       05
+  bInterfaceClass        0a
+  bInterfaceSubClass     00
+  bInterfaceProtocol     00
+  bNumEndpoints          02
+  interface              CDC Ethernet Data
+  driver:                cdc_ether
+  endpoints:             ep_03 ep_85 
+  tty:                   
+  net:                   
+--- 3-1:1.6
+  bInterfaceNumber       06
+  bInterfaceClass        e0
+  bInterfaceSubClass     01
+  bInterfaceProtocol     03
+  bNumEndpoints          01
+  interface              RNDIS Communications Control
+  driver:                rndis_host
+  endpoints:             ep_88 
+  tty:                   
+  net:                   enp10s0f3u1i6 
+--- 3-1:1.7
+  bInterfaceNumber       07
+  bInterfaceClass        0a
+  bInterfaceSubClass     00
+  bInterfaceProtocol     00
+  bNumEndpoints          02
+  interface              RNDIS Ethernet Data
+  driver:                rndis_host
+  endpoints:             ep_04 ep_87 
+  tty:                   
+  net:                   

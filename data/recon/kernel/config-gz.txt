@@ -1,0 +1,5 @@
+# kernel/config-gz   2026-08-18 23:32:13
+# $ (zcat /proc/config.gz 2>/dev/null || cat /proc/config.gz 2>/dev/null) | grep -v '^#' | grep .
+# NOTE: probe timed out - output may be truncated
+
+(no output)

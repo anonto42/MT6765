@@ -1,0 +1,10 @@
+# storage/mounts   2026-08-19 00:12:42
+# $ cat /proc/mounts
+
+rootfs / rootfs rw 0 0
+proc /proc proc rw,relatime 0 0
+sysfs /sys sysfs rw,relatime 0 0
+tmpfs /dev tmpfs rw,relatime 0 0
+tmpfs /tmp tmpfs rw,relatime 0 0
+devpts /dev/pts devpts rw,relatime,mode=600,ptmxmode=000 0 0
+none /sys/kernel/config configfs rw,relatime 0 0

@@ -1,0 +1,113 @@
+# userspace/init   2026-08-19 00:12:42
+# $ ls -la /; echo '--- /init:'; head -100 /init 2>&1
+
+total 8
+drwxrwxr-x   13 1000     1000             0 Mar  5 13:32 .
+drwxrwxr-x   13 1000     1000             0 Mar  5 13:32 ..
+drwxrwxr-x    2 1000     1000             0 Mar  5 13:32 bin
+drwxrwxrwt    9 root     root          4340 Mar  5 13:32 dev
+drwxrwxr-x    3 1000     1000             0 Jun 18  2026 etc
+-rwxr-xr-x    1 1000     1000          6337 Jun 18  2026 init
+drwxrwxr-x    2 1000     1000             0 Jun 18  2026 lib
+drwxrwxr-x    2 1000     1000             0 Jun 18  2026 mnt
+dr-xr-xr-x  334 root     root             0 Jan  1  1970 proc
+drwxrwxr-x    3 1000     1000             0 Jun 18  2026 root
+dr-xr-xr-x   13 root     root             0 Mar  5 13:32 sys
+drwxrwxrwt    2 root     root           100 Mar  5 13:32 tmp
+drwxrwxr-x    5 1000     1000             0 Jun 18  2026 usr
+drwxr-xr-x    3 root     root             0 Mar  5 13:32 var
+--- /init:
+#!/bin/busybox sh
+# WalPad8G headless server init — runs on the STOCK kernel, replaces Android userspace.
+# Goal: survive (pet watchdog, no Android hang_detect), bring up USB access.
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+/bin/busybox --install -s /bin 2>/dev/null
+# --- core filesystems ---
+mount -t proc     proc     /proc  2>/dev/null
+mount -t sysfs    sysfs    /sys   2>/dev/null
+mount -t tmpfs    tmpfs    /dev   2>/dev/null
+mount -t tmpfs    tmpfs    /tmp   2>/dev/null
+# essential device nodes (init is root, so mknod works at runtime)
+mknod /dev/console c 5 1   2>/dev/null
+mknod /dev/null    c 1 3   2>/dev/null
+mknod /dev/zero    c 1 5   2>/dev/null
+mknod /dev/kmsg    c 1 11  2>/dev/null
+mknod /dev/tty     c 5 0   2>/dev/null
+mkdir -p /dev/pts; mount -t devpts devpts /dev/pts 2>/dev/null
+# populate the rest (watchdog, ttyGS, mmcblk...) from sysfs
+echo /bin/mdev > /proc/sys/kernel/hotplug 2>/dev/null
+/bin/busybox mdev -s 2>/dev/null
+klog() { echo "WALPAD-SERVER: $*" > /dev/kmsg 2>/dev/null; }
+klog "=== init started ==="
+# --- pet the hardware watchdog so we don't get rebooted ---
+WD=""
+for w in /dev/watchdog /dev/watchdog0 /dev/misc/watchdog; do [ -e "$w" ] && WD="$w" && break; done
+klog "watchdog node = ${WD:-NONE}"
+(
+  while true; do
+    [ -n "$WD" ] && { echo 1 > "$WD" 2>/dev/null || printf '\0' > "$WD" 2>/dev/null; }
+    klog "heartbeat uptime=$(cut -d' ' -f1 /proc/uptime 2>/dev/null)"
+    sleep 10
+  done
+) &
+# --- USB gadget: serial console (acm) + ethernet (ecm/rndis) via configfs ---
+mount -t configfs none /sys/kernel/config 2>/dev/null
+G=/sys/kernel/config/usb_gadget/g1
+if [ -d /sys/kernel/config/usb_gadget ]; then
+  mkdir -p $G 2>/dev/null
+  echo 0x0e8d > $G/idVendor       2>/dev/null
+  echo 0x2008 > $G/idProduct      2>/dev/null
+  mkdir -p $G/strings/0x409       2>/dev/null
+  echo "0001"      > $G/strings/0x409/serialnumber  2>/dev/null
+  echo "Walton"    > $G/strings/0x409/manufacturer  2>/dev/null
+  echo "WalPad-Server" > $G/strings/0x409/product   2>/dev/null
+  mkdir -p $G/configs/c.1/strings/0x409 2>/dev/null
+  echo "server" > $G/configs/c.1/strings/0x409/configuration 2>/dev/null
+  # functions (best effort; whichever the kernel supports). ECM is nicer on
+  # Linux; RNDIS is kept as a fallback.
+  mkdir -p $G/functions/acm.GS0    2>/dev/null && ln -s $G/functions/acm.GS0   $G/configs/c.1/ 2>/dev/null
+  mkdir -p $G/functions/acm.GS1    2>/dev/null && ln -s $G/functions/acm.GS1   $G/configs/c.1/ 2>/dev/null
+  mkdir -p $G/functions/ecm.usb0   2>/dev/null && {
+    echo 02:11:22:33:42:01 > $G/functions/ecm.usb0/dev_addr  2>/dev/null
+    echo 02:11:22:33:42:02 > $G/functions/ecm.usb0/host_addr 2>/dev/null
+    ln -s $G/functions/ecm.usb0 $G/configs/c.1/ 2>/dev/null
+  }
+  mkdir -p $G/functions/rndis.usb1 2>/dev/null && {
+    echo 02:11:22:33:43:01 > $G/functions/rndis.usb1/dev_addr  2>/dev/null
+    echo 02:11:22:33:43:02 > $G/functions/rndis.usb1/host_addr 2>/dev/null
+    ln -s $G/functions/rndis.usb1 $G/configs/c.1/ 2>/dev/null
+  }
+  UDC=$(ls /sys/class/udc 2>/dev/null | head -1)
+  klog "usb gadget udc = ${UDC:-NONE}"
+  [ -n "$UDC" ] && echo "$UDC" > $G/UDC 2>/dev/null
+fi
+/bin/busybox mdev -s 2>/dev/null
+# --- PERSISTENT networking + services loop (handles host connecting later) ---
+( while true; do
+    /bin/busybox mdev -s 2>/dev/null
+    # Assign only USB-gadget interfaces. Avoid modem/tunnel/dummy devices:
+    # assigning duplicate subnets there breaks routing and ARP replies.
+    # This busybox build has ifconfig but no ip applet.
+    /bin/busybox ifconfig usb0 192.168.42.1 netmask 255.255.255.0 up 2>/dev/null
+    /bin/busybox ifconfig rndis0 192.168.43.1 netmask 255.255.255.0 up 2>/dev/null
+    # (re)start telnet shell server if not running
+    pidof telnetd >/dev/null 2>&1 || /bin/busybox telnetd -l /bin/sh -p 23 2>/dev/null
+    [ -e /dev/ttyGS0 ] && [ ! -f /tmp/serial-shell-started ] && {
+       touch /tmp/serial-shell-started
+       setsid /bin/sh -i </dev/ttyGS0 >/dev/ttyGS0 2>&1 &
+    }
+    [ -x /usr/sbin/dropbear ] && [ -e /dev/ttyGS1 ] && [ ! -f /tmp/serial-ssh-started ] && {
+       touch /tmp/serial-ssh-started
+       mkdir -p /etc/dropbear /root/.ssh /var/run
+       chmod 700 /root/.ssh 2>/dev/null
+       chmod 600 /root/.ssh/authorized_keys 2>/dev/null
+       [ -f /etc/dropbear/dropbear_ed25519_host_key ] || \
+         /usr/bin/dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key >/dev/kmsg 2>&1
+       (
+         while true; do
+           /bin/busybox stty -F /dev/ttyGS1 115200 raw -echo 2>/dev/null
+           /usr/sbin/dropbear -i -s -g -r /etc/dropbear/dropbear_ed25519_host_key \
+             </dev/ttyGS1 >/dev/ttyGS1 2>/tmp/dropbear-serial.err
+           sleep 1
+         done
+       ) &

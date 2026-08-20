@@ -1,0 +1,124 @@
+# kernel/interrupts   2026-08-19 00:10:56
+# $ cat /proc/interrupts
+
+cat /proc/interrupts
+           CPU0       CPU1       CPU2       CPU3       CPU4       CPU5       CPU6       CPU7
+  3:        980        597        816       1009       6038       2250       1515        909     GICv3  30 Level     arch_timer
+  6:        664       2164        729        609        592        165         22          4  MT_SYSIRQ 194 Level     timer@10017000
+  7:          0          0          0          0          0          0          0          0  MT_SYSIRQ 280 Level     CIRQ
+  8:          0          0          0          0          0          0          0          0     GICv3  23 Level     arm-pmu
+ 12:          0          0          0          0          0          0          0          0  MT_SYSIRQ 134 Edge      amms_irq
+ 17:          2          2          2          0          0          0          0          0   mt-eint   0 Edge      TOUCH_PANEL-eint
+ 18:          0          0          0          0          0          0          0          0   mt-eint   1 Edge      11240000.msdc cd
+ 23:          0          0          0          0          0          0          0          0   mt-eint   6 Level     ALS-eint
+ 27:          0          0          1          0          0          0          0          0   mt-eint  10 Level     audiokey-eint
+ 58:          0          0          0          0          0          0          0          0   mt-eint  41 Level     USB_IDDIG
+161:          0          0          0          0          0          0          0          1   mt-eint 144 Level     mt6358-irq
+177:          0          0          0          0          0          0          0          0  MT_SYSIRQ 181 Level     SPM
+181:          0          0          0          0          0          0          0          0  MT_SYSIRQ 248 Edge      tee_log_irq
+184:          0          0          0          0          0          0          0          0  MT_SYSIRQ 179 Level     mt-pmic-pwrap
+185:          1          1          0          2          2          1          0          0  MT_SYSIRQ 192 Level     SCP A IPC2HOST
+186:          0          0          0          0          0          0          0          0  MT_SYSIRQ 180 Edge      mtk-kpd
+188:          0          0          0          0          0          0          0          0  MT_SYSIRQ 158 Level     m4u
+189:          0          1          0          0          1          0          0          0  MT_SYSIRQ 142 Level     devapc
+191:          0          0          0          0          0          0          0          0  MT_SYSIRQ 148 Level     CCIF_AP_DATA
+197:          0          0          0          0          0          0          0          0  MT_SYSIRQ 144 Level     mpu
+201:          0          1          0          2          2          0          1          1  MT_SYSIRQ 125 Level     eem
+202:          4          0          0          0          2          0          0          1  MT_SYSIRQ 154 Level     mtk_cmdq
+207:          0          0          1          2          2          3          8          0  MT_SYSIRQ 205 Level     SSPM_MBOX
+208:          0          0          0          0          0          0          0          0  MT_SYSIRQ 206 Level     SSPM_MBOX
+209:         62         24         63         54        309         73         20         24  MT_SYSIRQ 207 Level     SSPM_MBOX
+210:          0          0          0          0          0          0          0          0  MT_SYSIRQ 208 Level     SSPM_MBOX
+219:         19         23         44         29        155        133        110        102  MT_SYSIRQ  91 Level     ttyS0
+221:       1736       1254       1359       1344       1362       1325       1322       1295  MT_SYSIRQ  84 Level     mt-i2c
+222:          3          2         10         16         10          7          7          4  MT_SYSIRQ  85 Level     mt-i2c
+223:          0          0          0          0          0          0          0          0  MT_SYSIRQ  86 Level     mt-i2c
+224:          0          0          0          0          1          0          0          0  MT_SYSIRQ  87 Level     mt-i2c
+225:          0          0          0          0          0          0          0          0  MT_SYSIRQ  88 Level     mt-i2c
+226:          0          0          0          0          0          0          0          0  MT_SYSIRQ 130 Level     mt-i2c
+227:         10         11         29         11        435         15         81          8  MT_SYSIRQ 131 Level     mt-i2c
+229:          0          0          0          0          0          0          0          0  MT_SYSIRQ 118 Level     1100a000.spi
+230:          0          0          0          0          0          0          0          0  MT_SYSIRQ  78 Level     mtk-thermal-legacy
+238:          0          0          0          0          0          0          0          0  MT_SYSIRQ 122 Level     11010000.spi
+239:          0          0          0          0          0          0          0          0  MT_SYSIRQ 128 Level     11012000.spi
+240:          0          0          0          0          0          0          0          0  MT_SYSIRQ 129 Level     11013000.spi
+241:          0          0          0          0          0          0          0          0  MT_SYSIRQ  95 Level     11014000.spi
+242:          0          0          0          0          0          0          0          0  MT_SYSIRQ  96 Level     11015000.spi
+243:         78         15        148         71        270        136         37         21  MT_SYSIRQ  73 Level     musb-hdrc
+244:          3          2          5          2          2          3          2          3  MT_SYSIRQ  79 Level     mtk-msdc
+245:          1          0          0          0          0          1          0          0  MT_SYSIRQ  80 Level     mtk-msdc
+246:          0          0          0          0          0          0          0          0  MT_SYSIRQ 153 Level     Afe_ISR_Handle
+247:          0          0          0          0          0          0          0          0  MT_SYSIRQ 266 Level     BTCVSD_ISR_Handle
+251:        922        167        113        190        161        177        129        193  MT_SYSIRQ 210 Level     mutex
+253:          0          0          0          0          0          0          0          0  MT_SYSIRQ 256 Level     dpe
+260:        488         77         59        102         87        115         53         62  MT_SYSIRQ 217 Level     ovl0
+261:        497         61         99         51        155         57         60         63  MT_SYSIRQ 229 Level     ovl0_2l
+262:        968        123        189        108        242        130        189        104  MT_SYSIRQ 218 Level     rdma0
+263:          1          0          0          0          0          0          0          0  MT_SYSIRQ 219 Level     wdma0
+265:          0          0          0          0          0          0          0          0  MT_SYSIRQ 221 Level     ccorr0
+266:          0          0          1          0          0          1          0          0  MT_SYSIRQ 222 Level     aal0
+269:          0          0          0          0          0          0          0          1  MT_SYSIRQ 225 Level     dsi0
+271:          0          0          0          0          0          0          0          0  MT_SYSIRQ 258 Level     camera-fdvt
+272:          0          0          0          0          0          0          0          0  MT_SYSIRQ 230 Level     Vcodec
+273:          0          0          0          0          0          0          0          0  MT_SYSIRQ 232 Level     jpeg_enc_driver
+274:          0          0          0          0          0          0          0          0  MT_SYSIRQ 233 Level     Vcodec
+276:          0          0          0          0          0          0          0          0  MT_SYSIRQ 236 Level     cam2
+277:          0          0          0          0          0          0          0          0  MT_SYSIRQ 237 Level     cam3
+278:          0          0          0          0          0          0          0          0  MT_SYSIRQ 243 Level     camsv1
+279:          0          0          0          0          0          0          0          0  MT_SYSIRQ 244 Level     camsv2
+280:          0          0          0          0          0          0          0          0  MT_SYSIRQ 241 Level     camsv3
+281:          0          0          0          0          0          0          0          0  MT_SYSIRQ 242 Level     camsv4
+282:          0          0          0          0          0          0          0          0  MT_SYSIRQ 246 Level     ccu
+287:          0          0          0          0          0          0          0          0  mt6358-irq 114 Edge      bat_h
+288:          0          0          0          0          0          0          0          0  mt6358-irq 115 Edge      bat_l
+289:          0          0          0          0          0          0          0          0  mt6358-irq   0 Edge      VPROC
+290:          0          0          0          0          0          0          0          0  mt6358-irq   1 Edge      VCORE
+291:          0          0          0          0          0          0          0          0  mt6358-irq   2 Edge      VMODEM
+292:          0          0          0          0          0          0          0          0  mt6358-irq   3 Edge      VS1
+293:          0          0          0          0          0          0          0          0  mt6358-irq   4 Edge      VPA
+295:          0          0          0          0          0          0          0          0  mt6358-irq  16 Edge      VFE28
+296:          0          0          0          0          0          0          0          0  mt6358-irq  17 Edge      VXO22
+297:          0          0          0          0          0          0          0          0  mt6358-irq  18 Edge      VRF18
+298:          0          0          0          0          0          0          0          0  mt6358-irq  19 Edge      VRF12
+299:          0          0          0          0          0          0          0          0  mt6358-irq  20 Edge      VEFUSE
+301:          0          0          0          0          0          0          0          0  mt6358-irq  22 Edge      VCN28
+302:          0          0          0          0          0          0          0          0  mt6358-irq  23 Edge      VCN18
+303:          0          0          0          0          0          0          0          0  mt6358-irq  24 Edge      VCAMA
+304:          0          0          0          0          0          0          0          0  mt6358-irq  25 Edge      VCAMD
+305:          0          0          0          0          0          0          0          0  mt6358-irq  26 Edge      VCAMIO
+306:          0          0          0          0          0          0          0          0  mt6358-irq  27 Edge      VLDO28
+307:          0          0          0          0          0          0          0          0  mt6358-irq  28 Edge      VUSB33
+308:          0          0          0          0          0          0          0          0  mt6358-irq  29 Edge      VAUX18
+309:          0          0          0          0          0          0          0          0  mt6358-irq  30 Edge      VAUD28
+310:          0          0          0          0          0          0          0          0  mt6358-irq  31 Edge      VIO28
+311:          0          0          0          0          0          0          0          0  mt6358-irq  32 Edge      VIO18
+312:          0          0          0          0          0          0          0          0  mt6358-irq  33 Edge      VSRAM_PROC
+313:          0          0          0          0          0          0          0          0  mt6358-irq  34 Edge      VSRAM_OTHERS
+314:          0          0          0          0          0          0          0          0  mt6358-irq  35 Edge      VIBR
+315:          0          0          0          0          0          0          0          0  mt6358-irq  36 Edge      VDRAM
+316:          0          0          0          0          0          0          0          0  mt6358-irq  37 Edge      VMC
+317:          0          0          0          0          0          0          0          0  mt6358-irq  38 Edge      VMCH
+318:          0          0          0          0          0          0          0          0  mt6358-irq  39 Edge      VEMC
+319:          0          0          0          0          0          0          0          0  mt6358-irq  40 Edge      VSIM1
+320:          0          0          0          0          0          0          0          0  mt6358-irq  41 Edge      VSIM2
+321:          0          0          0          0          0          0          0          0  mt6358-irq  82 Edge      fg_cur_h
+322:          0          0          0          0          0          0          0          0  mt6358-irq  83 Edge      fg_cur_l
+323:          0          0          0          0          0          0          0          0  mt6358-irq  54 Edge      chrdet
+324:          0          0          0          0          0          0          0          0  mt6358-irq  48 Edge      mtk-pmic-keys
+325:          0          0          0          0          0          0          0          0  mt6358-irq  49 Edge      mtk-pmic-keys
+326:          0          0          0          0          0          0          0          0  mt6358-irq  50 Edge      mtk-pmic-keys
+327:          0          0          0          0          0          0          0          0  mt6358-irq  51 Edge      mtk-pmic-keys
+328:          0          0          0          0          0          0          0          0  mt6358-irq  80 Edge      mtk_gauge_coulomb_high
+329:          1          0          0          0          0          0          0          0  mt6358-irq  81 Edge      mtk_gauge_coulomb_low
+330:          0          0          0          0          0          0          0          0  mt6358-irq 121 Edge      mtk_gauge_nafg
+331:          0          0          0          0          0          0          0          0  mt6358-irq  84 Edge      mtk_gauge_zcv
+332:          0          0          0          0          0          0          0          0  mt6358-irq  64 Edge      mt6397-rtc
+IPI0:      1253        689        726        577       5357       5322       2807        752       Rescheduling interrupts
+IPI1:         1          9          5          4          6          5          5          5       Function call interrupts
+IPI2:         0          0          0          0          0          0          0          0       CPU stop interrupts
+IPI3:         0          0          0          0          0          0          0          0       CPU stop (for crash dump) interrupts
+IPI4:       754        389        715        738         55         36         13          3       Timer broadcast interrupts
+IPI5:         7         29          1          2          5          0          3          0       IRQ work interrupts
+IPI6:         0          0          0          0          0          0          0          0       CPU wake-up interrupts
+Err:          0
+/ # echo

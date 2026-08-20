@@ -1,0 +1,5 @@
+# net/routes   2026-08-19 00:12:42
+# $ ip route 2>/dev/null || route -n 2>&1
+
+192.168.42.0/24 dev usb0 scope link  src 192.168.42.1
+192.168.43.0/24 dev rndis0 scope link  src 192.168.43.1

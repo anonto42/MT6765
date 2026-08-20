@@ -1,0 +1,7 @@
+# net/gadget-udc   2026-08-19 00:12:42
+# $ ls /sys/class/udc/ 2>&1; for f in /sys/class/udc/*/; do echo "== $f"; cat $f/state $f/function 2>/dev/null; done
+
+musb-hdrc
+== /sys/class/udc/musb-hdrc/
+configured
+g1

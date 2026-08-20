@@ -1,0 +1,8 @@
+# wifi/cfg80211   2026-08-19 00:10:56
+# $ ls -d /sys/module/cfg80211 /sys/module/mac80211 /sys/class/ieee80211/* 2>&1
+
+__WPD_EOC_12__
+/ # ls -d /sys/module/cfg80211 /sys/module/mac80211 /sys/class/ieee80211/* 2>&1
+/sys/class/ieee80211/phy0  /sys/module/mac80211
+/sys/module/cfg80211
+/ # echo

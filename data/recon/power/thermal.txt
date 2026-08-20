@@ -1,0 +1,22 @@
+# power/thermal   2026-08-19 00:12:42
+# $ for f in /sys/class/thermal/thermal_zone*/; do echo "$(basename $f) $(cat $f/type 2>/dev/null) $(cat $f/temp 2>/dev/null)"; done
+
+thermal_zone0 mtktsbattery 34000
+thermal_zone1 mtktscpu 33900
+thermal_zone10 mtktsAP 35000
+thermal_zone11 mtktsbtsmdpa 33000
+thermal_zone12 mtktspmic 34207
+thermal_zone13 mt6357tsbuck1 32625
+thermal_zone14 mt6357tsbuck2 34235
+thermal_zone15 battery 34000
+thermal_zone16 mtktscharger -127000
+thermal_zone17 mtk-master-charger -12700
+thermal_zone18 mtk-slave-charger 0
+thermal_zone2 mtktspa -127000
+thermal_zone3 mtktswmt -1000
+thermal_zone4 tzimgs0 -127000
+thermal_zone5 tzimgs1 -127000
+thermal_zone6 tzimgs2 -127000
+thermal_zone7 tzimgs3 -127000
+thermal_zone8 tzimgs4 -127000
+thermal_zone9 tzimgs5 -127000

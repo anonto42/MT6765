@@ -1,0 +1,4 @@
+# net/listening   2026-08-19 00:12:42
+# $ netstat -tulpn 2>/dev/null || cat /proc/net/tcp 2>&1 | head -20
+
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode

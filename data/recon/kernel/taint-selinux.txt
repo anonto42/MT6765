@@ -1,0 +1,7 @@
+# kernel/taint-selinux   2026-08-19 00:10:56
+# $ cat /proc/sys/kernel/tainted 2>/dev/null; getenforce 2>/dev/null; cat /sys/fs/selinux/enforce 2>/dev/null
+
+cat /proc/sys/kernel/tainted 2>/dev/null; getenforce 2>/dev/null; cat /sys/f
+s/selinux/enforce 2>/dev/null
+512
+/ # echo

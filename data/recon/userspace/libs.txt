@@ -1,0 +1,7 @@
+# userspace/libs   2026-08-19 00:12:42
+# $ ls /lib /usr/lib 2>&1 | head -40
+
+/lib:
+ld-linux-aarch64.so.1
+/usr/lib:
+aarch64-linux-gnu
