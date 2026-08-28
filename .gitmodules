@@ -1,0 +1,3 @@
+[submodule "tools/kernel-mt6765-4.19"]
+	path = tools/kernel-mt6765-4.19
+	url = https://gitlab.com/ubtouch-on-rabbit/android_kernel_rabbit_mt6765.git

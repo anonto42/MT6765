@@ -19,7 +19,7 @@ VENV  := $(REPO)/tools/mtk/.venv/bin/python
 MTK   := $(REPO)/tools/mtk/mtk.py
 SCR   := $(REPO)/scripts
 
-.PHONY: help setup udev watch probe console recon recon-watch host-recon super-map vendor-up wifi-up ssh net-console wifi-survey wifi-push wifi-userspace mtk-info mtk-gpt mtk-reset mtk-flash-lk clean
+.PHONY: help setup udev watch probe console recon recon-watch host-recon super-map vendor-up wifi-up wifi-find wifi-authorize wifi-password vps-setup vps-migrate-internal vps-shell vps-status vps-stage docker-setup docker-status services-setup services-up services-down services-restart services-status services-logs tailscale-up ssh net-console wifi-survey wifi-push wifi-userspace mtk-info mtk-gpt mtk-reset mtk-flash-lk clean
 .DEFAULT_GOAL := help
 
 help: ## show this help
@@ -71,6 +71,64 @@ wifi-userspace: ## push the static wpa_supplicant/iw bundle to the tablet's SD
 
 wifi-up: ## full WiFi bring-up over serial, then report the address (run, then plug in)
 	@$(VENV) $(SCR)/wifi_finish.py
+
+wifi-find: ## find the tablet's current LAN IP by its persistent SSH host key
+	@bash $(SCR)/wifi_find.sh $${SUBNET:-}
+
+wifi-authorize: ## authorize another device: make wifi-authorize KEY_FILE=~/.ssh/id_ed25519.pub
+	@test -n "$(KEY_FILE)" || { echo "KEY_FILE is required"; exit 2; }
+	@bash $(SCR)/wifi_authorize.sh "$(KEY_FILE)" "$${WPD_IP:-}"
+
+wifi-password: ## interactively set and persist the tablet's root SSH password
+	@bash $(SCR)/wifi_password.sh "$${WPD_IP:-}"
+
+vps-setup: ## provision persistent Alpine ARM64 + Tailscale (VPS_SIZE_MB=3072)
+	@bash $(SCR)/vps_setup.sh
+
+vps-migrate-internal: ## ERASE userdata and migrate Alpine to ~53 GiB internal ext4
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 tar -C $(SCR) -cf - vps_boot.sh vps_migrate_userdata.sh | \
+	 ssh -F /dev/null root@$$IP 'tar -C /mnt/sd/vps -xf -; \
+	 cp /mnt/sd/vps/vps_boot.sh /mnt/sd/vps/boot.sh; chmod 755 /mnt/sd/vps/*.sh; \
+	 sh /mnt/sd/vps/vps_migrate_userdata.sh'
+
+vps-shell: ## enter the persistent Alpine environment
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null -t root@$$IP 'chroot /mnt/vps /bin/bash -l'
+
+vps-status: ## show Alpine mount, services, storage and Tailscale state
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null root@$$IP 'mount | grep /mnt/vps; df -h /mnt/vps; \
+	 cat /mnt/vps/etc/alpine-release; ps | grep -E "[t]ailscaled|[w]pa_supplicant"; \
+	 /mnt/sd/vps/tailscale/tailscale --socket=/tmp/tailscaled.sock status 2>&1 || true'
+
+vps-stage: ## show completed/blocked VPS stages and your next action
+	@bash $(SCR)/vps_stage.sh
+
+docker-setup: ## install restricted Docker/Compose and run a kernel compatibility test
+	@bash $(SCR)/docker_setup.sh
+
+docker-status: ## show Docker daemon and containers
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null root@$$IP 'chroot /mnt/vps docker info; chroot /mnt/vps docker ps -a'
+
+services-setup: ## install and test native Caddy + supervised services
+	@bash $(SCR)/services_setup.sh
+
+services-up services-down services-restart services-status: ## manage native VPS services
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ACTION='$(@:services-%=%)'; \
+	 ssh -F /dev/null root@$$IP "chroot /mnt/vps /opt/walpad/services $$ACTION $${SERVICE:-}"
+
+services-logs: ## show service logs: make services-logs SERVICE=caddy
+	@test -n "$(SERVICE)" || { echo "SERVICE is required (for example: SERVICE=caddy)"; exit 2; }
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null root@$$IP 'chroot /mnt/vps /opt/walpad/services logs $(SERVICE)'
+
+tailscale-up: ## authenticate/reconnect Tailscale and print its URL or IP
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null -t root@$$IP '/mnt/sd/vps/tailscale/tailscale \
+	 --socket=/tmp/tailscaled.sock up --hostname=walpad --netfilter-mode=off'
 
 ssh: ## ssh in over WiFi (WPD_IP=... to override the address)
 	@ssh root@$${WPD_IP:-192.168.0.100}

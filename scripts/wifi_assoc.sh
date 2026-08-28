@@ -137,6 +137,11 @@ ping -c 2 -W 3 ${GW:-1.1.1.1} 2>&1 | tail -3
 # and dropbear refuses an authorized_keys file the logging-in user does not own,
 # failing with nothing but "Permission denied (publickey,password)" on the
 # client.  Fix the ownership before starting the daemon, not after.
+if [ -s "$W/ssh/shadow" ]; then
+    cp "$W/ssh/shadow" /etc/shadow
+    chmod 600 /etc/shadow
+fi
+
 if [ -f /root/.ssh/authorized_keys ]; then
     chown -R 0:0 /root
     chmod 700 /root /root/.ssh
@@ -151,3 +156,8 @@ fi
 ps | grep -v grep | grep -q '[d]ropbear' \
     && say "sshd listening -- ssh root@$IP" \
     || say "dropbear did not start, see /tmp/dropbear.log"
+
+# Optional persistent VPS payload. Provision with `make vps-setup`.
+if [ -x /mnt/sd/vps/boot.sh ]; then
+    setsid sh /mnt/sd/vps/boot.sh >/dev/null 2>&1 </dev/null &
+fi

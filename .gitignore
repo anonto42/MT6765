@@ -7,6 +7,7 @@ __pycache__/
 # written by hand on the host and pushed to the tablet's SD card.  See
 # data/wifi/wifi.conf.example for the format.
 data/wifi/wifi.conf
+data/vps/
 
 # Device-unique identifiers (MEID, SoC-ID) cached by mtkclient.  These identify
 # one physical tablet and are what MTK auth bypasses key off; keep them local.
@@ -26,3 +27,6 @@ data/wifi-userspace/wifi-userspace-aarch64.tar.gz
 *.img
 *.bin.orig
 data/dumps/
+
+# Repacked boot-image work area (contains an expanded proprietary ramdisk).
+/build/

@@ -19,7 +19,7 @@
 SD=/mnt/sd
 SYS=/system/system
 LINKER=$SYS/bin/bootstrap/linker64
-MODDIR=/vendor/lib/modules
+MODDIR=${MTK_MODULE_DIR:-/vendor/lib/modules}
 export LD_LIBRARY_PATH=$SYS/lib64/bootstrap:/vendor/lib64:$SYS/lib64
 # Neither loader can reach a property service — there is no Android init here —
 # so wmt_loader cannot publish the chip id and wmt_launcher spins forever

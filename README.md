@@ -19,9 +19,10 @@ instruction in the bootloader by hand."
 > Linux (none) 4.19.127 #1 SMP PREEMPT Fri May 6 19:07:29 CST 2022 aarch64 GNU/Linux
 > ```
 >
-> USB is still needed **once per boot** to bootstrap the stack, because it all
-> lives in a volatile ramdisk. Making that survive a reboot is the main open
-> item — see [What's next](#whats-next).
+> **Boot persistence is working.** The boot ramdisk now launches the SD-card
+> WiFi stack automatically; after a cold reboot the tablet associates, takes a
+> DHCP lease, and starts SSH without USB commands. The DHCP address may still
+> move until the router has a reservation for the tablet.
 >
 > The tablet boots a custom **"WalPad-Server" Linux** firmware that exposes a
 > root shell on `/dev/ttyACM0` plus USB ethernet (RNDIS + ECM). With the battery
@@ -110,9 +111,9 @@ them.
 
 | | Why it matters |
 |---|---|
-| **Persistence** | Everything lives in a volatile ramdisk. A reboot drops the mounts, modules, `wlan0`, dropbear and `authorized_keys`, and `make wifi-up` has to run again over USB. Making the stack run at boot means touching the boot image, so it needs care: a bad boot image means BROM recovery. |
+| **Persistence** | **Fixed 2026-08-27.** `/init` starts an embedded `wifi_boot.sh`, which mounts the SD card, runs the proven stack, and restores persistent SSH keys. A real reboot returned WiFi and SSH without host intervention. |
 | **Close telnetd** | The firmware runs a passwordless root shell on port 23. Over the USB tether that was a private link; on WiFi it is offered to the whole LAN. SSH keys are installed, so nothing depends on it anymore. |
-| **Stable identity** | The DHCP lease and the dropbear host key are both regenerated per boot, so the address can move and SSH warns about a changed key every time. Both go away with persistence; a DHCP reservation fixes the address sooner. |
+| **Stable identity** | The Dropbear host key now persists on the SD card. DHCP can still move the address; add a router reservation for the tablet's WiFi MAC. |
 | **NVRAM** | `glLoadNvram: Nvram not available` — the MAC/calibration partition is not mounted, so the MAC is a driver fallback and TX calibration is whatever the firmware defaults to. It associates fine; RF performance is unverified. |
 
 
@@ -173,6 +174,17 @@ Just need to *do* something:
 |---|---|
 | **Get on WiFi (run first, then plug in)** | `make wifi-up` |
 | **Shell in over WiFi** | `make ssh` |
+| **Find its current DHCP address** | `make wifi-find` |
+| **Authorize another device's SSH key** | `make wifi-authorize KEY_FILE=/path/to/id_ed25519.pub` |
+| **Set a persistent SSH password** | `make wifi-password` |
+| **Provision Alpine + Tailscale** | `make vps-setup` |
+| **Enter persistent Alpine** | `make vps-shell` |
+| **Show VPS progress and my next task** | `make vps-stage` |
+| **Move Alpine to internal userdata** | `make vps-migrate-internal` (**erases Android userdata**) |
+| **Install/test Docker compatibility** | `make docker-setup` |
+| **Install/test native service hosting** | `make services-setup` |
+| **Manage hosted services** | `make services-up`, `make services-status`, `make services-down` |
+| **Read a service log** | `make services-logs SERVICE=caddy` |
 | **One command over WiFi** | `make net-console C='uname -a'` |
 | Watch USB mode live | `make watch` (or `bash scripts/detect_mode.sh`) |
 | Get a root shell on the tablet | `sudo python3 scripts/console.py` (interactive) |
@@ -191,6 +203,11 @@ Just need to *do* something:
 
 All scripts locate the repo from their own path, so they work no matter where
 the repo lives. Network/serial tools need root (`sudo`).
+
+The stock kernel cannot run OCI containers safely because it lacks the devices
+cgroup controller. The supported hosting path is therefore the native service
+manager plus Caddy. Service definitions live in `config/services/*.conf`; Caddy
+routing lives in `config/services/Caddyfile`.
 
 ## Automation
 

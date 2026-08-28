@@ -2,6 +2,58 @@
 
 Running field notes for the WalPad 8G recovery/server project.
 
+## 2026-08-27 — internal userdata converted to 52.5 GiB Alpine VPS storage
+
+The unmounted Android `userdata` partition was positively identified as
+`/dev/mmcblk0p44` (GPT `PARTNAME=userdata`, 57,299,402,752 bytes). With explicit
+approval to erase the old Android data, it was formatted ext4 and the working
+Alpine 3.24.1 installation was migrated from its 3 GiB SD loop image.
+
+Before formatting, the primary/backup GPT regions and the first/last 64 MiB of
+userdata were saved under `firmware/MT6765/backups/storage/` on the host and
+`/mnt/sd/walpad-backup/storage/` on the SD card, with matching SHA-256 hashes.
+These are structural recovery artefacts, not a backup of the erased Android
+files.
+
+After a real reboot, `/dev/mmcblk0p44` mounted automatically at `/mnt/vps` with
+52.5 GiB total and 51.8 GiB free. Alpine, Python 3.14.7, Node.js 24.18.1,
+Tailscale, WiFi and SSH all restarted successfully. Passwordless telnet remains
+disabled. The verified old 3 GiB SD loop image was then removed, leaving 12.8
+GiB free on the SD card.
+
+## 2026-08-27 — boot persistence verified end-to-end
+
+Persistence is fixed. The exact active `boot_a` partition (`mmcblk0p23`, 32
+MiB) was backed up to both the host and SD card before modification. The live
+partition and backup matched at:
+
+    cadb95e22847966891f699aef0fe8b73aa809d2e11187b836ccf0b8bcd649be1
+
+The Android boot-image v2 ramdisk now contains `/wifi_boot.sh`, launched by
+`/init` asynchronously after the initial `mdev -s`. It waits for the SD block
+device, refuses to write into an unmounted `/mnt/sd`, mounts the card, restores
+the authorized key and Dropbear host key, runs `mtk_stack_up.sh` followed by
+`wifi_assoc.sh`, and appends diagnostics to `/mnt/sd/wifi/boot.log`. Running it
+asynchronously preserves the USB recovery console if the SD card or WiFi fails.
+
+The full-partition candidate and the flashed device both matched at:
+
+    d4a2e86f95c85d4c7c78f9917ccb37c396c1b040f0606a354d0881dd5141b3cf
+
+Reboot verification was performed without issuing any serial command or
+running `make wifi-up`. The tablet mounted `/vendor` and `/system`, initialized
+CONNSYS in the required order, associated with the configured WPA network,
+obtained `192.168.0.107`, reached `1.1.1.1`, and exposed key-authenticated SSH.
+The live and SD copies of the Ed25519 host key also hash identically.
+
+Recovery copies on the SD card:
+
+    /mnt/sd/walpad-backup/boot_a-original.img
+    /mnt/sd/walpad-backup/boot_a-persistent.img
+
+The DHCP address changed from `.105` to `.107` during testing. A router-side
+reservation remains the correct fix for a stable address.
+
 ## 2026-08-18 — host-side recon; console access is the one blocker
 
 ### The device is up and stable
