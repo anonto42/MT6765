@@ -9,7 +9,12 @@ mkdir -p "$CONF_DIR" "$RUN_DIR" "$LOG_DIR"
 
 names() {
     for conf in "$CONF_DIR"/*.conf; do
-        [ -f "$conf" ] && basename "$conf" .conf
+        [ -f "$conf" ] || continue
+        # Non-service files (for example hostapd.conf) may live beside the
+        # supervisor configs.  Only include explicitly enabled services.
+        grep -q '^COMMAND=' "$conf" || continue
+        grep -q '^AUTOSTART=0' "$conf" && continue
+        basename "$conf" .conf
     done
 }
 
@@ -17,6 +22,7 @@ load() {
     NAME=$1
     COMMAND=
     WORKDIR=/
+    ENV_FILE=
     # Service files are root-owned deployment configuration.
     . "$CONF_DIR/$NAME.conf"
     [ -n "$COMMAND" ] || { echo "$NAME: COMMAND is missing" >&2; return 2; }
@@ -30,15 +36,33 @@ running() {
 
 start_one() {
     load "$1" || return
+    # Never let an implicit boot/service start take over the framebuffer.
+    # The terminal is available only through an explicit service selection.
+    [ "$NAME" = terminal ] && [ "$AUTO_MODE" -eq 1 ] && return 0
+    # The framebuffer has one owner. Switching to the interactive terminal
+    # must stop the dashboard, and vice versa.
+    case "$NAME" in
+        dashboard) stop_one terminal 2>/dev/null || true ;;
+        terminal) stop_one dashboard 2>/dev/null || true ;;
+    esac
+    # stop_one loads its own config and changes NAME/COMMAND. Restore the
+    # requested service before checking/starting it.
+    load "$1" || return
     if running "$NAME"; then echo "$NAME: already running"; return; fi
     rm -f "$RUN_DIR/$NAME.pid"
     (
         cd "$WORKDIR" || exit 1
+        if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+            set -a
+            . "$ENV_FILE"
+            set +a
+        fi
         exec setsid sh -c "exec $COMMAND" >>"$LOG_DIR/$NAME.log" 2>&1
     ) </dev/null &
     pid=$!
     echo "$pid" >"$RUN_DIR/$NAME.pid"
-    sleep 1
+    # Node/Next.js and database daemons may need several seconds to initialize.
+    sleep 5
     if running "$NAME"; then echo "$NAME: started (pid $pid)"
     else echo "$NAME: failed; see $LOG_DIR/$NAME.log" >&2; return 1
     fi
@@ -58,7 +82,8 @@ stop_one() {
 
 action=${1:-status}
 selected=${2:-}
-[ -n "$selected" ] || selected=$(names)
+AUTO_MODE=0
+if [ -z "$selected" ]; then AUTO_MODE=1; selected=$(names); fi
 
 case "$action" in
     start|up) for name in $selected; do start_one "$name" || exit 1; done ;;

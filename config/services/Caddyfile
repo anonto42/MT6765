@@ -5,7 +5,18 @@
 
 :80 {
 	encode gzip
-	reverse_proxy 127.0.0.1:8080
+	# Public frontend. API/websocket paths remain reserved for the Go backend.
+	# The Next.js app owns /api/auth/* (login, refresh, logout, OAuth).
+	# Only versioned application API routes belong to the Go backend.
+	handle /api/v1/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /ws {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3001
+	}
 	log {
 		output file /var/log/caddy/access.log {
 			roll_size 10MiB

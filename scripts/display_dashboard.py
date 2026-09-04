@@ -171,12 +171,25 @@ def endpoint(port):
         return False, "DOWN"
 
 
+def hardware_status():
+    accel = os.path.exists("/dev/gsensor")
+    audio_out = os.path.exists("/dev/snd/pcmC0D0p")
+    audio_in = os.path.exists("/dev/snd/pcmC0D1c")
+    camera = bool(command(["sh", "-c", "ls /dev/video* /dev/media* 2>/dev/null | head -1"], ""))
+    return "ACCEL " + ("AUDIO_OUT " if audio_out else "NO_SPK ") + ("AUDIO_IN " if audio_in else "NO_MIC ") + ("CAMERA " if camera else "NO_CAMERA")
+
+
 def uptime_short():
     try:
         seconds = int(float(read("/proc/uptime").split()[0]))
         days, seconds = divmod(seconds, 86400)
-        hours, _ = divmod(seconds, 3600)
-        return f"{days}d {hours}h"
+        hours, seconds = divmod(seconds, 3600)
+        minutes = seconds // 60
+        if days:
+            return f"{days}d {hours}h {minutes}m"
+        if hours:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
     except (ValueError, IndexError):
         return "?"
 
@@ -220,20 +233,26 @@ def orientation(sensor):
     return ROTATION
 
 
+_display_initialized = False
 def commit_display():
     """Tell mtkfb to present the newly written shared framebuffer pages."""
+    if os.path.exists("/run/walpad-screen-off"):
+        return
+    global _display_initialized
     try:
         with open("/sys/class/graphics/fb0/pan", "w", encoding="ascii") as handle:
             handle.write("0,1280")
         with open("/sys/class/graphics/fb0/pan", "w", encoding="ascii") as handle:
             handle.write("0,0")
-        # This vendor driver leaves the boot/display overlay cached after a pan.
-        # A fast blank/unblank makes the display pipeline fetch the new frame.
-        with open("/sys/class/graphics/fb0/blank", "w", encoding="ascii") as handle:
-            handle.write("1")
-        time.sleep(0.04)
-        with open("/sys/class/graphics/fb0/blank", "w", encoding="ascii") as handle:
-            handle.write("0")
+        # Only wake the panel once. Repeated blank/unblank resets mtk-tpd and
+        # prevents the touchscreen from emitting input events.
+        if not _display_initialized:
+            with open("/sys/class/graphics/fb0/blank", "w", encoding="ascii") as handle:
+                handle.write("1")
+            time.sleep(0.04)
+            with open("/sys/class/graphics/fb0/blank", "w", encoding="ascii") as handle:
+                handle.write("0")
+            _display_initialized = True
     except OSError:
         pass
 
@@ -243,20 +262,26 @@ def render(frame, font):
     # coordinates transformed according to ROTATION.
     frame[: STRIDE * HEIGHT] = bytes((BG[2], BG[1], BG[0], BG[3])) * (WIDTH * HEIGHT)
     ip, wifi, capacity, charging, temperature, storage, uptime, services = status_lines()
+    hardware = hardware_status()
     cpu, ram, net = cpu_percent(), memory_usage(), network_rate()
     disk = command(["sh", "-c", "df -P / | awk 'NR==2 {print $5}'"])
     caddy_ok, caddy_ms = endpoint(80)
-    demo_ok, demo_ms = endpoint(8080)
+    demo_ok, demo_ms = endpoint(8081)
+    api_ok, api_ms = endpoint(8080)
     service_rows = []
     for item in services.split("  "):
         if item.strip():
             service_rows.append((item.split(":", 1)[0], "running" in item))
-    service_rows = service_rows[:4]
+    # Show the services that determine public availability first; glob order
+    # otherwise hides the ecommerce processes behind dashboard/demo entries.
+    service_map = dict(service_rows)
+    service_rows = [(name, service_map.get(name, False)) for name in
+                    ("caddy", "cloudflared", "ecommerce-backend", "ecommerce-frontend")]
     if ROTATION in (90, 270):
         panel(frame, 20, 18, 1240, 764)
         text(frame, font, "VPS: aloevol-prod", 42, 38, FG)
         indicator(frame, 335, 43, GREEN if caddy_ok and demo_ok else ORANGE)
-        text(frame, font, "HEALTHY" if caddy_ok and demo_ok else "DEGRADED", 360, 38, GREEN if caddy_ok and demo_ok else ORANGE)
+        text(frame, font, "HEALTHY" if caddy_ok and api_ok else "DEGRADED", 360, 38, GREEN if caddy_ok and api_ok else ORANGE)
         text(frame, font, "Uptime: " + uptime_short(), 1000, 38, MUTED)
         metrics = [("CPU", cpu), ("RAM", ram), ("DISK", disk), ("NETWORK", net)]
         for index, (label, value) in enumerate(metrics):
@@ -272,7 +297,7 @@ def render(frame, font):
             y = 270 + index * 38
             indicator(frame, 45, y + 4, GREEN if ok else ORANGE)
             text(frame, font, name, 70, y, FG)
-        for index, (name, ok, latency) in enumerate((("Caddy", caddy_ok, caddy_ms), ("Demo API", demo_ok, demo_ms))):
+        for index, (name, ok, latency) in enumerate((("Caddy", caddy_ok, caddy_ms), ("Go API", api_ok, api_ms))):
             y = 270 + index * 38
             indicator(frame, 658, y + 4, GREEN if ok else ORANGE)
             text(frame, font, f"{name:<20} {latency}", 683, y, FG)
@@ -288,6 +313,7 @@ def render(frame, font):
         text(frame, font, "SYSTEM / ACCESS", 42, 612, ORANGE)
         text(frame, font, f"WiFi: {wifi}  IP: {ip}  SSH: root@{ip}", 42, 650, FG)
         text(frame, font, f"Battery: {capacity}% {charging}  Temp: {temperature}  Storage: {storage}", 42, 687, FG)
+        text(frame, font, "Hardware: " + hardware, 42, 724, FG)
         text(frame, font, "ALERTS", 655, 612, ORANGE)
         indicator(frame, 658, 654, ORANGE)
         text(frame, font, "Container kernel support missing", 683, 650, FG)
@@ -296,7 +322,7 @@ def render(frame, font):
         panel(frame, 20, 18, 760, 1244)
         text(frame, font, "VPS: aloevol-prod", 42, 40, FG)
         indicator(frame, 45, 82, GREEN if caddy_ok and demo_ok else ORANGE)
-        text(frame, font, ("HEALTHY" if caddy_ok and demo_ok else "DEGRADED") + "  Uptime " + uptime_short(), 70, 77, GREEN)
+        text(frame, font, ("HEALTHY" if caddy_ok and api_ok else "DEGRADED") + "  Uptime " + uptime_short(), 70, 77, GREEN)
         metrics = [("CPU", cpu), ("RAM", ram), ("DISK", disk), ("NETWORK", net)]
         for index, (label, value) in enumerate(metrics):
             x = 42 + (index % 2) * 375
@@ -310,7 +336,7 @@ def render(frame, font):
             indicator(frame, 45, y + 4, GREEN if ok else ORANGE)
             text(frame, font, name, 70, y, FG)
         text(frame, font, "APPLICATION HEALTH", 42, 600, ORANGE)
-        for index, (name, ok, latency) in enumerate((("Caddy", caddy_ok, caddy_ms), ("Demo API", demo_ok, demo_ms))):
+        for index, (name, ok, latency) in enumerate((("Caddy", caddy_ok, caddy_ms), ("Go API", api_ok, api_ms))):
             y = 640 + index * 42
             indicator(frame, 45, y + 4, GREEN if ok else ORANGE)
             text(frame, font, f"{name:<20} {latency}", 70, y, FG)
@@ -322,7 +348,8 @@ def render(frame, font):
         text(frame, font, f"IP: {ip}", 42, 985, FG)
         text(frame, font, f"Battery: {capacity}% {charging}", 42, 1025, FG)
         text(frame, font, f"Temp: {temperature}", 42, 1065, FG)
-        text(frame, font, "SSH root@" + ip, 42, 1120, GREEN)
+        text(frame, font, "Hardware: " + hardware, 42, 1100, FG)
+        text(frame, font, "SSH root@" + ip, 42, 1140, GREEN)
         text(frame, font, time.strftime("Updated %Y-%m-%d %H:%M:%S"), 42, 1185, MUTED)
     # mtkfb exposes three vertically stacked 800x1280 pages and may retain the
     # bootloader logo on page 1 or 2. Keep every page identical so the dashboard

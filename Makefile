@@ -19,7 +19,7 @@ VENV  := $(REPO)/tools/mtk/.venv/bin/python
 MTK   := $(REPO)/tools/mtk/mtk.py
 SCR   := $(REPO)/scripts
 
-.PHONY: help setup udev watch probe console recon recon-watch host-recon super-map vendor-up wifi-up wifi-find wifi-authorize wifi-password vps-setup vps-migrate-internal vps-shell vps-status vps-stage docker-setup docker-status services-setup services-up services-down services-restart services-status services-logs tailscale-up ssh net-console wifi-survey wifi-push wifi-userspace mtk-info mtk-gpt mtk-reset mtk-flash-lk clean
+.PHONY: help setup udev watch probe console recon recon-watch host-recon super-map vendor-up wifi-up wifi-find wifi-authorize wifi-password vps-setup vps-migrate-internal vps-shell vps-status vps-stage docker-setup docker-status services-setup services-up services-down services-restart services-status services-logs dashboard terminal boot-container-kernel tailscale-up ssh net-console wifi-survey wifi-push wifi-userspace mtk-info mtk-gpt mtk-reset mtk-flash-lk clean
 .DEFAULT_GOAL := help
 
 help: ## show this help
@@ -119,6 +119,17 @@ services-up services-down services-restart services-status: ## manage native VPS
 	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
 	 ACTION='$(@:services-%=%)'; \
 	 ssh -F /dev/null root@$$IP "chroot /mnt/vps /opt/walpad/services $$ACTION $${SERVICE:-}"
+
+dashboard: ## show the persistent dashboard on the tablet display
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null root@$$IP 'chroot /mnt/vps /opt/walpad/services restart dashboard'
+
+terminal: ## switch the tablet display to the optional touch terminal
+	@IP=$${WPD_IP:-$$(bash $(SCR)/wifi_find.sh --ip-only)}; \
+	 ssh -F /dev/null root@$$IP 'chroot /mnt/vps /opt/walpad/services restart terminal'
+
+boot-container-kernel: ## RAM-boot kernel with cgroup support (requires fastboot mode)
+	@bash $(SCR)/boot_kernel.sh $(REPO)/build/persistence/boot-container-kernel-ramboot.img
 
 services-logs: ## show service logs: make services-logs SERVICE=caddy
 	@test -n "$(SERVICE)" || { echo "SERVICE is required (for example: SERVICE=caddy)"; exit 2; }

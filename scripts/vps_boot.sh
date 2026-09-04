@@ -32,8 +32,13 @@ mkdir -p "$ROOT/proc" "$ROOT/sys" "$ROOT/dev" "$ROOT/dev/pts" "$ROOT/dev/shm" "$
 mounted "$ROOT/proc" || mount -t proc proc "$ROOT/proc"
 mounted "$ROOT/sys" || mount --bind /sys "$ROOT/sys"
 mounted "$ROOT/dev" || mount --bind /dev "$ROOT/dev"
+mounted "$ROOT/dev/pts" || mount --bind /dev/pts "$ROOT/dev/pts"
 mounted "$ROOT/dev/shm" || mount -t tmpfs -o mode=1777,nosuid,nodev shm "$ROOT/dev/shm"
 cp /etc/resolv.conf "$ROOT/etc/resolv.conf"
+
+# Repair the service stack from the persistent SD bundle before starting it.
+# This makes dashboard/services self-restoring after power loss or reboot.
+[ -x "$VPS/vps_self_setup.sh" ] && sh "$VPS/vps_self_setup.sh" >>"$VPS/self-setup.log" 2>&1 || true
 
 # The recovery userspace creates lo but leaves it down and without an address.
 # Native services use loopback so backends are not exposed directly on WiFi.

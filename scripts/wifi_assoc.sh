@@ -158,6 +158,11 @@ ps | grep -v grep | grep -q '[d]ropbear' \
     || say "dropbear did not start, see /tmp/dropbear.log"
 
 # Optional persistent VPS payload. Provision with `make vps-setup`.
-if [ -x /mnt/sd/vps/boot.sh ]; then
+if [ "${WIFI_RECONNECT:-0}" != 1 ] && [ -x /mnt/sd/vps/boot.sh ]; then
     setsid sh /mnt/sd/vps/boot.sh >/dev/null 2>&1 </dev/null &
+fi
+
+# Continue trying after a later AP outage or expired DHCP lease.
+if [ "${WIFI_RECONNECT:-0}" != 1 ] && [ -x /mnt/sd/wifi_watchdog.sh ]; then
+    setsid sh /mnt/sd/wifi_watchdog.sh >/dev/null 2>&1 </dev/null &
 fi

@@ -36,7 +36,7 @@ NOW=$(date +%s)
 ssh -F /dev/null -o BatchMode=yes "root@$IP" \
     "date -s '@$NOW'; hwclock -w 2>/dev/null || true"
 
-tar -C "$ROOT/scripts" -cf - vps_boot.sh vps_setup_device.sh wifi_assoc.sh \
+tar -C "$ROOT/scripts" -cf - vps_boot.sh vps_setup_device.sh wifi_assoc.sh wifi_watchdog.sh \
     | ssh -F /dev/null -o BatchMode=yes "root@$IP" '
         mkdir -p /mnt/sd/vps
         tar -C /mnt/sd/vps -xf -

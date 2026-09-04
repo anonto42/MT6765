@@ -7,6 +7,11 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ -x "$repo/tools/platform-tools/fastboot" ]; then
   FB="$repo/tools/platform-tools/fastboot"
+elif command -v fastboot >/dev/null 2>&1; then
+  FB="fastboot"
+elif command -v nix >/dev/null 2>&1; then
+  # Keep the host setup sudo-free; Nix supplies a current Android fastboot.
+  exec nix shell nixpkgs#android-tools -c "$0" "$@"
 else
   FB="${FASTBOOT:-fastboot}"
 fi
