@@ -25,6 +25,19 @@ Hard limits that come from the hardware and the stock 4.19.127 kernel
 Things that need the user: confirm the Linux path; physically reseat the SD card (it is not detected);
 type Wi-Fi credentials on the tablet itself (never stored in the repo).
 
+## Progress (2026-11-08)
+
+| Phase | State |
+|---|---|
+| 0 framebuffer UI | done; touch works but is not accurate (tune later) |
+| 1 rootfs on `userdata` | done: Alpine ext4 flashed and verified, `init-os` boots it |
+| 2 Wi-Fi, 3 Wi-Fi UI | built (`walpad-wifi`, `walpad-wifi-ui.py`); **not yet verified on the device** |
+| 4 session, browser, terminal | built (Xvfb + openbox, Firefox ESR, `st`, launcher); browser/terminal not yet verified |
+| 5 hardware | auto-rotation, screen timeout, lid sensor, battery guard, power menu, volume gestures built (`walpad-devd`); audio, suspend, Bluetooth, SD not done |
+| 6 hardening | partial: `padui` fallback if the session fails; build and flash scripts exist |
+
+Open: rotation flicker fix flashed, result pending; rotation direction and Wi-Fi unverified.
+
 ## Phases
 
 Each phase ends with a check that can be repeated.  Flash only with the procedure in `AGENTS.md`

@@ -12,14 +12,22 @@ Redis/Next.js/Go stack unless the user asks.
 
 ## Current state (2026-11-08)
 
-- `boot_a` = BusyBox/dropbear server ramdisk + `padui` (framebuffer touch UI).  `boot_b` = unmodified
-  server ramdisk (fallback).  `super` = repaired stock Android system/vendor/product (not booted).
-- Works: display, hardware buttons.  Not working: touch (debugging), battery gauge (`-1`, estimated
-  from voltage).  `userdata` and `metadata` were erased; the Alpine VPS and its services are gone;
-  the SD card is not detected.
-- Build the image with `scripts/build_ui_boot.sh firmware/MT6765/backups/boot_a-original.img <out>`;
-  `tools/padui` and `tools/dmlinear` are static aarch64 C built by `build.sh` in a throwaway
-  Alpine docker container.
+- `userdata` = **Alpine aarch64 rootfs** (`build/rootfs/rootfs.ext4`, built by `scripts/build_rootfs.sh`):
+  Xvfb + openbox session, Firefox ESR, terminal, Wi-Fi UI, `walpad-devd` (auto-rotation, screen
+  timeout, lid sensor, battery guard, power menu), `walpad-keys` (volume/power gestures),
+  `walpad-touchd` (touch -> X), `fbmirror` (Xvfb -> `/dev/fb0`, rotation aware).
+- `boot_a` = `boot_a-os.img` (ramdisk `config/boot/init-os` mounts `userdata` and switch_roots into
+  Alpine; the old `padui` key UI is the fallback if the session is unhealthy).  `boot_b` = unmodified
+  server ramdisk (fallback).  `super` = repaired stock Android (not booted).  `metadata` erased.
+- Last flash 2026-11-08 (`scripts/flash_os.sh`, read-back verified): rootfs with the `fbmirror` fix
+  that no longer blanks the panel on rotation.  **Unverified on the device:** that the rotation
+  flicker is gone, Wi-Fi, and rotation direction (`rotate_flip` in `/etc/walpad/devd.json`).
+- Touch works but is not accurate (optimise later).  Battery gauge reads `-1` (voltage estimate).
+  SD card not detected.  Android cannot be restored without official Walton boot images.
+- Flash both partitions with `scripts/flash_os.sh <rootfs.ext4> <boot_a image>` (explicit user approval
+  and one cable replug).  To change a single file, patch the image with `debugfs -w` instead of a full
+  rebuild.  `tools/padui`, `tools/fbmirror`, `tools/dmlinear` are static aarch64 C, built by their
+  `build.sh` in a throwaway Alpine docker container.
 
 ## Flashing and recovery (read before touching the tablet)
 

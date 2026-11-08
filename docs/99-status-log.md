@@ -598,3 +598,17 @@ throwaway Alpine container with clang+lld; no cross toolchain needed on the host
 - `cmd 2>/dev/null` evaluates the redirect first: it creates `/dev/null` as a regular file.
 - A write that "succeeds" can still not land if the previous mtk session was stale: always read
   back and compare hashes.
+
+## 2026-11-08 (later) — Alpine rootfs flashed, rotation flicker fix
+
+- `scripts/build_rootfs.sh` builds an Alpine aarch64 ext4 rootfs (Xvfb, openbox, Firefox ESR, `st`,
+  Wi-Fi UI, `walpad-devd`, `walpad-keys`, `walpad-touchd`, `fbmirror`).  `scripts/flash_os.sh` writes it
+  to `userdata` and `config/boot/init-os` (as `boot_a-os.img`) to `boot_a`, reads both back and
+  compares: `USERDATA_VERIFIED`, `BOOT_VERIFIED`, reset OK.  The tablet booted the new system; touch
+  works (not accurate).
+- Reported: the display flickered when the tablet rotated.  Cause: `fbmirror` blanked and unblanked the
+  panel on every orientation change (and blanking resets the touch controller).  Fix: wake the panel
+  once at startup, wait 300 ms after a rotation for X to relayout, redraw once.  Patched into the
+  rootfs with `debugfs -w` and flashed (read-back verified).  **Result on the device not yet confirmed.**
+- Still unverified: Wi-Fi, rotation direction, Browser and Terminal tiles.  Android restore remains
+  impossible without official Walton boot images.
