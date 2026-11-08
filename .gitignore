@@ -30,3 +30,11 @@ data/dumps/
 
 # Repacked boot-image work area (contains an expanded proprietary ramdisk).
 /build/
+
+# Stock firmware backups and dumps (large, device-specific)
+/firmware/
+
+# built binaries (rebuild with tools/*/build.sh)
+/tools/padui/padui
+/tools/dmlinear/dmlinear
+/tools/fbmirror/fbmirror

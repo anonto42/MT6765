@@ -1,0 +1,23 @@
+{
+  "tap_window_ms": 350,
+  "long_ms": 600,
+  "chord_ms": 160,
+  "repeat_ms": 140,
+  "vol_up": {
+    "single": "key:Up",
+    "double": "key:Prior",
+    "triple": "ctl:brightness +40",
+    "quad":   "run:firefox-esr",
+    "long":   "keyboard",
+    "hold_repeat": false
+  },
+  "vol_down": {
+    "single": "key:Down",
+    "double": "key:Next",
+    "triple": "ctl:brightness -40",
+    "quad":   "screenshot",
+    "long":   "home",
+    "hold_repeat": false
+  },
+  "both": { "press": "ctl:rotate toggle" }
+}

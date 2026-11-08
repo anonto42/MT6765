@@ -518,3 +518,83 @@ everything after association.
 - **NVRAM.** `glLoadNvram: Nvram not available` — the MAC/calibration partition
   is not mounted, so the MAC is the driver's fallback `00:08:22:18:2a:06`. It
   associates fine, but TX calibration is whatever the firmware defaults to.
+
+
+## 2026-11-06 - direction change and boot check
+
+- IchiBazar is no longer hosted on the tablet. Caddy, cloudflared, Redis and the
+  ecommerce services are set to `AUTOSTART=0` in `config/services/`. Not yet
+  redeployed to the tablet.
+- New goal: use the tablet as a standalone device (touch, buttons, display).
+- Boot check: the tablet came up on WalPad-Server with `usb0`=192.168.42.1 and
+  `rndis0`=192.168.43.1, but no `/dev/mmcblk1` (no SD card detected), so
+  `wifi_boot.sh` could not start Wi-Fi. Host pings over USB got no ARP reply;
+  the serial console on `/dev/ttyACM0` did work. Action: reseat the SD card.
+
+## 2026-11-07 / 08 — attempt to restore Android, root causes found, switch to a Linux touch UI
+
+Goal changed on 2026-11-06: stop hosting IchiBazar and use the tablet as a normal device
+(touch, buttons, display, Wi-Fi).  Android restore was tried first; it was dropped on
+2026-11-08 in favour of an on-device Linux touch UI (see `docs/20-real-device-plan.md`).
+
+### How the tablet is reached now (all verified)
+- **mtkclient in preloader mode needs no preloader file** (BROM mode failed at DRAM setup).
+  Start ONE `mtk.py` command, then unplug/replug the USB cable with no buttons held (a 15 s
+  power hold also works while the tablet is running).  The window stays open for several
+  consecutive commands.  Never run two mtkclient processes at once; a killed session needs a
+  new unplug/replug.  Use `mtk.py reset` to leave the window.
+- **Fastboot works** (`0e8d:201c`, bootloader **unlocked**).  There is no `fastboot` binary here;
+  `scripts/fastboot_py.py` is a minimal pyusb client (getvar, reboot).  `fetch` is not supported.
+- **Serial console wedges** after any large transfer; the host side of the USB ethernet never
+  transmits (ARP stays INCOMPLETE).  Prefer mtkclient reads for anything big.
+
+### Root causes found
+- `super` held an **Android sparse image written raw** (magic `3aff26ed` at offset 0), so Android
+  could never read it.  It contains genuine Walton Android 11 system/vendor/product images
+  (`WALTON/WALPAD8G/WALPAD8G_V2:11/RP1A.200720.011/mp1V915`, no system_ext).  Expanded and
+  rewritten 2026-11-07 and verified byte-for-byte (`build/android-restore/super-raw.img`; the
+  as-found sparse dump is `super-sparse-as-found.img`).
+- `firmware/MT6765/backups/boot_a-original.img` is **not stock Android**: its ramdisk is the
+  BusyBox + dropbear WalPad-Server ramdisk (and `boot_b` holds the same image).  No stock
+  `boot.img` exists anywhere; `vendor_boot_a` is all zeros; `vbmeta_a/system/vendor` were edited
+  in place (flags 0x3, hashes no longer match).
+- `userdata` (p44) and `metadata` (p8) were erased on 2026-11-07 with the user's approval.  The
+  Alpine VPS that used to live on `userdata` is gone; the SD card is currently not detected
+  (`mmc1` shows no card), so the old Wi-Fi bundle and keys on it are unreachable.
+
+### Android experiment (kept in `config/boot/init-android-experiment`)
+A replacement first-stage `/init` (BusyBox script + `tools/dmlinear`) mounted system/vendor/product
+from `super` through device-mapper and `switch_root`ed into Android's `init selinux_setup`.
+Progress, each step proven from kernel logs read out of `expdb`/`metadata`:
+1. selinuxfs not mounted -> fixed.  2. loop devices are blocked by SELinux (kernel domain cannot
+read the `tmpfs`-labelled node) -> replaced by dm-linear.  3. `/dev/null` was created as a regular
+file by a `2>/dev/null` redirect -> fixed.  4. `mdev -s` pre-created `/dev` nodes that ueventd
+could not relabel -> minimal `/dev`.  After that Android reached second-stage init, ueventd and
+apexd, and the tablet enumerated as `0e8d:20ff WALTON WALPAD8G` (Android USB), but the screen
+stayed black and nothing more could be diagnosed without more log cycles.  Stopped there.
+A real fix is the official Walton firmware (stock boot.img + vendor_boot.img + vbmeta + dtbo).
+
+### Current state of the tablet
+- `boot_a` = server ramdisk + **padui** (tools/padui): framebuffer UI with a home screen, touch
+  pad, button test, status and brightness.  Power key turns the screen off/on, volume keys change
+  brightness.  Built with `scripts/build_ui_boot.sh`.
+- Verified working: display, hardware buttons.  **Not working: touch** (cause unknown; the build
+  flashed last adds an on-screen event counter per input device to find out).  **Battery shows -1%**:
+  the kernel gauge reports `uisoc:-1`; padui now estimates from voltage and labels it "est.".
+- `boot_b` still holds the unmodified server image (fallback); `super` holds repaired Android.
+- Input map: event0 HALL_DEV, event1 mtk-kpd (volume), event2 mtk-pmic-keys (power),
+  event3 kxd-kxd, event4 mtk-tpd (touch).
+
+### Tools added
+`scripts/repack_boot.py` (replace a v2 boot image's ramdisk), `scripts/build_ui_boot.sh`,
+`scripts/fastboot_py.py`, `tools/padui/` and `tools/dmlinear/` (static aarch64 C built in a
+throwaway Alpine container with clang+lld; no cross toolchain needed on the host).
+
+### Gotchas that cost time
+- `pkill -f`/`pgrep -f` patterns can match your own shell command line and kill it; use
+  `ps | grep | grep -v grep`.
+- `cp` is aliased interactive here: use `command cp -f`.
+- `/tmp` is a 6.8 GB tmpfs; a 4 GB partition read plus a copy fills it.
+- `cmd 2>/dev/null` evaluates the redirect first: it creates `/dev/null` as a regular file.
+- A write that "succeeds" can still not land if the previous mtk session was stale: always read
+  back and compare hashes.

@@ -12,10 +12,12 @@ tar -C "$ROOT" -cf - scripts/services_ctl.sh scripts/power_button.py \
     tmp=/tmp/walpad-services-setup
     mkdir -p "$tmp"
     tar -C "$tmp" -xf -
-    chroot /mnt/vps /sbin/apk add caddy curl
+    chroot /mnt/vps /sbin/apk add caddy curl redis
     mkdir -p /mnt/vps/opt/walpad /mnt/vps/opt/walpad/compose \
         /mnt/vps/etc/walpad/services.d /mnt/vps/etc/caddy \
         /mnt/vps/srv/walpad-demo /mnt/vps/var/lib/caddy /mnt/vps/var/log/caddy
+    mkdir -p /mnt/vps/var/lib/redis
+    chroot /mnt/vps /bin/sh -c 'id redis >/dev/null 2>&1 && chown -R redis:redis /var/lib/redis || true'
     cp "$tmp/scripts/services_ctl.sh" /mnt/vps/opt/walpad/services
     cp "$tmp/scripts/power_button.py" /mnt/vps/opt/walpad/power_button.py
     cp "$tmp/scripts/display_dashboard.py" /mnt/vps/opt/walpad/display_dashboard.py

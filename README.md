@@ -10,6 +10,13 @@ written to drive the repair, and a documentation set that goes deep on every
 concept involved — from "what is a preloader" to "how to patch a Thumb-2
 instruction in the bootloader by hand."
 
+> **Direction change (2026-11-06): the tablet is now a standalone device.**
+> IchiBazar hosting is retired.  Current state (2026-11-08): `boot_a` runs the Linux server ramdisk
+> plus an on-device touch UI (`tools/padui`).  Display and hardware buttons work; touch and the
+> battery gauge are being fixed.  Android restore was attempted and stopped (see the status log);
+> the plan to turn this into a browsing/terminal/Wi-Fi tablet is in
+> [docs/20-real-device-plan.md](docs/20-real-device-plan.md).  Details: [AGENTS.md](AGENTS.md).
+
 > **Status (2026-08-20): the built-in WiFi works.** The tablet associates with a
 > WPA2 network, takes a DHCP lease, reaches the internet, and serves SSH — so a
 > shell no longer needs the USB cable:

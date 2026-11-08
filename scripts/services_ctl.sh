@@ -8,13 +8,19 @@ LOG_DIR=/var/log/walpad-services
 mkdir -p "$CONF_DIR" "$RUN_DIR" "$LOG_DIR"
 
 names() {
+    # Redis is a dependency of the API; start it before application services.
+    if [ -f "$CONF_DIR/redis.conf" ] && ! grep -q '^AUTOSTART=0' "$CONF_DIR/redis.conf"; then
+        grep -q '^COMMAND=' "$CONF_DIR/redis.conf" && echo redis
+    fi
     for conf in "$CONF_DIR"/*.conf; do
         [ -f "$conf" ] || continue
         # Non-service files (for example hostapd.conf) may live beside the
         # supervisor configs.  Only include explicitly enabled services.
         grep -q '^COMMAND=' "$conf" || continue
         grep -q '^AUTOSTART=0' "$conf" && continue
-        basename "$conf" .conf
+        name=$(basename "$conf" .conf)
+        [ "$name" = redis ] && continue
+        echo "$name"
     done
 }
 

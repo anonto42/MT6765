@@ -1,0 +1,94 @@
+#!/bin/sh
+# Bring the MediaTek CONNSYS Wi-Fi stack up (sequence proven in scripts/mtk_stack_up.sh / wifi_assoc.sh)
+# and keep the tablet associated.  Networks are stored in /etc/wpa_supplicant/wpa_supplicant.conf
+# (managed by the Wi-Fi settings app through wpa_cli).  ORDER IS LOAD-BEARING: wmt_launcher must
+# be serving before anything powers the chip on; a failed power-on can only be cleared by a reboot.
+SYS=/system/system
+LINKER=$SYS/bin/bootstrap/linker64
+MODDIR=/vendor/lib/modules
+SHIM=/usr/local/lib/libwpdprops.so
+CONF=/etc/wpa_supplicant/wpa_supplicant.conf
+IFACE=wlan0
+say() { echo "[wifi] $*"; echo "WALPAD-WIFI: $*" > /dev/kmsg 2>/dev/null; }
+
+mkdir -p /etc/wpa_supplicant /run/wpa_supplicant /run/walpad
+[ -f $CONF ] || printf 'ctrl_interface=/run/wpa_supplicant\nctrl_interface_group=0\nupdate_config=1\ncountry=US\n' > $CONF
+chmod 600 $CONF
+
+stack_up() {
+  [ -x $LINKER ] || { say "bootstrap linker missing: /system not mounted"; return 1; }
+  export LD_LIBRARY_PATH=$SYS/lib64/bootstrap:/vendor/lib64:$SYS/lib64
+  export LD_PRELOAD=$SHIM
+  insmod_once() { grep -q "^$1 " /proc/modules && return 0; insmod $MODDIR/$1.ko && say "insmod $1"; }
+  insmod_once wmt_drv || return 1
+  if ! grep -q chipid /tmp/wpd-props 2>/dev/null; then
+    $LINKER /vendor/bin/wmt_loader > /tmp/wmt_loader.log 2>&1
+    i=0; while [ ! -c /dev/stpwmt ] && [ $i -lt 20 ]; do sleep 1; i=$((i+1)); busybox mdev -s 2>/dev/null; done
+    [ -c /dev/stpwmt ] || { say "wmt_loader did not create /dev/stpwmt"; return 1; }
+  fi
+  insmod_once wmt_chrdev_wifi || return 1
+  insmod_once wlan_drv_gen4m || return 1
+  launcher_serving() { for p in $(ps -eo pid,args | grep -v grep | grep 'wmt_launcher' | awk '{print $1}'); do ls -l /proc/$p/fd 2>/dev/null | grep -q stpwmt && return 0; done; return 1; }
+  if ! launcher_serving; then
+    for p in $(ps -eo pid,args | grep -v grep | grep 'wmt_launcher' | awk '{print $1}'); do kill $p 2>/dev/null; done
+    setsid $LINKER /vendor/bin/wmt_launcher -p /vendor/firmware/ -o 1 > /tmp/wmt_launcher.log 2>&1 < /dev/null &
+    j=0; while ! launcher_serving && [ $j -lt 15 ]; do sleep 1; j=$((j+1)); done
+    launcher_serving || { say "wmt_launcher not serving"; return 1; }
+    say "wmt_launcher serving"
+  fi
+  DEVNUM=$(cat /sys/class/wmtWifi/wmtWifi/dev 2>/dev/null)
+  [ -n "$DEVNUM" ] || { say "no /sys/class/wmtWifi"; return 1; }
+  if [ ! -c /dev/wmtWifi ]; then rm -f /dev/wmtWifi; mknod /dev/wmtWifi c "${DEVNUM%%:*}" "${DEVNUM##*:}"; chmod 600 /dev/wmtWifi; fi
+  if [ ! -d /sys/class/net/$IFACE ]; then
+    dmesg -c > /dev/null 2>&1
+    if echo 1 > /dev/wmtWifi 2>/tmp/wmton.err; then sleep 5
+    else
+      sleep 3; dmesg > /var/log/wmton.dmesg 2>/dev/null
+      say "WMT power-on failed (first-attempt trace saved in /var/log/wmton.dmesg)"
+      return 9
+    fi
+  fi
+  [ -d /sys/class/net/$IFACE ] || { say "no $IFACE after power-on"; return 1; }
+  unset LD_PRELOAD LD_LIBRARY_PATH
+  ip link set $IFACE up 2>/dev/null
+  say "$IFACE is up"
+}
+
+DONE_STACK=0
+for attempt in 1 2 3; do
+  stack_up; rc=$?
+  if [ $rc = 0 ]; then DONE_STACK=1; break; fi
+  [ $rc = 9 ] && break   # a failed power-on latches the chip until reboot: do not retry
+  say "stack bring-up attempt $attempt failed"; sleep 5
+done
+[ $DONE_STACK = 1 ] || { say "giving up on Wi-Fi (reboot to retry)"; echo failed > /run/walpad/wifi-state; exit 1; }
+
+# supplicant (Alpine's native build) and DHCP, with a reconnect loop
+unset LD_PRELOAD LD_LIBRARY_PATH
+cat > /run/walpad/udhcpc.script <<'SCR'
+#!/bin/sh
+case "$1" in
+  bound|renew)
+    ip addr flush dev $interface 2>/dev/null
+    ip addr add $ip/${mask:-24} dev $interface
+    ip link set $interface up
+    [ -n "$router" ] && ip route replace default via ${router%% *} dev $interface
+    : > /etc/resolv.conf; for d in $dns; do echo "nameserver $d" >> /etc/resolv.conf; done
+    [ -s /etc/resolv.conf ] || printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf ;;
+esac
+exit 0
+SCR
+chmod +x /run/walpad/udhcpc.script
+pkill wpa_supplicant 2>/dev/null; sleep 1
+wpa_supplicant -B -i $IFACE -c $CONF -Dnl80211 -P /run/wpa_supplicant.pid -f /var/log/wpa_supplicant.log
+echo started > /run/walpad/wifi-state
+while true; do
+  state=$(wpa_cli -p /run/wpa_supplicant -i $IFACE status 2>/dev/null | sed -n 's/^wpa_state=//p')
+  ip=$(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
+  if [ "$state" = "COMPLETED" ] && [ -z "$ip" ]; then
+    say "associated, requesting DHCP"
+    udhcpc -i $IFACE -n -q -t 6 -s /run/walpad/udhcpc.script > /dev/null 2>&1
+  fi
+  echo "${state:-none} ${ip:-}" > /run/walpad/wifi-state
+  sleep 4
+done

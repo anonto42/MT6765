@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus><focusNew>yes</focusNew><followMouse>no</followMouse></focus>
+  <desktops><number>1</number></desktops>
+  <applications>
+    <!-- every normal window fills the 800x1280 panel with no title bar -->
+    <application class="*"><decor>no</decor><maximized>yes</maximized><focus>yes</focus></application>
+    <!-- the on-screen keyboard keeps its own size, always on top -->
+    <application name="matchbox-keyboard"><maximized>no</maximized><decor>no</decor><layer>above</layer><focus>no</focus></application>
+    <application class="Matchbox-keyboard"><maximized>no</maximized><decor>no</decor><layer>above</layer><focus>no</focus></application>
+  </applications>
+</openbox_config>

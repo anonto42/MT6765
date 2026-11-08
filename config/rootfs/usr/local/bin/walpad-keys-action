@@ -1,0 +1,7 @@
+#!/bin/sh
+# Run one walpad-keys action from the launcher: walpad-keys-action keyboard | home | screenshot | powermenu
+exec python3 - "$@" <<'PY'
+import sys, importlib.util
+spec = importlib.util.spec_from_file_location("wk", "/usr/local/bin/walpad-keys.py"); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.do(sys.argv[1])
+PY

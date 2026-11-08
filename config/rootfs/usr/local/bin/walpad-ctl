@@ -1,0 +1,5 @@
+#!/bin/sh
+# Send a command to walpad-devd:  walpad-ctl screen toggle | rotate lock | brightness +30 | ...
+# Shows the daemon's status with:  walpad-ctl status
+[ "$1" = "status" ] && { cat /run/walpad/status.json; echo; exit 0; }
+echo "$*" > /run/walpad/devd.cmd

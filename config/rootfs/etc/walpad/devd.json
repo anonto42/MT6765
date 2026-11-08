@@ -1,0 +1,14 @@
+{
+  "auto_rotate": true,
+  "rotate_flip": false,
+  "tilt_min": 3000,
+  "tilt_ratio": 1.35,
+  "rotate_samples": 3,
+  "dim_after_s": 90,
+  "dim_level": 20,
+  "off_after_s": 240,
+  "lid_off": true,
+  "low_batt_mv": 3550,
+  "critical_batt_mv": 3350,
+  "default_brightness": 120
+}
