@@ -38,3 +38,6 @@ data/dumps/
 /tools/padui/padui
 /tools/dmlinear/dmlinear
 /tools/fbmirror/fbmirror
+
+# Claude Code worktrees and local state
+/.claude/worktrees/
