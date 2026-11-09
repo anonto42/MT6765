@@ -34,10 +34,16 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M5.4 | Home + core client + offline banner (6 goldens, full-stack test) | done (host) |
 | M5.5 | Apps + Network + password sheet (17 goldens, click-through test) | done (host) |
 | M5.6 | Device + Settings screens (19 goldens, round-trip test) | done (host) |
-| M5.7-M5.9 | power menu, system dock, UI checklist | todo |
-| M6.1-M6.4 | Process manager, installed-only apps, crash notice, gate | todo |
-| M7.1-M7.2 | Remove Python from rootfs, re-baseline | todo |
-| M8.1-M8.3 | fbmirror pause when screen off, damage-driven mirror (if measured), Firefox memory | todo |
+| M5.7 | Power menu overlay + hardware-key navigation (input topic) | done (host; see reports/M5.7.md) |
+| M5.8 | System dock (own X window, shown over foreign apps) | done (host; see reports/M5.8.md) |
+| M5.9 [DEVICE] | UI checklist on the tablet; `walpad-shell --capabilities` already prints `shell` (reports/M5.9-prep.md) | owner runs it |
+| M6.1-M6.3 | process manager, installed-only apps, crash notice | done (host; see reports/M6.1-M6.3.md) |
+| M6.4 [DEVICE] | gate checklist: scripts/device/m6_check.sh | owner runs it |
+| M7.1 | Python-free image: WALPAD_NO_PYTHON=1 build mode + padui rescue (opt-in; default image unchanged) | done (host; see reports/M7.1.md) |
+| M7.2 [DEVICE] | re-run baseline, compare | owner runs it |
+| M8.1 | fbmirror pauses while the screen is off | done (host; never run on the tablet; see reports/M8.md) |
+| M8.2 [DEVICE] | decide from scripts/device/measure_fbmirror.sh | owner measures |
+| M8.3 [DEVICE] | Firefox memory: scripts/device/measure_firefox_mem.sh | owner measures |
 | M9.1-M9.5 | Log caps, safe mode, reproducible build, security review, failure matrix | todo |
 
 Owner decisions (defaults apply unless changed here): D1 pure-Rust renderer (tiny-skia+fontdue); D2 Files tile only when installed; D3 system dock yes; D4 port one-reading critical rule first, then 3 readings in own commit; D5 defer boot image changes; D6 keep keys.json gestures, add volume: only after audio verified.
