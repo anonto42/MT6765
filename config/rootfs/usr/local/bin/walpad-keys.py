@@ -6,7 +6,8 @@ both buttons together = chord.  Every gesture runs an action from /etc/walpad/ke
 
   key:NAME        send an X key (xdotool), e.g. key:Up  key:Prior  key:ctrl+Tab  key:alt+Left
   ctl:ARGS        command for walpad-devd: ctl:brightness +40  ctl:rotate toggle  ctl:screen off
-  run:COMMAND     start a program, e.g. run:firefox-esr  run:st
+  launch:APP-ID   start an app from the /etc/walpad/apps.json allowlist, e.g. launch:browser
+  run:COMMAND     start a program, e.g. run:st  (Python runtime only; the Rust input subsystem rejects it)
   home            bring the Home launcher to the front
   keyboard        show/hide the on-screen keyboard
   screenshot      save the screen to /root/screenshots/shot-<time>.xwd
@@ -25,6 +26,12 @@ DEFAULT = {"tap_window_ms": 350, "long_ms": 600, "chord_ms": 160, "repeat_ms": 1
            "vol_down": {"single": "key:Down", "double": "key:Next", "triple": "ctl:brightness -40", "quad": "none", "long": "home"},
            "both": {"press": "ctl:rotate toggle"}}
 cfg = dict(DEFAULT)
+APPS_FILE = "/etc/walpad/apps.json"
+# environment of every launched app (docs/rust/CONTRACTS.md)
+APP_ENV = {"DISPLAY": ":0", "HOME": "/root", "XDG_RUNTIME_DIR": "/run/walpad", "LIBGL_ALWAYS_SOFTWARE": "1",
+           "MOZ_DISABLE_CONTENT_SANDBOX": "1", "MOZ_DISABLE_GMP_SANDBOX": "1", "MOZ_DISABLE_RDD_SANDBOX": "1",
+           "MOZ_DISABLE_SOCKET_PROCESS_SANDBOX": "1", "MOZ_WEBRENDER": "0", "MOZ_ACCELERATED": "0",
+           "GTK_A11Y": "none", "NO_AT_BRIDGE": "1"}
 
 def log(*a): print(time.strftime("%H:%M:%S"), *a, flush=True)
 def load():
@@ -43,6 +50,23 @@ def sh(*cmd, wait=False):
         if wait: p.wait(timeout=8)
     except Exception as e: log("run failed:", cmd, e)
 
+def spawn(cmd, env):
+    subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+def launch(app_id):
+    """Start exactly the `exec` list of the allowlisted app; the id is the only thing keys.json supplies."""
+    try:
+        apps = json.load(open(APPS_FILE))
+        app = next(a for a in apps if isinstance(a, dict) and a.get("id") == app_id)
+        cmd = app["exec"]
+        if not (isinstance(cmd, list) and cmd and all(isinstance(c, str) for c in cmd)): raise ValueError("bad exec")
+    except StopIteration: log("launch: unknown app id", repr(app_id), "- ignored"); return
+    except Exception as e: log("launch: cannot read", APPS_FILE, e, "- ignored"); return
+    env = dict(os.environ, **APP_ENV)
+    env.update({str(k): str(v) for k, v in (app.get("env") or {}).items()})
+    try: spawn(cmd, env)
+    except Exception as e: log("launch failed:", app_id, e)
+
 def keyboard_toggle():
     if subprocess.call(["pgrep", "-f", "matchbox-keyboard"], stdout=subprocess.DEVNULL) == 0:
         subprocess.call(["pkill", "-f", "matchbox-keyboard"])
@@ -60,6 +84,7 @@ def do(action):
     kind, _, arg = action.partition(":")
     if kind == "key": sh("xdotool", "key", arg)
     elif kind == "ctl": ctl(arg)
+    elif kind == "launch": launch(arg.strip())
     elif kind == "run": sh(*shlex.split(arg))
     elif action == "home": sh("xdotool", "search", "--name", "WalPad Home", "windowactivate")
     elif action == "keyboard": keyboard_toggle()

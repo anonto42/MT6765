@@ -7,7 +7,7 @@
     "single": "key:Up",
     "double": "key:Prior",
     "triple": "ctl:brightness +40",
-    "quad":   "run:firefox-esr",
+    "quad":   "launch:browser",
     "long":   "keyboard",
     "hold_repeat": false
   },

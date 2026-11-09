@@ -413,4 +413,45 @@ mod tests {
             "missing per-button keys fall back to the serde default"
         );
     }
+
+    #[test]
+    fn shipped_keys_json_parses_and_quad_launches_a_shipped_app() {
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config/rootfs/etc/walpad");
+        let cfg: Cfg =
+            serde_json::from_str(&std::fs::read_to_string(root.join("keys.json")).unwrap())
+                .unwrap();
+        assert_eq!(cfg.vol_up.quad, "launch:browser");
+        assert_eq!(
+            parse_action(&cfg.vol_up.quad),
+            Action::Launch("browser".into())
+        );
+        for a in [
+            &cfg.vol_up.single,
+            &cfg.vol_up.double,
+            &cfg.vol_up.triple,
+            &cfg.vol_up.long,
+            &cfg.vol_down.single,
+            &cfg.vol_down.double,
+            &cfg.vol_down.triple,
+            &cfg.vol_down.quad,
+            &cfg.vol_down.long,
+            &cfg.both.press,
+        ] {
+            assert!(
+                !matches!(parse_action(a), Action::Run(_)),
+                "run: in keys.json: {a}"
+            );
+        }
+        let apps: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join("apps.json")).unwrap())
+                .unwrap();
+        assert!(
+            apps.as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a["id"] == "browser"),
+            "apps.json has no browser"
+        );
+    }
 }

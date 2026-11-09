@@ -146,4 +146,11 @@ if command -v bash >/dev/null 2>&1; then
   WALPAD_NO_PYTHON=2 bash scripts/build_rootfs.sh >/dev/null 2>&1; eq "bad WALPAD_NO_PYTHON rejected" "$?" 2
 fi
 
+# --- walpad-keys.py launch:/run: dispatch (M5.9 prep); needs python3 on the host
+if command -v python3 >/dev/null 2>&1; then
+  if python3 -I tests/shell/keys_py_test.py >"$T/keys_py.out" 2>&1; then ok "walpad-keys.py launch:/run: unit tests"; else bad "walpad-keys.py launch:/run: unit tests" "$(tail -5 "$T/keys_py.out")" ok; fi
+else
+  echo "SKIP walpad-keys.py unit tests (python3 not installed)"
+fi
+
 exit $FAIL

@@ -2,13 +2,16 @@ use std::sync::atomic::AtomicBool;
 use walpad_hw::Root;
 use walpad_shell::shell::{Options, Shell};
 
+/// Must equal the capability walpad-runtime requires for WALPAD_SHELL (tests/capability.rs).
+const CAPABILITIES: &str = "shell";
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("--version") => return println!("walpad-shell {}", env!("CARGO_PKG_VERSION")),
-        // The `shell` capability is added when the UI is complete (M5.9); until then walpad-runtime
-        // keeps the Tk launcher even if WALPAD_SHELL=rust.
-        Some("--capabilities") => return println!(),
+        // walpad-runtime honours WALPAD_SHELL=rust only if this list has `shell`.  The default
+        // runtime.conf keeps WALPAD_SHELL=python, so advertising it switches nothing by itself.
+        Some("--capabilities") => return println!("{CAPABILITIES}"),
         _ => {}
     }
     // WALPAD_X_SOCKET overrides <root>/tmp/.X11-unix/X0 (host sessions use :5)
