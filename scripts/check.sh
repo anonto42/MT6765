@@ -23,6 +23,10 @@ else
 fi
 echo "== shell tests"
 if sh tests/shell/run.sh | grep -v '^PASS'; then echo "FAIL: shell tests"; exit 1; fi
+echo "== fbmirror logic test"
+rc=0; tools/fbmirror/test.sh || rc=$?
+if [ "$rc" = 77 ]; then echo "SKIPPED: docker unavailable, fbmirror logic test not run"
+elif [ "$rc" != 0 ]; then echo "FAIL: fbmirror logic test"; exit 1; fi
 echo "== secrets grep"
 # Only the redaction tests may contain such literals (they prove the masking works).
 if git grep -nI -e 'psk=' -e 'PSK=' -- crates tests ':!crates/walpad-hw/src/sysinfo.rs' ':!crates/walpad-shell/tests/screens_snapshots.rs' 2>/dev/null; then echo "FAIL: psk literal found"; exit 1; fi
