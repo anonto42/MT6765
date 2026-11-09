@@ -1,4 +1,6 @@
 """Unit test of walpad-keys.py action dispatch (launch: allowlist, run: unchanged).  No device needed."""
+import sys
+sys.dont_write_bytecode = True  # importing walpad-keys.py must not leave a __pycache__ in config/rootfs
 import importlib.util, json, os, tempfile, unittest
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../config/rootfs/usr/local/bin/walpad-keys.py")

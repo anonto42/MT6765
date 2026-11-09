@@ -74,6 +74,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   echo walpad > /out/root/etc/hostname
   printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /out/root/etc/resolv.conf
   cp -a /cfg/. /out/root/
+  find /out/root -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true   # never ship stray bytecode
   install -m 755 /tools/dmlinear/dmlinear /out/root/usr/local/bin/dmlinear
   install -m 755 /tools/padui/padui /out/root/usr/local/bin/padui
   install -m 755 /tools/fbmirror/fbmirror /out/root/usr/local/bin/fbmirror
