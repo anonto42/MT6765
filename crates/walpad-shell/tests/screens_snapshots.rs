@@ -233,3 +233,126 @@ fn forget_dialog_and_toast() {
     assert_eq!(b.model.toast.as_ref().map(|t| t.tone), Some(Tone::Danger));
     shot("network_toast_failed", 800, 1280, &mut b);
 }
+
+// ---------------------------------------------------------------------------------- M5.6
+
+use walpad_shell::settings_screen::{Page, SysInfo};
+
+fn sys(telnet_open: bool) -> SysInfo {
+    SysInfo {
+        alpine: Some("3.24.0".into()),
+        kernel: Some("4.19.127".into()),
+        storage: Some((3_800_000_000, 1_200_000_000)),
+        memory_kb: Some((3_800_000, 1_900_000)),
+        uptime_s: Some(8040),
+        ssh_port_open: true,
+        ssh_keys: 1,
+        listening: vec![
+            ("0.0.0.0".into(), 22),
+            (
+                if telnet_open {
+                    "0.0.0.0"
+                } else {
+                    "192.168.42.1"
+                }
+                .into(),
+                23,
+            ),
+        ],
+        dns: vec!["1.1.1.1".into(), "8.8.8.8".into()],
+        gateway: Some("192.168.0.1".into()),
+        logs: (0..40)
+            .map(|i| format!("walpad-core: line {i} orientation -> 90 accel x=4000 psk=hidden{i}"))
+            .map(|l| walpad_hw::sysinfo::redact_log_line(&l))
+            .collect(),
+        gestures: vec![
+            ("Volume up · tap".into(), "Key Up".into()),
+            ("Volume up · hold".into(), "Toggle keyboard".into()),
+            ("Volume down · tap".into(), "Key Down".into()),
+            ("Volume down · hold".into(), "Home".into()),
+            ("Both buttons".into(), "Rotate toggle".into()),
+        ],
+    }
+}
+
+#[test]
+fn device_tab_portrait_landscape_offline() {
+    let mut a = app(800, 1280, Tab::Device, true);
+    shot("device_portrait", 800, 1280, &mut a);
+    let mut l = app(1280, 800, Tab::Device, true);
+    shot("device_landscape", 1280, 800, &mut l);
+    // locked to landscape, custom timeouts, lid option off, battery gauge + low
+    let mut s = status();
+    s.rotation_locked = true;
+    s.orientation = 90;
+    s.battery.source = BatterySource::Gauge;
+    s.battery.low = true;
+    s.hardware.audio = "ok".into();
+    let mut b = app(800, 1280, Tab::Device, false);
+    b.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    b.set_config(
+        walpad_shell::config::DevdSettings {
+            dim_after_s: 30,
+            off_after_s: 600,
+            lid_off: false,
+            ..Default::default()
+        },
+        true,
+    );
+    shot("device_locked_custom", 800, 1280, &mut b);
+    shot(
+        "device_offline",
+        800,
+        1280,
+        &mut app(800, 1280, Tab::Device, false),
+    );
+}
+
+#[test]
+fn settings_list_and_pages() {
+    let mut a = app(800, 1280, Tab::Settings, true);
+    a.set_sysinfo(sys(false));
+    shot("settings_list", 800, 1280, &mut a);
+    for (pg, name) in [
+        (Page::System, "settings_system"),
+        (Page::Network, "settings_network"),
+        (Page::Security, "settings_security"),
+        (Page::Maintenance, "settings_maintenance"),
+        (Page::Input, "settings_input"),
+        (Page::Power, "settings_power"),
+        (Page::Clock, "settings_clock"),
+        (Page::About, "settings_about"),
+        (Page::Logs, "settings_logs"),
+    ] {
+        a.model.settings_page = Some(pg);
+        shot(name, 800, 1280, &mut a);
+    }
+    // telnet open on the network: the owner must see the warning
+    a.set_sysinfo(sys(true));
+    a.model.settings_page = Some(Page::Security);
+    shot("settings_security_telnet_open", 800, 1280, &mut a);
+    let mut l = app(1280, 800, Tab::Settings, true);
+    l.set_sysinfo(sys(false));
+    shot("settings_list_landscape", 1280, 800, &mut l);
+}
+
+#[test]
+fn power_confirm_dialogs() {
+    let mut a = app(800, 1280, Tab::Settings, true);
+    a.model.settings_page = Some(Page::Maintenance);
+    a.model.overlay = Some(Overlay::PowerConfirm {
+        poweroff: true,
+        armed_until: None,
+    });
+    shot("power_confirm_shutdown", 800, 1280, &mut a);
+    a.model.overlay = Some(Overlay::PowerConfirm {
+        poweroff: true,
+        armed_until: Some(5000),
+    });
+    shot("power_confirm_shutdown_armed", 800, 1280, &mut a);
+    a.model.overlay = Some(Overlay::PowerConfirm {
+        poweroff: false,
+        armed_until: None,
+    });
+    shot("power_confirm_restart", 800, 1280, &mut a);
+}

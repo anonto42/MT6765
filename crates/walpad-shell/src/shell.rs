@@ -2,8 +2,10 @@
 //! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
 //! after the first frame is on screen (the boot ramdisk health check).
 use crate::app::{load_catalog, read_clock_24h, read_pinned, App, Cmd, WallTime};
+use crate::config::read_devd;
 use crate::core_client::{CoreClient, CoreEvent};
 use crate::gesture::{Gesture, Recogniser};
+use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,6 +36,7 @@ pub struct Shell {
     started: Instant,
     next_minute: Instant,
     dirty: bool,
+    need_refresh: bool,
     first_frame: bool,
     pub frames: u64,
 }
@@ -86,6 +89,7 @@ impl Shell {
             started: Instant::now(),
             next_minute: Instant::now() + Duration::from_millis(to_minute),
             dirty: true,
+            need_refresh: true,
             first_frame: true,
             frames: 0,
         })
@@ -109,8 +113,24 @@ impl Shell {
         for g in gs {
             let out = self.app.on_gesture(&g, now);
             self.dirty |= out.dirty;
+            self.need_refresh |= out.refresh;
             self.send(out.cmds);
         }
+    }
+
+    /// Re-read the configuration files and the system facts the Device/Settings screens show.
+    fn reload(&mut self) {
+        self.need_refresh = false;
+        let devd = read_devd(&self.root);
+        let clock_24h = read_clock_24h(&self.root);
+        self.dirty |= self.app.set_config(devd, clock_24h);
+        if clock_24h != self.clock_24h {
+            self.clock_24h = clock_24h;
+            let (wall, to_minute) = WallTime::now(clock_24h);
+            self.next_minute = Instant::now() + Duration::from_millis(to_minute);
+            self.dirty |= self.app.set_wall(wall);
+        }
+        self.dirty |= self.app.set_sysinfo(gather(&self.root));
     }
 
     fn resize(&mut self, w: i32, h: i32) {
@@ -168,6 +188,7 @@ impl Shell {
             }
             let out = self.app.on_core(&ev, now);
             self.dirty |= out.dirty;
+            self.need_refresh |= out.refresh;
             self.send(out.cmds);
         }
         self.dirty |= self.app.tick(now);
@@ -175,6 +196,14 @@ impl Shell {
             let (wall, to_minute) = WallTime::now(self.clock_24h);
             self.next_minute = Instant::now() + Duration::from_millis(to_minute);
             self.dirty |= self.app.set_wall(wall);
+            // uptime and memory change: refresh the facts once a minute while Settings/Device is open
+            self.need_refresh |= matches!(
+                self.app.active,
+                walpad_ui::components::Tab::Settings | walpad_ui::components::Tab::Device
+            );
+        }
+        if self.need_refresh {
+            self.reload();
         }
         if self.dirty {
             self.redraw()?;

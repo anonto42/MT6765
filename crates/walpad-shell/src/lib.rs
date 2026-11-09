@@ -4,11 +4,14 @@
 
 pub mod app;
 pub mod apps_screen;
+pub mod config;
 pub mod core_client;
+pub mod device_screen;
 pub mod gesture;
 pub mod home;
 pub mod network;
 pub mod overlay;
 pub mod present;
+pub mod settings_screen;
 pub mod shell;
 pub mod window;

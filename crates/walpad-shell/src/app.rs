@@ -1,11 +1,14 @@
 //! Application state: what the shell shows and how taps, core events and replies change it.
 //! Pure of I/O: the shell loop feeds it gestures and core events and sends the commands it returns.
 use crate::apps_screen;
+use crate::config::DevdSettings;
 use crate::core_client::{CoreEvent, ReplyError};
+use crate::device_screen;
 use crate::gesture::Gesture;
 use crate::home;
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet};
+use crate::settings_screen::{self, Page, SysInfo};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use walpad_hw::Root;
@@ -18,6 +21,7 @@ use walpad_ui::{Canvas, Icon, Rect};
 pub type Ms = u64;
 
 const TOAST_MS: Ms = 3000;
+const POWER_ARM_MS: Ms = 3000;
 const SPIN_EVERY_MS: Ms = 100;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -147,6 +151,18 @@ pub enum Target {
     Avail(usize),
     Saved(usize),
     Forget(usize),
+    // Device
+    Rot(usize),
+    Dim(usize),
+    Off(usize),
+    LidToggle,
+    // Settings
+    Page(Page),
+    Back,
+    ClockToggle,
+    RestartShell,
+    Reboot,
+    Shutdown,
     // overlays
     Eye,
     Key(usize),
@@ -177,6 +193,14 @@ pub enum Cmd {
     },
     WifiDisconnect,
     WifiForget(u32),
+    /// `rotate` mode: auto, 0, 90, 180, 270.
+    Rotate(&'static str),
+    /// `set_setting` with an allowlisted key.
+    Setting(&'static str, Value),
+    RestartShell,
+    Power {
+        poweroff: bool,
+    },
 }
 
 /// What a request was for, to interpret its reply.
@@ -187,6 +211,7 @@ pub enum Purpose {
     Connect,
     Forget,
     Close,
+    Setting,
     Other,
 }
 
@@ -226,6 +251,13 @@ impl Cmd {
             }
             Cmd::WifiDisconnect => ("wifi_disconnect", Value::Null),
             Cmd::WifiForget(id) => ("wifi_forget", json!({"saved_id": id})),
+            Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
+            Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
+            Cmd::RestartShell => ("restart_shell", Value::Null),
+            Cmd::Power { poweroff } => (
+                "power",
+                json!({"action": if *poweroff { "poweroff" } else { "reboot" }, "confirmed": true}),
+            ),
         }
     }
 
@@ -236,6 +268,7 @@ impl Cmd {
             Cmd::WifiConnect { .. } => Purpose::Connect,
             Cmd::WifiForget(_) => Purpose::Forget,
             Cmd::CloseApp(_) => Purpose::Close,
+            Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
         }
     }
@@ -265,6 +298,11 @@ pub struct Model {
     pub overlay: Option<Overlay>,
     pub toast: Option<Toast>,
     pub spinner_deg: u16,
+    pub devd: DevdSettings,
+    pub clock_24h: bool,
+    pub sys: SysInfo,
+    /// Open Settings subpage (None = the category list).
+    pub settings_page: Option<Page>,
 }
 
 impl Model {
@@ -283,6 +321,10 @@ impl Model {
             overlay: None,
             toast: None,
             spinner_deg: 0,
+            devd: DevdSettings::default(),
+            clock_24h: true,
+            sys: SysInfo::default(),
+            settings_page: None,
         }
     }
 
@@ -297,6 +339,13 @@ impl Model {
         }
     }
 
+    fn armed_until(&self) -> Option<Ms> {
+        match &self.overlay {
+            Some(Overlay::PowerConfirm { armed_until, .. }) => *armed_until,
+            _ => None,
+        }
+    }
+
     fn spinning(&self) -> bool {
         self.net.scanning
             || self.net.connecting.is_some()
@@ -308,6 +357,8 @@ impl Model {
 pub struct Outcome {
     pub dirty: bool,
     pub cmds: Vec<Cmd>,
+    /// The shell should re-read the configuration files and system facts.
+    pub refresh: bool,
 }
 
 impl Outcome {
@@ -424,6 +475,20 @@ impl App {
         self.model.tiles = tiles;
     }
 
+    /// New configuration read from the files (devd.json, shell.json). Returns true to redraw.
+    pub fn set_config(&mut self, devd: DevdSettings, clock_24h: bool) -> bool {
+        let changed = self.model.devd != devd || self.model.clock_24h != clock_24h;
+        self.model.devd = devd;
+        self.model.clock_24h = clock_24h;
+        changed
+    }
+
+    pub fn set_sysinfo(&mut self, sys: SysInfo) -> bool {
+        let changed = self.model.sys != sys;
+        self.model.sys = sys;
+        changed
+    }
+
     /// Remember which request was sent with which id (to interpret its reply).
     pub fn note_sent(&mut self, id: u64, cmd: &Cmd) {
         self.pending.insert(id, cmd.purpose());
@@ -442,6 +507,10 @@ impl App {
             self.active = tab;
             self.scroll = 0;
             self.content_hits.clear();
+            self.model.settings_page = None;
+        }
+        if matches!(tab, Tab::Device | Tab::Settings) {
+            out.refresh = true;
         }
         if tab == Tab::Network && self.model.connected {
             out.cmd(Cmd::WifiListSaved);
@@ -600,6 +669,13 @@ impl App {
                 }
             }
             (Purpose::Forget, true) => out.cmd(Cmd::WifiListSaved),
+            (Purpose::Setting, ok) => {
+                // the core wrote (or refused) the file: show what is really configured
+                out.refresh = true;
+                if let (false, Some(e)) = (ok, error) {
+                    self.toast(friendly(e), Tone::Danger);
+                }
+            }
             (Purpose::Close, true) => {
                 if data["closed"] == false {
                     self.toast("Could not close the app", Tone::Warning);
@@ -625,6 +701,12 @@ impl App {
             self.model.toast = None;
             dirty = true;
         }
+        if self.armed_until().is_some_and(|t| now >= t) {
+            if let Some(Overlay::PowerConfirm { armed_until, .. }) = &mut self.model.overlay {
+                *armed_until = None;
+            }
+            dirty = true;
+        }
         if self.model.spinning() && now.saturating_sub(self.last_spin) >= SPIN_EVERY_MS {
             self.last_spin = now;
             self.model.spinner_deg = (self.model.spinner_deg + 30) % 360;
@@ -640,10 +722,17 @@ impl App {
             .spinning()
             .then_some(self.last_spin + SPIN_EVERY_MS);
         let toast = self.model.toast.as_ref().map(|t| t.until);
-        [spin, toast].into_iter().flatten().min()
+        [spin, toast, self.armed_until()]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     // ------------------------------------------------------------------ banners
+    fn armed_until(&self) -> Option<Ms> {
+        self.model.armed_until()
+    }
+
     /// Persistent banner under the status bar (core down has priority over low battery).
     pub fn banner(&self) -> Option<(&'static str, Tone)> {
         if !self.model.connected {
@@ -702,12 +791,19 @@ impl App {
             .map(|(_, t)| *t)
     }
 
+    /// The brightness slider's rectangle (Home: screen hits; Device: content hits). x is never scrolled.
+    fn slider_rect(&self) -> Option<Rect> {
+        self.hits
+            .iter()
+            .chain(self.content_hits.iter())
+            .find(|(_, t)| *t == Target::Slider)
+            .map(|(r, _)| *r)
+    }
+
     fn slider_value_at(&self, x: i32) -> f32 {
         let track = self
-            .hits
-            .iter()
-            .find(|(_, t)| *t == Target::Slider)
-            .map(|(r, _)| r.inset(SP_4))
+            .slider_rect()
+            .map(|r| r.inset(SP_4))
             .unwrap_or(Rect::new(0, 0, 1, 1));
         ((x - track.x) as f32 / track.w.max(1) as f32).clamp(0.0, 1.0)
     }
@@ -776,11 +872,7 @@ impl App {
             Gesture::DragStart { .. } => {}
             Gesture::Drag { dx, dy } => {
                 if self.model.slider_active {
-                    let w = self
-                        .hits
-                        .iter()
-                        .find(|(_, t)| *t == Target::Slider)
-                        .map_or(1, |(r, _)| r.inset(SP_4).w.max(1));
+                    let w = self.slider_rect().map_or(1, |r| r.inset(SP_4).w.max(1));
                     self.model.slider_value =
                         (self.model.slider_value + dx as f32 / w as f32).clamp(0.0, 1.0);
                     out.dirty = true;
@@ -874,14 +966,83 @@ impl App {
                     });
                 }
             }
+            // ---- Device
+            Target::Rot(i) if interactive => {
+                if let Some((_, mode)) = device_screen::ROTATION_ROWS.get(i) {
+                    out.cmd(Cmd::Rotate(mode));
+                }
+            }
+            Target::Dim(i) if interactive => {
+                if let Some((v, _)) = device_screen::DIM_OPTIONS.get(i) {
+                    out.cmd(Cmd::Setting("dim_after_s", json!(v)));
+                }
+            }
+            Target::Off(i) if interactive => {
+                if let Some((v, _)) = device_screen::OFF_OPTIONS.get(i) {
+                    out.cmd(Cmd::Setting("off_after_s", json!(v)));
+                }
+            }
+            Target::LidToggle if interactive => {
+                out.cmd(Cmd::Setting("lid_off", json!(!self.model.devd.lid_off)))
+            }
+            // ---- Settings
+            Target::Page(Page::Display) => self.go(Tab::Device, out),
+            Target::Page(pg) => {
+                self.model.settings_page = Some(pg);
+                self.scroll = 0;
+                self.content_hits.clear();
+                out.refresh = true;
+            }
+            Target::Back => {
+                self.model.settings_page = match self.model.settings_page {
+                    Some(Page::Logs) => Some(Page::Maintenance),
+                    _ => None,
+                };
+                self.scroll = 0;
+                self.content_hits.clear();
+            }
+            Target::ClockToggle if interactive => {
+                out.cmd(Cmd::Setting("clock_24h", json!(!self.model.clock_24h)))
+            }
+            Target::RestartShell if interactive => {
+                out.cmd(Cmd::RestartShell);
+                self.toast("Restarting the shell", Tone::Info);
+            }
+            Target::Reboot => {
+                self.model.overlay = Some(Overlay::PowerConfirm {
+                    poweroff: false,
+                    armed_until: None,
+                })
+            }
+            Target::Shutdown => {
+                self.model.overlay = Some(Overlay::PowerConfirm {
+                    poweroff: true,
+                    armed_until: None,
+                })
+            }
             // ---- overlays
             Target::SheetCancel => self.close_overlay(),
             Target::DialogCancel => self.close_overlay(),
-            Target::DialogConfirm => {
-                if let Some(Overlay::Forget { id, .. }) = self.model.overlay.take() {
-                    out.cmd(Cmd::WifiForget(id));
+            Target::DialogConfirm => match self.model.overlay.take() {
+                Some(Overlay::Forget { id, .. }) => out.cmd(Cmd::WifiForget(id)),
+                // two taps: the first arms the button for 3 s ("Tap again to shut down")
+                Some(Overlay::PowerConfirm {
+                    poweroff,
+                    armed_until,
+                }) => {
+                    if armed_until.is_some_and(|t| self.now < t) {
+                        if self.model.connected {
+                            out.cmd(Cmd::Power { poweroff });
+                        }
+                    } else {
+                        self.model.overlay = Some(Overlay::PowerConfirm {
+                            poweroff,
+                            armed_until: Some(self.now + POWER_ARM_MS),
+                        });
+                    }
                 }
-            }
+                other => self.model.overlay = other,
+            },
             Target::Eye => {
                 if let Some(Overlay::Password(s)) = &mut self.model.overlay {
                     s.shown = !s.shown;
@@ -906,6 +1067,22 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Rows of the open Settings subpage (empty for the category list).
+    fn settings_rows(&self) -> Vec<settings_screen::Row> {
+        match self.model.settings_page {
+            None => Vec::new(),
+            Some(pg) => settings_screen::page_rows(
+                pg,
+                &settings_screen::Ctx {
+                    sys: &self.model.sys,
+                    status: &self.model.status,
+                    devd: &self.model.devd,
+                    clock_24h: self.model.clock_24h,
+                },
+            ),
         }
     }
 
@@ -1058,6 +1235,10 @@ impl App {
             Some(Overlay::Password(s)) => overlay::render_password(p, &self.frame, s, deg),
             Some(Overlay::App(s)) => overlay::render_app_sheet(p, &self.frame, s),
             Some(Overlay::Forget { ssid, .. }) => overlay::render_forget(p, &self.frame, ssid),
+            Some(Overlay::PowerConfirm {
+                poweroff,
+                armed_until,
+            }) => overlay::render_power_confirm(p, &self.frame, *poweroff, armed_until.is_some()),
             None => Vec::new(),
         };
         if let Some(t) = &self.model.toast {
@@ -1071,6 +1252,11 @@ impl App {
         let total = match self.active {
             Tab::Apps => apps_screen::layout(&frame, self.model.apps.len()).total,
             Tab::Network => network::layout(&frame, &self.model.status, &self.model.net).total,
+            Tab::Device => device_screen::layout(&frame, &self.model.status, &self.model.devd).1,
+            Tab::Settings => {
+                settings_screen::layout(&frame, self.model.settings_page, &self.settings_rows())
+                    .total
+            }
             _ => 0,
         }
         .max(self.view.h);
@@ -1096,21 +1282,28 @@ impl App {
                     m.pressed,
                     m.spinner_deg,
                 ),
-                other => {
-                    let c = frame.padded();
-                    op.screen_title(other.label(), Rect::new(c.x, SP_4, c.w, 40));
-                    op.text(
-                        "Coming in the next card",
-                        walpad_ui::Style::new(
-                            walpad_ui::Face::Regular,
-                            SIZE_SECONDARY,
-                            TEXT_SECONDARY,
-                        ),
-                        Rect::new(c.x, 64, c.w, 24),
-                        walpad_ui::Align::Left,
-                    );
-                    Vec::new()
+                Tab::Device => device_screen::render(
+                    &mut op,
+                    &frame,
+                    &m.status,
+                    &m.devd,
+                    m.connected,
+                    m.brightness_value(),
+                    m.slider_active,
+                    m.pressed,
+                ),
+                Tab::Settings => {
+                    let rows = self.settings_rows();
+                    settings_screen::render(
+                        &mut op,
+                        &frame,
+                        m.settings_page,
+                        &rows,
+                        m.connected,
+                        m.pressed,
+                    )
                 }
+                Tab::Home => Vec::new(),
             };
         }
         if let Some(slice) = off.crop(Rect::new(0, self.scroll, frame.w, self.view.h)) {

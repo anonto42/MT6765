@@ -904,3 +904,223 @@ fn catalog_and_settings_files() {
     assert!(!read_clock_24h(&Root::new(&root)));
     assert_eq!(read_pinned(&Root::new(&root)), ["terminal"]);
 }
+
+// ---------------------------------------------------------------------------------- Device
+
+#[test]
+fn device_tab_controls_send_the_right_commands() {
+    let mut app = online();
+    let out = go(&mut app, Tab::Device);
+    assert!(
+        out.refresh,
+        "opening Device asks the shell to re-read the configuration"
+    );
+    assert_eq!(
+        tap(&mut app, Target::Rot(0)).cmds,
+        vec![Cmd::Rotate("auto")]
+    );
+    assert_eq!(tap(&mut app, Target::Rot(2)).cmds, vec![Cmd::Rotate("90")]);
+    assert_eq!(tap(&mut app, Target::Rot(4)).cmds, vec![Cmd::Rotate("270")]);
+    assert_eq!(
+        tap(&mut app, Target::Dim(1)).cmds,
+        vec![Cmd::Setting("dim_after_s", json!(30))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::Off(4)).cmds,
+        vec![Cmd::Setting("off_after_s", json!(240))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::Off(6)).cmds,
+        vec![Cmd::Setting("off_after_s", json!(0))],
+        "Never"
+    );
+    assert_eq!(
+        tap(&mut app, Target::LidToggle).cmds,
+        vec![Cmd::Setting("lid_off", json!(false))],
+        "lid_off defaults to on, so the toggle turns it off"
+    );
+    // the brightness slider works here too (it lives in the scrolled content)
+    let (_, cy) = centre(&app, Target::Slider);
+    let track = app.slider_rect().unwrap().inset(SP_4);
+    app.on_gesture(
+        &Gesture::Pressed {
+            x: track.right(),
+            y: cy,
+        },
+        0,
+    );
+    assert_eq!(
+        app.on_gesture(
+            &Gesture::Tap {
+                x: track.right(),
+                y: cy
+            },
+            5
+        )
+        .cmds,
+        vec![Cmd::SetBrightness(255)]
+    );
+}
+
+#[test]
+fn settings_replies_trigger_a_reload_and_errors_are_shown() {
+    let mut app = online();
+    go(&mut app, Tab::Device);
+    app.note_sent(80, &Cmd::Setting("dim_after_s", json!(30)));
+    assert!(
+        reply(&mut app, 80, json!({"key":"dim_after_s","value":30})).refresh,
+        "read back what the core really wrote"
+    );
+    app.note_sent(81, &Cmd::Setting("off_after_s", json!(5)));
+    let out = reply_err(
+        &mut app,
+        81,
+        "invalid_args",
+        "value must be an integer 0-3600",
+    );
+    assert!(out.refresh);
+    assert_eq!(app.model.toast.as_ref().map(|t| t.tone), Some(Tone::Danger));
+    // the shell feeds the files back in
+    let d = DevdSettings {
+        dim_after_s: 30,
+        ..DevdSettings::default()
+    };
+    assert!(app.set_config(d.clone(), false));
+    assert!(
+        !app.set_config(d, false),
+        "unchanged config does not redraw"
+    );
+    assert!(!app.model.clock_24h);
+}
+
+#[test]
+fn device_controls_do_nothing_while_the_core_is_down() {
+    let mut app = App::new(800, 1280, catalog(), wall());
+    render(&mut app);
+    go(&mut app, Tab::Device);
+    for t in [
+        Target::Rot(1),
+        Target::Dim(0),
+        Target::Off(0),
+        Target::LidToggle,
+        Target::Slider,
+    ] {
+        assert!(tap(&mut app, t).cmds.is_empty(), "{t:?}");
+    }
+}
+
+// ---------------------------------------------------------------------------------- Settings
+
+#[test]
+fn settings_pages_open_and_back_returns_to_the_right_place() {
+    let mut app = online();
+    go(&mut app, Tab::Settings);
+    assert_eq!(app.model.settings_page, None);
+    assert!(
+        tap(&mut app, Target::Page(Page::System)).refresh,
+        "opening a page refreshes the system facts"
+    );
+    assert_eq!(app.model.settings_page, Some(Page::System));
+    tap(&mut app, Target::Back);
+    assert_eq!(app.model.settings_page, None);
+    // Maintenance -> Logs -> back goes to Maintenance, then to the list
+    tap(&mut app, Target::Page(Page::Maintenance));
+    tap(&mut app, Target::Page(Page::Logs));
+    assert_eq!(app.model.settings_page, Some(Page::Logs));
+    tap(&mut app, Target::Back);
+    assert_eq!(app.model.settings_page, Some(Page::Maintenance));
+    tap(&mut app, Target::Back);
+    assert_eq!(app.model.settings_page, None);
+    // Display is a shortcut to the Device tab; leaving Settings forgets the open page
+    tap(&mut app, Target::Page(Page::Display));
+    assert_eq!(app.active, Tab::Device);
+}
+
+#[test]
+fn leaving_settings_closes_the_subpage() {
+    let mut app = online();
+    go(&mut app, Tab::Settings);
+    tap(&mut app, Target::Page(Page::Security));
+    go(&mut app, Tab::Home);
+    go(&mut app, Tab::Settings);
+    assert_eq!(app.model.settings_page, None);
+}
+
+#[test]
+fn clock_toggle_restart_shell_and_two_step_power_confirm() {
+    let mut app = online();
+    go(&mut app, Tab::Settings);
+    tap(&mut app, Target::Page(Page::Clock));
+    assert_eq!(
+        tap(&mut app, Target::ClockToggle).cmds,
+        vec![Cmd::Setting("clock_24h", json!(false))]
+    );
+    tap(&mut app, Target::Back);
+    tap(&mut app, Target::Page(Page::Maintenance));
+    let out = tap(&mut app, Target::RestartShell);
+    assert_eq!(out.cmds, vec![Cmd::RestartShell]);
+    assert!(app.model.toast.is_some());
+
+    // Shut down: dialog, first confirm only arms it, second within 3 s powers off
+    tap(&mut app, Target::Shutdown);
+    assert!(matches!(
+        app.model.overlay,
+        Some(Overlay::PowerConfirm {
+            poweroff: true,
+            armed_until: None
+        })
+    ));
+    let (x, y) = centre(&app, Target::DialogConfirm);
+    app.now = 10_000;
+    let first = tap_at(&mut app, x, y, 10_000);
+    assert!(first.cmds.is_empty());
+    assert!(
+        matches!(
+            app.model.overlay,
+            Some(Overlay::PowerConfirm {
+                armed_until: Some(13_010),
+                ..
+            })
+        ),
+        "armed for 3 s"
+    );
+    let second = tap_at(&mut app, x, y, 12_000);
+    assert_eq!(second.cmds, vec![Cmd::Power { poweroff: true }]);
+    assert!(app.model.overlay.is_none());
+    assert_eq!(
+        Cmd::Power { poweroff: true }.request(),
+        ("power", json!({"action":"poweroff","confirmed":true}))
+    );
+    assert_eq!(
+        Cmd::Power { poweroff: false }.request().1["action"],
+        "reboot"
+    );
+
+    // the arming expires: a late second tap only re-arms
+    tap(&mut app, Target::Reboot);
+    let (x, y) = centre(&app, Target::DialogConfirm);
+    tap_at(&mut app, x, y, 20_000);
+    app.model.toast = None; // the earlier toast would otherwise be the next deadline
+    assert_eq!(app.next_deadline(), Some(23_010));
+    assert!(app.tick(23_010), "the button goes back to its normal label");
+    assert!(matches!(
+        app.model.overlay,
+        Some(Overlay::PowerConfirm {
+            armed_until: None,
+            ..
+        })
+    ));
+    let late = tap_at(&mut app, x, y, 24_000);
+    assert!(
+        late.cmds.is_empty()
+            && matches!(
+                app.model.overlay,
+                Some(Overlay::PowerConfirm {
+                    armed_until: Some(_),
+                    ..
+                })
+            )
+    );
+    // cancel closes without doing anything
+    assert!(tap(&mut app, Target::DialogCancel).cmds.is_empty() && app.model.overlay.is_none());
+}

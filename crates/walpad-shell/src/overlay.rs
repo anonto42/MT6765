@@ -53,7 +53,15 @@ pub struct AppSheet {
 pub enum Overlay {
     Password(PasswordSheet),
     App(AppSheet),
-    Forget { id: u32, ssid: String },
+    Forget {
+        id: u32,
+        ssid: String,
+    },
+    /// Restart / shut down: the first confirm tap arms the button for 3 s.
+    PowerConfirm {
+        poweroff: bool,
+        armed_until: Option<u64>,
+    },
 }
 
 const SHEET_W: i32 = 800;
@@ -208,6 +216,35 @@ pub fn render_forget(p: &mut Painter, frame: &Frame, ssid: &str) -> Vec<(Rect, T
         true,
         false,
     );
+    vec![
+        (cancel, Target::DialogCancel),
+        (confirm, Target::DialogConfirm),
+    ]
+}
+
+pub fn render_power_confirm(
+    p: &mut Painter,
+    frame: &Frame,
+    poweroff: bool,
+    armed: bool,
+) -> Vec<(Rect, Target)> {
+    let screen = Rect::new(0, 0, frame.w, frame.h);
+    let (title, body, label, again) = if poweroff {
+        (
+            "Shut down?",
+            "The tablet will power off. Press the power button to start it again.",
+            "Shut down",
+            "Tap again to shut down",
+        )
+    } else {
+        (
+            "Restart tablet?",
+            "The tablet will restart. Open apps will be closed.",
+            "Restart",
+            "Tap again to restart",
+        )
+    };
+    let (cancel, confirm) = p.dialog(screen, title, body, "Cancel", label, again, true, armed);
     vec![
         (cancel, Target::DialogCancel),
         (confirm, Target::DialogConfirm),

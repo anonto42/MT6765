@@ -33,7 +33,8 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M5.3 | X11 presenter, gestures, window props, resize, walpad-ok | done (host) |
 | M5.4 | Home + core client + offline banner (6 goldens, full-stack test) | done (host) |
 | M5.5 | Apps + Network + password sheet (17 goldens, click-through test) | done (host) |
-| M5.6-M5.9 | Device/Settings, power menu, system dock, UI checklist | todo |
+| M5.6 | Device + Settings screens (19 goldens, round-trip test) | done (host) |
+| M5.7-M5.9 | power menu, system dock, UI checklist | todo |
 | M6.1-M6.4 | Process manager, installed-only apps, crash notice, gate | todo |
 | M7.1-M7.2 | Remove Python from rootfs, re-baseline | todo |
 | M8.1-M8.3 | fbmirror pause when screen off, damage-driven mirror (if measured), Firefox memory | todo |

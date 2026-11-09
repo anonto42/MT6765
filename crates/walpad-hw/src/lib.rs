@@ -8,6 +8,7 @@ pub mod evdev;
 pub mod gsensor;
 pub mod input;
 pub mod sysfs;
+pub mod sysinfo;
 
 use std::path::{Path, PathBuf};
 

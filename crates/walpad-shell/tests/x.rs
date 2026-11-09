@@ -15,6 +15,13 @@ use x11rb::protocol::xproto::{
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
 
+/// A display number no other test in this binary (or process) uses: the tests run in parallel.
+fn display_num() -> u32 {
+    use std::sync::atomic::AtomicU32;
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    200 + (std::process::id() % 100) * 8 + NEXT.fetch_add(1, Ordering::SeqCst) % 8
+}
+
 struct Xvfb(Child, PathBuf);
 impl Drop for Xvfb {
     fn drop(&mut self) {
@@ -136,7 +143,7 @@ fn count(img: &[u8], w: usize, x0: usize, x1: usize, y0: usize, y1: usize, c: Co
 
 #[test]
 fn shell_runs_on_a_real_x_server() {
-    let n = 40 + std::process::id() % 40;
+    let n = display_num();
     let Some(x) = xvfb(n) else {
         eprintln!("Xvfb not available: skipping");
         return;
@@ -252,7 +259,7 @@ fn shell_drives_the_core_and_shows_when_it_is_gone() {
     use walpad_shell::home;
     use walpad_ui::layout::Frame;
 
-    let n = 90 + std::process::id() % 9;
+    let n = display_num();
     let Some(x) = xvfb(n) else {
         eprintln!("Xvfb not available: skipping");
         return;
@@ -327,7 +334,7 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     use walpad_ui::components::{keyboard_layout, Key, KeyboardLayer};
     use walpad_ui::layout::Frame;
 
-    let n = 80 + std::process::id() % 9;
+    let n = display_num();
     let Some(x) = xvfb(n) else {
         eprintln!("Xvfb not available: skipping");
         return;
@@ -435,6 +442,86 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
         let img = probe.image(win, 800, 1280);
         px(&img, 800, g.sheet.x as usize + 5, g.sheet.y as usize + 100)
             != (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
+    });
+
+    stop.store(true, Ordering::Relaxed);
+    core_thread.join().unwrap();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Device tab: tap a setting -> core writes devd.json -> the shell re-reads it and redraws
+
+#[test]
+fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
+    use walpad_core::{daemon::Daemon, fake};
+    use walpad_shell::config::DevdSettings;
+    use walpad_shell::device_screen::{self, Item};
+    use walpad_ui::layout::Frame;
+
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-device-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("etc/walpad")).unwrap();
+    fake::populate(&root).unwrap();
+    let mut core = Daemon::new(Root::new(&root)).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let s2 = stop.clone();
+    let core_thread = std::thread::spawn(move || core.run(&s2));
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("shell window", || probe.find_shell().is_some());
+    let win = probe.find_shell().unwrap();
+    wait_for("drawn and connected", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, 5, 1250) == (SURFACE.r, SURFACE.g, SURFACE.b)
+            && px(&img, 800, 400, 64) == (BG.r, BG.g, BG.b)
+    });
+    let frame = Frame::new(800, 1280);
+    let (placed, _) = device_screen::layout(&frame, &None, &DevdSettings::default());
+    let dim = placed.iter().find(|p| p.item == Item::DimSeg).unwrap().rect;
+    let seg_w = (dim.w - 8) / 5;
+    let seg = |i: i32| Rect4 {
+        x: dim.x + 4 + i * seg_w,
+        y: frame.content.y + dim.y + 4,
+        w: seg_w,
+        h: 48,
+    };
+    struct Rect4 {
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    }
+    let accent_in = |img: &[u8], r: &Rect4| {
+        (r.y..r.y + r.h)
+            .flat_map(|yy| (r.x..r.x + r.w).map(move |xx| (xx, yy)))
+            .filter(|&(xx, yy)| {
+                px(img, 800, xx as usize, yy as usize) == (ACCENT.r, ACCENT.g, ACCENT.b)
+            })
+            .count()
+    };
+
+    // open the Device tab (fourth nav item); the default "90 s" is selected
+    probe.click((frame.nav.w / 5 * 3 + 20) as i16, (frame.nav.y + 40) as i16);
+    wait_for("Device tab with 90 s selected", || {
+        let img = probe.image(win, 800, 1280);
+        accent_in(&img, &seg(3)) > 100
+    });
+    // tap "30 s": the core writes devd.json, the shell reads it back and moves the highlight
+    let (cx, cy) = (seg(1).x + seg(1).w / 2, seg(1).y + 20);
+    probe.click(cx as i16, cy as i16);
+    wait_for("devd.json written by the core", || {
+        std::fs::read_to_string(root.join("etc/walpad/devd.json"))
+            .map(|s| s.contains("\"dim_after_s\": 30"))
+            .unwrap_or(false)
+    });
+    wait_for("highlight moved to 30 s", || {
+        let img = probe.image(win, 800, 1280);
+        accent_in(&img, &seg(1)) > 100 && accent_in(&img, &seg(3)) == 0
     });
 
     stop.store(true, Ordering::Relaxed);
