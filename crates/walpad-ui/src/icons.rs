@@ -301,11 +301,27 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
 
 /// Draw `icon` with its top-left at (x, y), `size` px square (24 = native).
 pub fn draw_icon(cv: &mut Canvas, icon: Icon, x: i32, y: i32, size: i32, color: Color) {
+    draw_icon_rotated(cv, icon, x, y, size, color, 0.0);
+}
+
+/// Same, rotated by `angle_deg` around the icon centre (spinners).
+pub fn draw_icon_rotated(
+    cv: &mut Canvas,
+    icon: Icon,
+    x: i32,
+    y: i32,
+    size: i32,
+    color: Color,
+    angle_deg: f32,
+) {
     let s = size as f32 / 24.0;
-    let t = Transform::from_scale(s, s).post_translate(x as f32, y as f32);
+    let t = Transform::from_rotate_at(angle_deg, 12.0, 12.0)
+        .post_scale(s, s)
+        .post_translate(x as f32, y as f32);
     let (stroke, dots) = build(icon);
     if let Some(path) = stroke {
-        cv.stroke(&path, 2.0 * s, color, t);
+        // 2 px at the native 24 px size; grows slowly so large icons do not turn into blobs
+        cv.stroke(&path, (1.0 + s) / s, color, t);
     }
     if let Some(path) = dots {
         cv.fill_path(&path, color, t);
@@ -315,6 +331,17 @@ pub fn draw_icon(cv: &mut Canvas, icon: Icon, x: i32, y: i32, size: i32, color: 
 impl Canvas {
     pub fn icon(&mut self, icon: Icon, x: i32, y: i32, size: i32, color: Color) {
         draw_icon(self, icon, x, y, size, color);
+    }
+    pub fn icon_rotated(
+        &mut self,
+        icon: Icon,
+        x: i32,
+        y: i32,
+        size: i32,
+        color: Color,
+        angle_deg: f32,
+    ) {
+        draw_icon_rotated(self, icon, x, y, size, color, angle_deg);
     }
 }
 

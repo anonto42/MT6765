@@ -3,7 +3,9 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod canvas;
+pub mod components;
 pub mod icons;
+pub mod layout;
 pub mod snapshot;
 pub mod text;
 pub mod tokens;
