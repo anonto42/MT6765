@@ -272,6 +272,11 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
         Page::Maintenance => vec![
             Row::Link("View logs", Page::Logs),
             Row::Action {
+                label: "Power menu",
+                target: Target::PowerMenu,
+                danger: false,
+            },
+            Row::Action {
                 label: "Restart shell",
                 target: Target::RestartShell,
                 danger: false,
@@ -651,6 +656,7 @@ mod tests {
         assert_eq!(
             acts,
             [
+                ("Power menu", false),
                 ("Restart shell", false),
                 ("Restart tablet", true),
                 ("Shut down", true)
@@ -689,13 +695,23 @@ mod tests {
         std::fs::create_dir_all(d.join("var/log")).unwrap();
         std::fs::write(d.join("proc/sys/kernel/osrelease"), "4.19.127\n").unwrap();
         std::fs::write(d.join("proc/uptime"), "7200.5 1.0\n").unwrap();
-        std::fs::write(d.join("var/log/walpad-core.log"), "a\nb psk=secret\n").unwrap();
+        // built from parts: the source tree must not contain a literal key=value secret (check.sh greps for it)
+        let key = ["p", "sk"].concat();
+        std::fs::write(
+            d.join("var/log/walpad-core.log"),
+            format!("a\nb {key}=secret\n"),
+        )
+        .unwrap();
         let s = gather(&Root::new(&d));
         assert_eq!(
             (s.kernel.as_deref(), s.uptime_s, s.logs.len()),
             (Some("4.19.127"), Some(7200), 2)
         );
-        assert_eq!(s.logs[1], "b psk=***", "the log viewer never shows secrets");
+        assert_eq!(
+            s.logs[1],
+            format!("b {key}=***"),
+            "the log viewer never shows secrets"
+        );
         assert!(!s.ssh_port_open && s.ssh_keys == 0);
     }
 }

@@ -7,8 +7,10 @@ use crate::logic::{
 use serde::de::DeserializeOwned;
 use std::fmt;
 use walpad_hw::battery::RawBattery;
-use walpad_hw::evdev::{InputEvent, EV_ABS, EV_KEY, EV_SW, KEY_POWER};
-use walpad_proto::{ScreenMode, ScreenState};
+use walpad_hw::evdev::{
+    InputEvent, EV_ABS, EV_KEY, EV_SW, KEY_POWER, KEY_VOLUMEDOWN, KEY_VOLUMEUP,
+};
+use walpad_proto::{ScreenMode, ScreenState, ShellInput};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -33,11 +35,16 @@ pub enum Effect {
     // input subsystem
     Pointer(tm::Act),
     Action(kg::Action),
+    /// A volume key while the shell's power menu is open: goes to the shell, not to the gestures.
+    ShellKey(ShellInput),
 }
 
 impl Effect {
     pub fn is_device(&self) -> bool {
-        !matches!(self, Effect::Pointer(_) | Effect::Action(_))
+        !matches!(
+            self,
+            Effect::Pointer(_) | Effect::Action(_) | Effect::ShellKey(_)
+        )
     }
 }
 
@@ -54,6 +61,7 @@ impl fmt::Display for Effect {
             Effect::Cover(c) => write!(f, "WOULD cover {}", if *c { "closed" } else { "open" }),
             Effect::LowBattery(l) => write!(f, "WOULD low-battery {l}"),
             Effect::CriticalPoweroff(mv) => write!(f, "WOULD poweroff (critical battery {mv} mV)"),
+            Effect::ShellKey(k) => write!(f, "WOULD shell-key {k:?}"),
             Effect::Pointer(tm::Act::Move(x, y)) => write!(f, "WOULD pointer move {x} {y}"),
             Effect::Pointer(tm::Act::Press) => write!(f, "WOULD pointer press"),
             Effect::Pointer(tm::Act::Release) => write!(f, "WOULD pointer release"),
@@ -91,6 +99,9 @@ pub struct Brain {
     last_gest: Ms,
     /// Set by the caller from /run/walpad/powermenu-open before feeding events.
     pub menu_open: bool,
+    /// Set by the caller while the shell's power menu is open: volume keys go to the shell as
+    /// `Effect::ShellKey` and never reach the volume gestures.
+    pub shell_keys: bool,
 }
 
 fn cfg<T: DeserializeOwned + Default>(json: &str) -> T {
@@ -112,6 +123,7 @@ impl Brain {
             last_b: None,
             last_gest: now,
             menu_open: false,
+            shell_keys: false,
         }
     }
 
@@ -196,7 +208,16 @@ impl Brain {
                     self.gestures.note_wake(now);
                 }
                 if is_key {
-                    if ev.kind == EV_KEY {
+                    let vol = match ev.code {
+                        KEY_VOLUMEUP => Some(ShellInput::VolumeUp),
+                        KEY_VOLUMEDOWN => Some(ShellInput::VolumeDown),
+                        _ => None,
+                    };
+                    if let (true, Some(k), true) = (self.shell_keys, vol, ev.kind == EV_KEY) {
+                        if ev.value == 1 {
+                            out.push(Effect::ShellKey(k));
+                        }
+                    } else if ev.kind == EV_KEY {
                         Self::actions(self.gestures.on_key(ev.code, ev.value, now), &mut out);
                     }
                 } else {
@@ -262,5 +283,72 @@ impl Brain {
     /// How long the caller may sleep before the next tick is needed (power key down = faster).
     pub fn poll_interval_ms(&self) -> Ms {
         self.power.poll_interval_ms().min(GESTURE_TICK)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(code: u16, value: i32) -> InputEvent {
+        InputEvent {
+            sec: 0,
+            usec: 0,
+            kind: EV_KEY,
+            code,
+            value,
+        }
+    }
+    fn brain() -> Brain {
+        Brain::new("", "", "", Some(120), 0)
+    }
+    fn tick(b: &mut Brain, now: Ms) -> Vec<Effect> {
+        b.tick(now, &mut || None, &mut RawBattery::default)
+    }
+
+    #[test]
+    fn long_power_press_opens_the_menu_once_and_short_press_activates_it() {
+        let mut b = brain();
+        assert!(b.on_event(Role::Key, &key(KEY_POWER, 1), 0).is_empty());
+        assert!(!tick(&mut b, 900).contains(&Effect::PowerMenuOpen));
+        assert!(tick(&mut b, 1000).contains(&Effect::PowerMenuOpen));
+        assert!(!tick(&mut b, 1100).contains(&Effect::PowerMenuOpen));
+        b.on_event(Role::Key, &key(KEY_POWER, 0), 1200);
+        // menu open: a short press activates the focused item instead of toggling the screen
+        b.menu_open = true;
+        b.on_event(Role::Key, &key(KEY_POWER, 1), 2000);
+        let fx = b.on_event(Role::Key, &key(KEY_POWER, 0), 2100);
+        assert_eq!(fx, vec![Effect::PowerMenuActivate]);
+    }
+
+    #[test]
+    fn volume_keys_go_to_the_shell_while_its_menu_is_open() {
+        let mut b = brain();
+        b.shell_keys = true;
+        let down = b.on_event(Role::Key, &key(KEY_VOLUMEDOWN, 1), 10);
+        let up = b.on_event(Role::Key, &key(KEY_VOLUMEUP, 1), 20);
+        assert!(down.contains(&Effect::ShellKey(ShellInput::VolumeDown)));
+        assert!(up.contains(&Effect::ShellKey(ShellInput::VolumeUp)));
+        // releases and the later tick produce no volume gesture
+        let mut all = b.on_event(Role::Key, &key(KEY_VOLUMEDOWN, 0), 60);
+        all.extend(b.on_event(Role::Key, &key(KEY_VOLUMEUP, 0), 80));
+        all.extend(tick(&mut b, 800));
+        assert!(
+            !all.iter().any(|e| matches!(e, Effect::Action(_))),
+            "{all:?}"
+        );
+    }
+
+    #[test]
+    fn volume_keys_follow_the_gestures_when_no_menu_is_open() {
+        let mut b = brain();
+        let fx = b.on_event(Role::Key, &key(KEY_VOLUMEUP, 1), 10);
+        assert!(!fx.iter().any(|e| matches!(e, Effect::ShellKey(_))));
+        b.on_event(Role::Key, &key(KEY_VOLUMEUP, 0), 60);
+        let fx = tick(&mut b, 600);
+        assert!(
+            fx.iter().any(|e| matches!(e, Effect::Action(_))),
+            "single press after the tap window is a volume action: {fx:?}"
+        );
     }
 }

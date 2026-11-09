@@ -4,6 +4,7 @@
 use crate::app::{load_catalog, read_clock_24h, read_pinned, App, Cmd, WallTime};
 use crate::config::read_devd;
 use crate::core_client::{CoreClient, CoreEvent};
+use crate::dock::{load_wm_classes, Dock};
 use crate::gesture::{Gesture, Recogniser};
 use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
@@ -26,6 +27,8 @@ pub struct Options {
 
 pub struct Shell {
     win: Window,
+    /// The system dock (None when its X connection could not be opened or died).
+    dock: Option<Dock>,
     core: CoreClient,
     canvas: Canvas,
     fonts: Fonts,
@@ -67,6 +70,13 @@ impl Shell {
             .clone()
             .unwrap_or_else(|| opts.root.p("/tmp/.X11-unix/X0"));
         let win = Window::open(&sock, w, h).map_err(|e| format!("X: {}", e.0))?;
+        let dock = match Dock::open(&sock, win.win, load_wm_classes(&opts.root), (w, h)) {
+            Ok(d) => Some(d),
+            Err(e) => {
+                eprintln!("walpad-shell: system dock disabled: {}", e.0);
+                None
+            }
+        };
         let canvas =
             Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
         let clock_24h = read_clock_24h(&opts.root);
@@ -78,6 +88,7 @@ impl Shell {
         );
         Ok(Shell {
             win,
+            dock,
             core,
             canvas,
             fonts,
@@ -141,6 +152,11 @@ impl Shell {
             self.canvas = c;
             self.app.resize(w, h);
             self.dirty = true;
+            if let Some(d) = &mut self.dock {
+                if let Err(e) = d.set_shell_size(w, h) {
+                    eprintln!("walpad-shell: system dock: {}", e.0);
+                }
+            }
         }
     }
 
@@ -180,6 +196,15 @@ impl Shell {
         let now = self.now_ms();
         let gs = self.rec.tick(now);
         self.apply_gestures(gs);
+        if let Some(mut d) = self.dock.take() {
+            match d.poll(&mut self.fonts) {
+                Ok(cmds) => {
+                    self.dock = Some(d);
+                    self.send(cmds);
+                }
+                Err(e) => eprintln!("walpad-shell: system dock disabled: {}", e.0),
+            }
+        }
 
         let now = self.now_ms();
         for ev in self.core.tick(Instant::now()) {
@@ -192,6 +217,8 @@ impl Shell {
             self.send(out.cmds);
         }
         self.dirty |= self.app.tick(now);
+        let queued = self.app.take_cmds();
+        self.send(queued);
         if Instant::now() >= self.next_minute {
             let (wall, to_minute) = WallTime::now(self.clock_24h);
             self.next_minute = Instant::now() + Duration::from_millis(to_minute);
@@ -223,14 +250,10 @@ impl Shell {
             wait = wait.min(500); // reconnect attempts
         }
         let wait = wait.max(1);
-        match self.core.fd() {
-            Some(c) => {
-                walpad_x::wait_any(&[&self.win.xc.wait_fd, c], Some(wait));
-            }
-            None => {
-                self.win.wait(Some(wait));
-            }
-        }
+        let mut fds = vec![&self.win.xc.wait_fd];
+        fds.extend(self.core.fd());
+        fds.extend(self.dock.as_ref().map(|d| d.wait_fd()));
+        walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }
 

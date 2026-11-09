@@ -1124,3 +1124,230 @@ fn clock_toggle_restart_shell_and_two_step_power_confirm() {
     // cancel closes without doing anything
     assert!(tap(&mut app, Target::DialogCancel).cmds.is_empty() && app.model.overlay.is_none());
 }
+
+// ---------------------------------------------------------------------------- power menu (M5.7)
+
+fn hw_key(app: &mut App, k: ShellInput, now: Ms) -> Outcome {
+    let o = app.on_core(&CoreEvent::Input(k), now);
+    render(app);
+    o
+}
+fn menu_focus(app: &App) -> Option<usize> {
+    match &app.model.overlay {
+        Some(Overlay::PowerMenu { focus, .. }) => Some(*focus),
+        _ => None,
+    }
+}
+fn menu_armed(app: &App) -> Option<usize> {
+    match &app.model.overlay {
+        Some(Overlay::PowerMenu { armed, .. }) => armed.map(|(i, _)| i),
+        _ => None,
+    }
+}
+const ITEM_SCREEN_OFF: usize = 0;
+const ITEM_RESTART: usize = 1;
+const ITEM_SHUTDOWN: usize = 2;
+const ITEM_CANCEL: usize = 3;
+
+#[test]
+fn long_power_opens_the_menu_with_cancel_focused_and_tells_the_core() {
+    let mut app = online();
+    let out = hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    assert_eq!(menu_focus(&app), Some(ITEM_CANCEL));
+    assert_eq!(out.cmds, vec![Cmd::PowerMenuState(true)]);
+    assert_eq!(
+        Cmd::PowerMenuState(true).request(),
+        ("power_menu", json!({"open": true}))
+    );
+    // a second open event while it is open changes nothing
+    let again = hw_key(&mut app, ShellInput::PowerMenuOpen, 1100);
+    assert!(again.cmds.is_empty());
+    assert_eq!(menu_focus(&app), Some(ITEM_CANCEL));
+}
+
+#[test]
+fn the_menu_does_not_open_while_the_core_is_away() {
+    let mut app = App::new(800, 1280, catalog(), wall());
+    render(&mut app);
+    assert!(hw_key(&mut app, ShellInput::PowerMenuOpen, 10)
+        .cmds
+        .is_empty());
+    assert!(app.model.overlay.is_none());
+}
+
+#[test]
+fn settings_maintenance_has_a_power_menu_action() {
+    let mut app = online();
+    go(&mut app, Tab::Settings);
+    tap(&mut app, Target::Page(Page::Maintenance));
+    let out = tap(&mut app, Target::PowerMenu);
+    assert_eq!(out.cmds, vec![Cmd::PowerMenuState(true)]);
+    assert_eq!(menu_focus(&app), Some(ITEM_CANCEL));
+}
+
+#[test]
+fn volume_keys_move_the_focus_and_wrap() {
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    hw_key(&mut app, ShellInput::VolumeDown, 1100);
+    assert_eq!(
+        menu_focus(&app),
+        Some(ITEM_SCREEN_OFF),
+        "down wraps past Cancel"
+    );
+    hw_key(&mut app, ShellInput::VolumeDown, 1200);
+    assert_eq!(menu_focus(&app), Some(ITEM_RESTART));
+    hw_key(&mut app, ShellInput::VolumeUp, 1300);
+    hw_key(&mut app, ShellInput::VolumeUp, 1400);
+    assert_eq!(
+        menu_focus(&app),
+        Some(ITEM_CANCEL),
+        "up wraps before Screen off"
+    );
+    // keys do nothing without a menu
+    let mut closed = online();
+    assert!(hw_key(&mut closed, ShellInput::VolumeDown, 5)
+        .cmds
+        .is_empty());
+    assert!(hw_key(&mut closed, ShellInput::PowerShort, 5)
+        .cmds
+        .is_empty());
+    assert!(closed.model.overlay.is_none());
+}
+
+#[test]
+fn short_power_press_activates_the_focused_item() {
+    // Cancel: closes, only tells the core
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    let out = hw_key(&mut app, ShellInput::PowerShort, 1100);
+    assert_eq!(out.cmds, vec![Cmd::PowerMenuState(false)]);
+    assert!(app.model.overlay.is_none());
+
+    // Screen off: one press, no confirmation
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 2000);
+    hw_key(&mut app, ShellInput::VolumeDown, 2100); // Cancel -> Screen off
+    let out = hw_key(&mut app, ShellInput::PowerShort, 2200);
+    assert_eq!(out.cmds, vec![Cmd::PowerMenuState(false), Cmd::ScreenOff]);
+    assert!(app.model.overlay.is_none());
+}
+
+#[test]
+fn restart_and_shut_down_need_two_presses_within_three_seconds() {
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    hw_key(&mut app, ShellInput::VolumeUp, 1100); // Cancel -> Shut down
+    assert_eq!(menu_focus(&app), Some(ITEM_SHUTDOWN));
+    let first = hw_key(&mut app, ShellInput::PowerShort, 2000);
+    assert!(first.cmds.is_empty(), "the first press only arms");
+    assert_eq!(menu_armed(&app), Some(ITEM_SHUTDOWN));
+    let second = hw_key(&mut app, ShellInput::PowerShort, 4900);
+    assert_eq!(
+        second.cmds,
+        vec![Cmd::PowerMenuState(false), Cmd::Power { poweroff: true }]
+    );
+    assert!(app.model.overlay.is_none());
+
+    // the arming expires after 3 s: the button goes back and a late press only re-arms
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 10_000);
+    hw_key(&mut app, ShellInput::VolumeUp, 10_100);
+    hw_key(&mut app, ShellInput::VolumeUp, 10_200); // Restart? Cancel -> Shut down -> Restart
+    assert_eq!(menu_focus(&app), Some(ITEM_RESTART));
+    hw_key(&mut app, ShellInput::PowerShort, 11_000);
+    assert_eq!(menu_armed(&app), Some(ITEM_RESTART));
+    assert!(
+        app.tick(14_000),
+        "arming ended: redraw with the normal label"
+    );
+    assert_eq!(menu_armed(&app), None);
+    let late = hw_key(&mut app, ShellInput::PowerShort, 14_500);
+    assert!(late.cmds.is_empty());
+    assert_eq!(menu_armed(&app), Some(ITEM_RESTART));
+    let ok = hw_key(&mut app, ShellInput::PowerShort, 15_000);
+    assert_eq!(
+        ok.cmds,
+        vec![Cmd::PowerMenuState(false), Cmd::Power { poweroff: false }]
+    );
+}
+
+#[test]
+fn arming_one_item_then_pressing_another_does_not_fire() {
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    hw_key(&mut app, ShellInput::VolumeUp, 1100); // Shut down
+    hw_key(&mut app, ShellInput::PowerShort, 1200);
+    assert_eq!(menu_armed(&app), Some(ITEM_SHUTDOWN));
+    hw_key(&mut app, ShellInput::VolumeUp, 1300); // Restart
+    let out = hw_key(&mut app, ShellInput::PowerShort, 1400);
+    assert!(out.cmds.is_empty(), "Restart is armed now, nothing fired");
+    assert_eq!(menu_armed(&app), Some(ITEM_RESTART));
+}
+
+#[test]
+fn touch_taps_use_the_same_two_step_confirm() {
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    let (x, y) = centre(&app, Target::PowerItem(ITEM_SHUTDOWN));
+    let first = tap_at(&mut app, x, y, 2000);
+    assert!(first.cmds.is_empty());
+    assert_eq!(menu_armed(&app), Some(ITEM_SHUTDOWN));
+    assert_eq!(
+        menu_focus(&app),
+        Some(ITEM_SHUTDOWN),
+        "the focus follows the tap"
+    );
+    let second = tap_at(&mut app, x, y, 3000);
+    assert_eq!(
+        second.cmds,
+        vec![Cmd::PowerMenuState(false), Cmd::Power { poweroff: true }]
+    );
+    // Cancel by touch
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 5000);
+    let (x, y) = centre(&app, Target::PowerItem(ITEM_CANCEL));
+    let out = tap_at(&mut app, x, y, 5100);
+    assert_eq!(out.cmds, vec![Cmd::PowerMenuState(false)]);
+    assert!(app.model.overlay.is_none());
+}
+
+#[test]
+fn the_menu_closes_itself_after_20_seconds() {
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    assert_eq!(app.next_deadline(), Some(21_000));
+    assert!(!app.tick(20_999));
+    assert!(app.model.overlay.is_some());
+    assert!(app.tick(21_000));
+    assert!(app.model.overlay.is_none());
+    assert_eq!(app.take_cmds(), vec![Cmd::PowerMenuState(false)]);
+    assert!(app.take_cmds().is_empty(), "drained once");
+}
+
+#[test]
+fn losing_the_core_closes_the_menu() {
+    let mut app = online();
+    hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+    app.on_core(&CoreEvent::Disconnected, 1100);
+    assert!(app.model.overlay.is_none());
+}
+
+#[test]
+fn power_menu_geometry_is_560_wide_centred_and_touchable_in_both_orientations() {
+    for (w, h) in [(800, 1280), (1280, 800)] {
+        let mut app = online();
+        app.resize(w, h);
+        hw_key(&mut app, ShellInput::PowerMenuOpen, 1000);
+        let hits: Vec<_> = app
+            .overlay_hits
+            .iter()
+            .filter(|(_, t)| matches!(t, Target::PowerItem(_)))
+            .collect();
+        assert_eq!(hits.len(), 4);
+        for (r, _) in &hits {
+            assert!(r.h >= TOUCH_MIN, "{r:?}");
+            assert_eq!(r.w + 2 * SP_5, 560, "sheet is 560 wide");
+            assert_eq!(r.x - SP_5 + 560 / 2, w / 2, "centred");
+            assert!(r.bottom() < h && r.y > 0);
+        }
+        assert!(hits.windows(2).all(|p| p[0].0.bottom() < p[1].0.y));
+    }
+}

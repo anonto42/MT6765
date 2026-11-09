@@ -14,6 +14,7 @@ use x11rb::protocol::xproto::{
     self, AtomEnum, ConfigureWindowAux, ConnectionExt as _, ImageFormat, Window,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
+use x11rb::wrapper::ConnectionExt as _;
 
 /// A display number no other test in this binary (or process) uses: the tests run in parallel.
 fn display_num() -> u32 {
@@ -526,4 +527,203 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
 
     stop.store(true, Ordering::Relaxed);
     core_thread.join().unwrap();
+}
+
+// ---------------------------------------------------------------------------------------------
+// system dock (M5.8): appears while a foreign window is active, disappears when the shell is,
+// Home raises the shell. No window manager runs in this test: the test plays the part of the WM
+// by writing _NET_ACTIVE_WINDOW on the root, exactly what openbox does.
+
+fn atom(c: &XConn, name: &str) -> u32 {
+    c.conn
+        .intern_atom(false, name.as_bytes())
+        .unwrap()
+        .reply()
+        .unwrap()
+        .atom
+}
+fn find_by_class(c: &XConn, prefix: &[u8]) -> Option<Window> {
+    for w in c.conn.query_tree(c.root).ok()?.reply().ok()?.children {
+        let p = c
+            .conn
+            .get_property(false, w, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 64)
+            .ok()?
+            .reply()
+            .ok()?;
+        if p.value.starts_with(prefix) {
+            return Some(w);
+        }
+    }
+    None
+}
+fn is_mapped(c: &XConn, w: Window) -> bool {
+    c.conn
+        .get_window_attributes(w)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .map_state
+        != xproto::MapState::UNMAPPED
+}
+fn set_active(c: &XConn, w: Window) {
+    let a = atom(c, "_NET_ACTIVE_WINDOW");
+    c.conn
+        .change_property32(xproto::PropMode::REPLACE, c.root, a, AtomEnum::WINDOW, &[w])
+        .unwrap();
+    c.conn.flush().unwrap();
+}
+/// Index in the root's stacking order (bottom to top).
+fn stack_pos(c: &XConn, w: Window) -> usize {
+    c.conn
+        .query_tree(c.root)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .children
+        .iter()
+        .position(|x| *x == w)
+        .unwrap()
+}
+
+#[test]
+fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
+    use x11rb::protocol::xproto::{CreateWindowAux, WindowClass};
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-dock-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let shell = probe.find_shell().expect("shell window");
+    let dock = find_by_class(&probe.0, b"walpad-dock\0").expect("dock window exists");
+    let c = &probe.0.conn;
+
+    // nothing active: the dock is not mapped, so apps keep their whole area
+    assert!(!is_mapped(&probe.0, dock));
+
+    // a foreign app (WM_CLASS st) becomes active: the dock appears at the bottom, strut and type set
+    let app = c.generate_id().unwrap();
+    c.create_window(
+        0,
+        app,
+        probe.0.root,
+        0,
+        0,
+        800,
+        1224,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        0,
+        &CreateWindowAux::new().background_pixel(0x0033_6699),
+    )
+    .unwrap();
+    c.change_property8(
+        xproto::PropMode::REPLACE,
+        app,
+        AtomEnum::WM_CLASS,
+        AtomEnum::STRING,
+        b"st\0St\0",
+    )
+    .unwrap();
+    c.map_window(app).unwrap();
+    c.flush().unwrap();
+    set_active(&probe.0, app);
+    wait_for("dock mapped for a foreign window", || {
+        is_mapped(&probe.0, dock)
+    });
+    let g = c.get_geometry(dock).unwrap().reply().unwrap();
+    assert_eq!((g.x, g.y, g.width, g.height), (0, 1224, 800, 56));
+    let strut = c
+        .get_property(
+            false,
+            dock,
+            atom(&probe.0, "_NET_WM_STRUT_PARTIAL"),
+            AtomEnum::CARDINAL,
+            0,
+            12,
+        )
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        strut,
+        [0, 0, 0, 56, 0, 0, 0, 0, 0, 0, 0, 799],
+        "bottom strut 56 px"
+    );
+    let ty = c
+        .get_property(
+            false,
+            dock,
+            atom(&probe.0, "_NET_WM_WINDOW_TYPE"),
+            AtomEnum::ATOM,
+            0,
+            4,
+        )
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(ty, [atom(&probe.0, "_NET_WM_WINDOW_TYPE_DOCK")]);
+    // it is drawn: surface colour with the pressed-free strip
+    wait_for("dock painted", || {
+        let img = probe.image(dock, 800, 56);
+        px(&img, 800, 5, 30) == (SURFACE.r, SURFACE.g, SURFACE.b)
+            && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
+    });
+
+    // Home (left third) raises the shell above the app and the dock
+    assert!(stack_pos(&probe.0, shell) < stack_pos(&probe.0, dock));
+    probe.click(100, 1250);
+    wait_for("shell raised above the dock", || {
+        stack_pos(&probe.0, shell) > stack_pos(&probe.0, dock)
+            && stack_pos(&probe.0, shell) > stack_pos(&probe.0, app)
+    });
+
+    // the window manager (the test) reports the shell active: the dock goes away
+    set_active(&probe.0, shell);
+    wait_for("dock unmapped while the shell is active", || {
+        !is_mapped(&probe.0, dock)
+    });
+
+    // rotation: the shell is resized to landscape; the dock follows (also while hidden)
+    c.configure_window(shell, &ConfigureWindowAux::new().width(1280).height(800))
+        .unwrap();
+    c.flush().unwrap();
+    wait_for("dock moved for landscape", || {
+        let g = c.get_geometry(dock).unwrap().reply().unwrap();
+        (g.x, g.y, g.width, g.height) == (0, 744, 1280, 56)
+    });
+    set_active(&probe.0, app);
+    wait_for("dock back for the app", || is_mapped(&probe.0, dock));
+    let strut = c
+        .get_property(
+            false,
+            dock,
+            atom(&probe.0, "_NET_WM_STRUT_PARTIAL"),
+            AtomEnum::CARDINAL,
+            0,
+            12,
+        )
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(strut[3], 536, "480 below the panel + 56");
+    wait_for("landscape dock painted", || {
+        let img = probe.image(dock, 1280, 56);
+        px(&img, 1280, 5, 30) == (SURFACE.r, SURFACE.g, SURFACE.b)
+            && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
+    });
 }
