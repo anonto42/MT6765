@@ -1,0 +1,30 @@
+#!/bin/sh
+# walpad-rescue REASON...   no-Python image: give the panel to padui (the static C rescue UI).
+# Idempotent (first call wins).  Stops everything that draws on or reads the panel, then:
+#  - /run/walpad-ok missing: the ramdisk health check has not passed.  It starts padui itself at
+#    150 s after boot (or already did).  We must NOT start a second one: do nothing more.
+#  - /run/walpad-ok present: the ramdisk already declared the session healthy and will never fall
+#    back, so we start padui from the rootfs copy, in a restart loop.
+# Test hooks: WALPAD_RUN_DIR, WALPAD_OK_FILE, WALPAD_LOG_DIR, WALPAD_PADUI_ONCE=1 (padui once, no loop).
+export PATH="$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
+RUN=${WALPAD_RUN_DIR:-/run/walpad}; OK=${WALPAD_OK_FILE:-/run/walpad-ok}
+LOG=${WALPAD_LOG_DIR:-/var/log}
+klog() { echo "WALPAD-RESCUE: $*" > /dev/kmsg 2>/dev/null; echo "walpad-rescue: $*" >&2; }
+mkdir -p "$RUN"
+mkdir "$RUN/rescue.d" 2>/dev/null || exit 0
+echo "$*" > "$RUN/rescue.d/reason"
+klog "$*"
+# the supervisors first, so nothing restarts what we stop
+pkill -f 'walpad-supervise' 2>/dev/null
+for n in walpad-shell walpad-core matchbox-keyboard firefox-esr st xterm openbox fbmirror Xvfb; do pkill -x $n 2>/dev/null; done
+sleep 1
+if [ -f "$OK" ]; then
+  if pidof padui >/dev/null 2>&1; then klog "padui already running"; exit 0; fi
+  klog "session was healthy, the ramdisk will not fall back: starting padui"
+  if [ "${WALPAD_PADUI_ONCE:-0}" = 1 ]; then padui >> "$LOG/padui.log" 2>&1
+  else setsid sh -c 'while :; do padui >> /var/log/padui.log 2>&1; sleep 1; done' < /dev/null > /dev/null 2>&1 &
+  fi
+else
+  klog "no /run/walpad-ok: the ramdisk health check starts padui (at most 150 s after boot)"
+fi
+exit 0
