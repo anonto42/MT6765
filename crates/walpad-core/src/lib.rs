@@ -4,3 +4,5 @@
 pub mod daemon;
 pub mod fake;
 pub mod logic;
+pub mod shadow;
+pub mod shadow_live;

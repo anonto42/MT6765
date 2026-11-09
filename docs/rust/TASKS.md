@@ -17,7 +17,9 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M1.6 | scripts/dev/host_session.sh | done |
 | M1.7 | build_rootfs.sh installs binaries, runtime.conf (python), apps.json | done |
 | M2.1 | Logic modules (battery, screen_timeout, power_key, rotation, touch_map, key_gestures) | done |
-| M2.2-M2.4 | Shadow mode, shadow_diff.sh, owner session | todo |
+| M2.2 | Shadow mode | done |
+| M2.3 | shadow_diff.sh | done |
+| M2.4 [DEVICE] | Owner scripted session + diff report | todo (see reports/M2.2-M2.3.md) |
 | M3.1-M3.4 | runtime.conf handling + fallback, device subsystem, input subsystem, device check | todo |
 | M4.1-M4.4 | wpa ctrl client, scan, connect/forget/disconnect (PBKDF2 PSK), device test | todo |
 | M5.1-M5.9 | walpad-ui, components, X11 presenter, screens, power menu, system dock, UI checklist | todo |

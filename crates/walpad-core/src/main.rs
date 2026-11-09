@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicBool;
 use walpad_core::{daemon::Daemon, fake};
 use walpad_hw::Root;
 
-const USAGE: &str = "walpad-core [--version] [--fake] [--root DIR]\n  WALPAD_ROOT sets the path prefix (default /); --fake fills it with sample hardware values.";
+const USAGE: &str = "walpad-core [--version] [--fake] [--shadow] [--root DIR]\n  WALPAD_ROOT sets the path prefix (default /); --fake fills it with sample hardware values.";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -30,6 +30,7 @@ fn main() {
             std::process::exit(1);
         }
     }
+    let conf_path = root.p("/etc/walpad/runtime.conf");
     let mut d = match Daemon::new(root) {
         Ok(d) => d,
         Err(e) => {
@@ -37,6 +38,11 @@ fn main() {
             std::process::exit(1);
         }
     };
+    let conf = std::fs::read_to_string(conf_path).unwrap_or_default();
+    if args.iter().any(|a| a == "--shadow") || conf.lines().any(|l| l.trim() == "WALPAD_SHADOW=1") {
+        d.enable_shadow();
+        eprintln!("walpad-core: SHADOW mode: logging WOULD lines, no hardware writes by policy");
+    }
     eprintln!("walpad-core: listening on {}", d.socket_path().display());
     let stop = AtomicBool::new(false);
     d.run(&stop);

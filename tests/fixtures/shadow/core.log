@@ -1,0 +1,9 @@
+walpad-core: SHADOW mode
+1699963205200 WOULD orientation 90
+1699963205200 WOULD struts 90
+1699963205200 WOULD keyboard-dock 90
+1699963206150 WOULD action key:Up
+1699963207400 WOULD action ctl:rotate toggle
+1699963209100 WOULD cover closed
+1699963209100 WOULD backlight 0
+1699963210000 WOULD pointer press

@@ -79,6 +79,7 @@ pub struct Daemon {
     next_status: Instant,
     next_battery: Instant,
     sock_path: PathBuf,
+    shadow: Option<crate::shadow_live::Live>,
 }
 
 fn load_json<T: serde::de::DeserializeOwned + Default>(root: &Root, path: &str) -> T {
@@ -121,6 +122,7 @@ impl Daemon {
             next_battery: now,
             started: now,
             sock_path,
+            shadow: None,
             root,
         };
         let init = d.rotation.init();
@@ -460,9 +462,19 @@ impl Daemon {
         }
     }
 
+    /// Shadow mode: read the real inputs, log `WOULD ...`, write nothing (M2.2).
+    pub fn enable_shadow(&mut self) {
+        self.shadow = Some(crate::shadow_live::Live::new(&self.root));
+    }
+
     pub fn run(&mut self, stop: &AtomicBool) {
         while !stop.load(Ordering::Relaxed) {
-            self.step(Duration::from_millis(200));
+            if let Some(sh) = self.shadow.as_mut() {
+                sh.pump(&self.root);
+                self.step(Duration::from_millis(40));
+            } else {
+                self.step(Duration::from_millis(200));
+            }
         }
         let _ = std::fs::remove_file(&self.sock_path);
     }

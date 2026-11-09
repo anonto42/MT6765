@@ -1,0 +1,4 @@
+12:00:01 inputs: ['touch', 'key', 'hall']
+12:00:05 orientation -> 90 accel x=4000 y=100
+12:00:09 cover closed
+12:00:20 cmd: rotate toggle
