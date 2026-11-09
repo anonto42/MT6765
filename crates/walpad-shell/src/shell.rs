@@ -1,7 +1,8 @@
-//! The shell event loop: X events -> gestures -> app -> render -> present. Redraws only when
-//! something changed; writes /run/walpad-ok after the first frame is on screen (the boot ramdisk
-//! health check).
-use crate::app::App;
+//! The shell event loop: X events + core events -> gestures -> app -> render -> present. Redraws
+//! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
+//! after the first frame is on screen (the boot ramdisk health check).
+use crate::app::{load_catalog, read_clock_24h, App, Cmd, WallTime};
+use crate::core_client::{CoreClient, CoreEvent};
 use crate::gesture::{Gesture, Recogniser};
 use crate::window::{WinEvent, Window};
 use std::path::PathBuf;
@@ -16,17 +17,22 @@ pub struct Options {
     pub root: Root,
     /// X socket, default <root>/tmp/.X11-unix/X0.
     pub x_socket: Option<PathBuf>,
+    /// Core control socket, default <root>/run/walpad/control.sock.
+    pub core_socket: Option<PathBuf>,
     pub fonts_dir: Option<PathBuf>,
 }
 
 pub struct Shell {
     win: Window,
+    core: CoreClient,
     canvas: Canvas,
     fonts: Fonts,
     pub app: App,
     rec: Recogniser,
     root: Root,
+    clock_24h: bool,
     started: Instant,
+    next_minute: Instant,
     dirty: bool,
     first_frame: bool,
     pub frames: u64,
@@ -60,14 +66,24 @@ impl Shell {
         let win = Window::open(&sock, w, h).map_err(|e| format!("X: {}", e.0))?;
         let canvas =
             Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
+        let clock_24h = read_clock_24h(&opts.root);
+        let (wall, to_minute) = WallTime::now(clock_24h);
+        let core = CoreClient::new(
+            opts.core_socket
+                .clone()
+                .unwrap_or_else(|| opts.root.p(walpad_proto::SOCKET_PATH)),
+        );
         Ok(Shell {
             win,
+            core,
             canvas,
             fonts,
-            app: App::new(w, h),
+            app: App::new(w, h, load_catalog(&opts.root), wall),
             rec: Recogniser::new(),
             root: opts.root,
+            clock_24h,
             started: Instant::now(),
+            next_minute: Instant::now() + Duration::from_millis(to_minute),
             dirty: true,
             first_frame: true,
             frames: 0,
@@ -78,11 +94,19 @@ impl Shell {
         self.started.elapsed().as_millis() as u64
     }
 
+    fn send(&mut self, cmds: Vec<Cmd>) {
+        for c in cmds {
+            let (name, args) = c.request();
+            self.core.send(name, args);
+        }
+    }
+
     fn apply_gestures(&mut self, gs: Vec<Gesture>) {
+        let now = self.now_ms();
         for g in gs {
-            if self.app.on_gesture(&g) {
-                self.dirty = true;
-            }
+            let out = self.app.on_gesture(&g, now);
+            self.dirty |= out.dirty;
+            self.send(out.cmds);
         }
     }
 
@@ -118,10 +142,10 @@ impl Shell {
     /// One loop iteration. Returns Err when the X connection is gone (the supervisor restarts us).
     pub fn step(&mut self, max_wait: Duration) -> Result<(), String> {
         let events = self.win.poll_events().map_err(|e| e.0)?;
-        let now = self.now_ms();
         for ev in events {
             match ev {
                 WinEvent::Input(i) => {
+                    let now = self.now_ms();
                     let gs = self.rec.feed(i, now);
                     self.apply_gestures(gs);
                 }
@@ -130,21 +154,47 @@ impl Shell {
                 WinEvent::Key(_) => {}
             }
         }
+        let now = self.now_ms();
         let gs = self.rec.tick(now);
         self.apply_gestures(gs);
+
+        for ev in self.core.tick(Instant::now()) {
+            if let CoreEvent::Connected = ev {
+                self.clock_24h = read_clock_24h(&self.root);
+            }
+            self.dirty |= self.app.on_core(&ev);
+        }
+        if Instant::now() >= self.next_minute {
+            let (wall, to_minute) = WallTime::now(self.clock_24h);
+            self.next_minute = Instant::now() + Duration::from_millis(to_minute);
+            self.dirty |= self.app.set_wall(wall);
+        }
         if self.dirty {
             self.redraw()?;
         }
-        let until_long = self
-            .rec
-            .next_deadline()
-            .map(|d| d.saturating_sub(self.now_ms()));
-        let wait = until_long
-            .map_or(max_wait.as_millis() as u64, |d| {
-                d.min(max_wait.as_millis() as u64)
-            })
-            .max(1);
-        self.win.wait(Some(wait));
+
+        // sleep until the next thing that needs us: input, core traffic, a long-press, the minute
+        let mut wait = max_wait.as_millis() as u64;
+        if let Some(d) = self.rec.next_deadline() {
+            wait = wait.min(d.saturating_sub(self.now_ms()));
+        }
+        wait = wait.min(
+            self.next_minute
+                .saturating_duration_since(Instant::now())
+                .as_millis() as u64,
+        );
+        if !self.core.connected() {
+            wait = wait.min(500); // reconnect attempts
+        }
+        let wait = wait.max(1);
+        match self.core.fd() {
+            Some(c) => {
+                walpad_x::wait_any(&[&self.win.xc.wait_fd, c], Some(wait));
+            }
+            None => {
+                self.win.wait(Some(wait));
+            }
+        }
         Ok(())
     }
 

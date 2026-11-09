@@ -68,6 +68,7 @@ impl Running {
             let mut sh = Shell::new(Options {
                 root: Root::new(root),
                 x_socket: Some(sock),
+                core_socket: None,
                 fonts_dir: Some(
                     Path::new(env!("CARGO_MANIFEST_DIR")).join("../walpad-ui/assets/fonts"),
                 ),
@@ -218,5 +219,99 @@ fn shell_runs_on_a_real_x_server() {
     wait_for("Settings active in landscape", || {
         let img = probe.image(win, 1280, 800);
         count(&img, 1280, 1024, 1280, 712, 800, ACCENT) > 20
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// shell + real core daemon + real X server
+
+fn core_status(root: &Path) -> Option<serde_json::Value> {
+    use std::io::{BufRead, BufReader, Write};
+    let s = std::os::unix::net::UnixStream::connect(root.join("run/walpad/control.sock")).ok()?;
+    s.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
+    let mut w = s.try_clone().ok()?;
+    let mut r = BufReader::new(s);
+    let mut call = |id: u64, cmd: &str| -> Option<serde_json::Value> {
+        writeln!(
+            w,
+            "{}",
+            serde_json::json!({"v":1,"id":id,"cmd":cmd,"args":{"client":"t","proto":1}})
+        )
+        .ok()?;
+        let mut l = String::new();
+        r.read_line(&mut l).ok()?;
+        serde_json::from_str(&l).ok()
+    };
+    call(1, "hello")?;
+    call(2, "get_status").map(|v| v["data"].clone())
+}
+
+#[test]
+fn shell_drives_the_core_and_shows_when_it_is_gone() {
+    use walpad_core::{daemon::Daemon, fake};
+    use walpad_shell::home;
+    use walpad_ui::layout::Frame;
+
+    let n = 90 + std::process::id() % 9;
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-core-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("usr/bin")).unwrap();
+    std::fs::create_dir_all(root.join("etc/walpad")).unwrap();
+    fake::populate(&root).unwrap();
+    std::fs::write(root.join("usr/bin/sleep"), "").unwrap(); // makes "browser" count as installed
+    std::fs::write(root.join("etc/walpad/apps.json"), r#"[{"id":"browser","name":"Browser","icon":"globe","exec":["sleep","30"],"single_instance":true,"wm_class":"x"}]"#).unwrap();
+
+    let mut core = Daemon::new(Root::new(&root)).unwrap();
+    let core_stop = Arc::new(AtomicBool::new(false));
+    let cs = core_stop.clone();
+    let core_thread = std::thread::spawn(move || core.run(&cs));
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("shell window", || probe.find_shell().is_some());
+    let win = probe.find_shell().unwrap();
+
+    // connected: the frame is drawn (nav bar present) AND the offline banner has disappeared.
+    // (The window background equals BG, so "no banner" alone is true before the first frame.)
+    let banner_px = |img: &[u8]| px(img, 800, 400, 64);
+    wait_for("drawn and connected (no banner)", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, 5, 1250) == (SURFACE.r, SURFACE.g, SURFACE.b)
+            && banner_px(&img) == (BG.r, BG.g, BG.b)
+    });
+
+    let frame = Frame::new(800, 1280);
+    let l = home::layout(&frame, 0, 2); // Browser + Settings tiles (terminal is not installed)
+    let c = l.buttons[0].center();
+    probe.click(c.0 as i16, c.1 as i16);
+    wait_for("rotation locked in the core", || {
+        core_status(&root).is_some_and(|s| s["rotation_locked"] == true)
+    });
+
+    let right = (l.slider.inset(SP_4).right() - 1) as i16;
+    probe.click(right, l.slider.center().1 as i16);
+    wait_for("brightness 255 in the core", || {
+        core_status(&root).is_some_and(|s| s["brightness"] == 255)
+    });
+    // the status event flows back: the shell now shows 100%
+    wait_for("shell shows the new brightness", || {
+        // knob at the right end of the track: accent pixels near the right edge of the slider
+        let img = probe.image(win, 800, 1280);
+        let (sx, sy) = (
+            l.slider.inset(SP_4).right() as usize,
+            l.slider.center().1 as usize,
+        );
+        (sx - 20..sx + 2).any(|xx| px(&img, 800, xx, sy) == (ACCENT.r, ACCENT.g, ACCENT.b))
+    });
+
+    // the core goes away: the "System service not responding" banner appears
+    core_stop.store(true, Ordering::Relaxed);
+    core_thread.join().unwrap();
+    wait_for("offline banner", || {
+        banner_px(&probe.image(win, 800, 1280))
+            == (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
     });
 }

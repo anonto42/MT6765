@@ -23,6 +23,17 @@ pub const COMMAND_NAMES: &[&str] = &[
     "set_setting",
 ];
 
+/// Commands without arguments.
+const NO_ARG_COMMANDS: &[&str] = &[
+    "get_status",
+    "wifi_scan",
+    "wifi_list_saved",
+    "wifi_disconnect",
+    "home",
+    "restart_shell",
+    "screenshot",
+];
+
 /// Settings accepted by `set_setting` (section 9 of the plan).
 pub const ALLOWED_SETTINGS: &[&str] = &[
     "auto_rotate",
@@ -161,7 +172,10 @@ impl Command {
         }
         let mut obj = serde_json::Map::new();
         obj.insert("cmd".into(), Value::String(raw.cmd.clone()));
-        if !raw.args.is_null() {
+        // commands that take no arguments ignore a stray `args` (unknown fields are ignored)
+        if NO_ARG_COMMANDS.contains(&raw.cmd.as_str()) {
+            // nothing to insert
+        } else if !raw.args.is_null() {
             obj.insert("args".into(), raw.args.clone());
         } else if matches!(raw.cmd.as_str(), "set_brightness") {
             obj.insert("args".into(), Value::Object(Default::default()));

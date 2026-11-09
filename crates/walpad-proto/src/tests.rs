@@ -94,6 +94,33 @@ fn power_defaults_to_unconfirmed() {
 }
 
 #[test]
+fn commands_without_arguments_ignore_a_stray_args_object() {
+    for cmd in [
+        "get_status",
+        "wifi_scan",
+        "wifi_list_saved",
+        "wifi_disconnect",
+        "home",
+        "restart_shell",
+        "screenshot",
+    ] {
+        for args in [
+            r#""args":{}"#,
+            r#""args":{"client":"x","proto":1}"#,
+            r#""args":null"#,
+        ] {
+            let line = format!(r#"{{"v":1,"id":1,"cmd":"{cmd}",{args}}}"#);
+            assert!(req(&line).is_ok(), "{cmd} with {args}");
+        }
+    }
+    // commands that DO take arguments still validate them
+    assert_eq!(
+        code(req(r#"{"v":1,"id":1,"cmd":"screen","args":{}}"#)),
+        ErrorCode::InvalidArgs
+    );
+}
+
+#[test]
 fn unknown_fields_ignored() {
     assert!(req(r#"{"v":1,"id":1,"cmd":"get_status","extra":5}"#).is_ok());
 }

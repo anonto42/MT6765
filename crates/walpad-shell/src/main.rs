@@ -16,6 +16,7 @@ fn main() {
     let opts = Options {
         root: Root::from_env(),
         x_socket,
+        core_socket: None,
         fonts_dir: None,
     };
     let mut shell = match Shell::new(opts) {

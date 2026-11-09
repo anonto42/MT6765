@@ -105,6 +105,34 @@ pub fn wait_readable(fd: &UnixStream, timeout_ms: Option<u64>) -> bool {
     }
 }
 
+/// Wait until any of `fds` is readable (or the timeout). Returns one flag per fd.
+pub fn wait_any(fds: &[&UnixStream], timeout_ms: Option<u64>) -> Vec<bool> {
+    let ms = timeout_ms.unwrap_or(60_000).min(i32::MAX as u64) as i64;
+    let t = Timespec {
+        tv_sec: ms / 1000,
+        tv_nsec: (ms % 1000) * 1_000_000,
+    };
+    loop {
+        let mut pfds: Vec<PollFd<'_>> = fds
+            .iter()
+            .map(|f| PollFd::new(*f, PollFlags::IN | PollFlags::HUP))
+            .collect();
+        match poll(&mut pfds, Some(&t)) {
+            Ok(_) => {
+                return pfds
+                    .iter()
+                    .map(|p| {
+                        p.revents()
+                            .intersects(PollFlags::IN | PollFlags::HUP | PollFlags::ERR)
+                    })
+                    .collect()
+            }
+            Err(rustix::io::Errno::INTR) => continue,
+            Err(_) => return vec![false; fds.len()],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +143,16 @@ mod tests {
         let t = Instant::now();
         assert!(connect(Path::new("/tmp/.X11-unix/X998")).is_err());
         assert!(t.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn wait_any_reports_which_socket_is_ready() {
+        use std::io::Write;
+        let (a, mut a2) = UnixStream::pair().unwrap();
+        let (b, _b2) = UnixStream::pair().unwrap();
+        assert_eq!(wait_any(&[&a, &b], Some(20)), vec![false, false]);
+        a2.write_all(b"x").unwrap();
+        assert_eq!(wait_any(&[&a, &b], Some(200)), vec![true, false]);
     }
 
     #[test]
