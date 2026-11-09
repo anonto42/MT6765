@@ -207,3 +207,101 @@ fn oversized_line_closes_connection_and_socket_mode_is_0600() {
         "connection closed without a reply"
     );
 }
+
+#[test]
+fn settings_launch_screenshot_power_and_restart_shell() {
+    let root = std::env::temp_dir().join(format!("walpad-ipc-{}-newcmds", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("usr/bin")).unwrap();
+    std::fs::create_dir_all(root.join("etc/walpad")).unwrap();
+    fake::populate(&root).unwrap();
+    std::fs::write(root.join("usr/bin/sleep"), "").unwrap();
+    std::fs::write(
+        root.join("etc/walpad/apps.json"),
+        r#"[{"id":"sleeper","name":"S","exec":["sleep","30"],"single_instance":true},{"id":"ghost","name":"G","exec":["nope-not-here"]}]"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join("run/walpad/xfb")).unwrap();
+    std::fs::write(root.join("run/walpad/xfb/Xvfb_screen0"), "XWD").unwrap();
+    let mut d = Daemon::new(Root::new(&root)).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let s2 = stop.clone();
+    let handle = std::thread::spawn(move || d.run(&s2));
+    let h = Harness {
+        stop,
+        handle: Some(handle),
+        root: root.clone(),
+    };
+
+    let mut c = Conn::new(&h);
+    c.hello();
+    // set_setting rewrites devd.json atomically and keeps other keys
+    std::fs::write(root.join("etc/walpad/devd.json"), r#"{"tilt_min":1234}"#).unwrap();
+    let r = c.call(2, "set_setting", json!({"key":"dim_after_s","value":45}));
+    assert_eq!(r["ok"], true, "{r}");
+    let j: Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("etc/walpad/devd.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        (j["dim_after_s"].clone(), j["tilt_min"].clone()),
+        (json!(45), json!(1234))
+    );
+    assert_eq!(
+        c.call(3, "set_setting", json!({"key":"clock_24h","value":true}))["ok"],
+        true
+    );
+    assert!(root.join("etc/walpad/shell.json").exists());
+    assert_eq!(
+        c.call(4, "set_setting", json!({"key":"nope","value":1}))["error"]["code"],
+        "invalid_args"
+    );
+
+    // apps: only installed ones are listed; launch by id only
+    let st = c.call(5, "get_status", Value::Null);
+    assert_eq!(
+        st["data"]["apps"],
+        json!([{"app":"sleeper","running":false}])
+    );
+    assert_eq!(
+        c.call(6, "launch", json!({"app":"ghost"}))["error"]["code"],
+        "refused"
+    );
+    assert_eq!(
+        c.call(7, "launch", json!({"app":"rm -rf /"}))["error"]["code"],
+        "invalid_args"
+    );
+    assert_eq!(
+        c.call(8, "launch", json!({"app":"zzz"}))["error"]["code"],
+        "invalid_args"
+    );
+    assert_eq!(
+        c.call(9, "launch", json!({"app":"sleeper"}))["data"]["result"],
+        "launched"
+    );
+    assert_eq!(
+        c.call(10, "launch", json!({"app":"sleeper"}))["data"]["result"],
+        "already_running"
+    );
+    assert_eq!(
+        c.call(11, "get_status", Value::Null)["data"]["apps"][0]["running"],
+        true
+    );
+
+    // screenshot copies the XWD, power needs confirmation, restart_shell finds nothing in a test root
+    let r = c.call(12, "screenshot", Value::Null);
+    let path = r["data"]["path"].as_str().unwrap().to_string();
+    assert!(root.join(path.trim_start_matches('/')).exists());
+    assert_eq!(
+        c.call(13, "power", json!({"action":"reboot"}))["error"]["code"],
+        "refused"
+    );
+    assert_eq!(
+        c.call(14, "power", json!({"action":"reboot","confirmed":true}))["ok"],
+        true
+    );
+    assert_eq!(
+        c.call(15, "restart_shell", Value::Null)["data"]["terminated"],
+        0
+    );
+    assert_eq!(c.call(16, "home", Value::Null)["data"]["focused"], false);
+}

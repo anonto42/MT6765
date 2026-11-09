@@ -18,6 +18,10 @@ esac
 [ "$val" = rust ] || { echo python; exit 0; }
 if [ -e "$RUN/$flag" ]; then echo "walpad-runtime: $KEY=rust ignored (fell back this boot)" >&2; echo python; exit 0; fi
 if ! command -v $bin >/dev/null 2>&1; then echo "walpad-runtime: $KEY=rust ignored ($bin not installed)" >&2; echo python; exit 0; fi
+# Gesture/wake handling needs the Rust device subsystem (wake-swallow), so INPUT=rust implies DEVICE=rust.
+if [ "$KEY" = WALPAD_INPUT ] && [ "$(sh "$0" WALPAD_DEVICE 2>/dev/null)" != rust ]; then
+  echo "walpad-runtime: WALPAD_INPUT=rust ignored (needs WALPAD_DEVICE=rust)" >&2; echo python; exit 0
+fi
 case " $($bin --capabilities 2>/dev/null) " in
   *" $cap "*) echo rust ;;
   *) echo "walpad-runtime: $KEY=rust ignored ($bin lacks capability '$cap')" >&2; echo python ;;

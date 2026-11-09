@@ -18,6 +18,7 @@ pub fn read_backlight(root: &Root) -> Option<u32> {
 pub fn write_backlight(root: &Root, value: u32) -> std::io::Result<()> {
     let mut f = std::fs::OpenOptions::new()
         .write(true)
+        .truncate(true)
         .open(root.p(BACKLIGHT))?;
     f.write_all(value.min(255).to_string().as_bytes())
 }
@@ -44,6 +45,12 @@ mod tests {
         assert_eq!(read_backlight(&r), Some(120));
         write_backlight(&r, 999).unwrap();
         assert_eq!(read_backlight(&r), Some(255));
+        write_backlight(&r, 0).unwrap();
+        assert_eq!(
+            read_backlight(&r),
+            Some(0),
+            "shorter value must not leave trailing digits"
+        );
     }
     #[test]
     fn uptime() {

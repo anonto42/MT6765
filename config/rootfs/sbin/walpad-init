@@ -55,6 +55,7 @@ RT_DEVICE=$(walpad-runtime WALPAD_DEVICE); RT_INPUT=$(walpad-runtime WALPAD_INPU
 if [ "$RT_DEVICE" = rust ] || [ "$RT_INPUT" = rust ] || [ "$RT_SHADOW" = 1 ]; then
   FB=""; [ "$RT_DEVICE" = rust ] && FB="$FB devd"; [ "$RT_INPUT" = rust ] && FB="$FB keys touchd"
   CORE_ARGS=""; [ "$RT_SHADOW" = 1 ] && CORE_ARGS="--shadow"
+  [ "$RT_DEVICE" = rust ] && CORE_ARGS="$CORE_ARGS --device"; [ "$RT_INPUT" = rust ] && CORE_ARGS="$CORE_ARGS --input"
   klog "starting walpad-core ($CORE_ARGS) device=$RT_DEVICE input=$RT_INPUT"
   ( walpad-supervise core --on-fallback "walpad-python-daemons$FB" -- walpad-core $CORE_ARGS >> /var/log/walpad-core.log 2>&1 ) &
 fi

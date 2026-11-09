@@ -28,6 +28,11 @@ eq "input not requested stays python" "$(rt WALPAD_INPUT)" python
 : > "$T/run/fallback-core"
 eq "fallback flag forces python" "$(rt WALPAD_DEVICE)" python
 rm "$T/run/fallback-core"
+printf 'WALPAD_INPUT=rust\n' > "$T/runtime.conf"
+eq "input=rust needs device=rust" "$(rt WALPAD_INPUT)" python
+printf 'WALPAD_DEVICE=rust\nWALPAD_INPUT=rust\n' > "$T/runtime.conf"
+fakebin walpad-core "ipc shadow device input"
+eq "input=rust with device=rust" "$(rt WALPAD_INPUT)" rust
 printf 'WALPAD_SHELL=rust\n' > "$T/runtime.conf"
 fakebin walpad-shell "shell"
 eq "shell rust when capable" "$(rt WALPAD_SHELL)" rust

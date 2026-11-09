@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicBool;
 use walpad_core::{daemon::Daemon, fake};
 use walpad_hw::Root;
 
-const USAGE: &str = "walpad-core [--version] [--fake] [--shadow] [--root DIR]\n  WALPAD_ROOT sets the path prefix (default /); --fake fills it with sample hardware values.";
+const USAGE: &str = "walpad-core [--version] [--capabilities] [--fake] [--shadow] [--device] [--input] [--root DIR]\n  WALPAD_ROOT sets the path prefix (default /); --fake fills it with sample hardware values.";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -11,9 +11,8 @@ fn main() {
         return;
     }
     if args.iter().any(|a| a == "--capabilities") {
-        // Subsystems this build can run live. `device` and `input` are added by M3.2/M3.3;
-        // until then walpad-runtime keeps Python for them.
-        println!("ipc shadow");
+        // Subsystems this build can run live (walpad-runtime only honours `rust` for these).
+        println!("ipc shadow device input");
         return;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
@@ -48,6 +47,14 @@ fn main() {
     if args.iter().any(|a| a == "--shadow") || conf.lines().any(|l| l.trim() == "WALPAD_SHADOW=1") {
         d.enable_shadow();
         eprintln!("walpad-core: SHADOW mode: logging WOULD lines, no hardware writes by policy");
+    }
+    let (dev, inp) = (
+        args.iter().any(|a| a == "--device"),
+        args.iter().any(|a| a == "--input"),
+    );
+    if dev || inp {
+        d.enable_live(dev, inp);
+        eprintln!("walpad-core: LIVE subsystems: device={dev} input={inp}");
     }
     eprintln!("walpad-core: listening on {}", d.socket_path().display());
     let stop = AtomicBool::new(false);

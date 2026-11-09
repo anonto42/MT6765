@@ -1,9 +1,12 @@
-//! The core poll loop: IPC socket, devd.cmd FIFO and timers in one thread, no async runtime.
-//! M1.4 scope: serve status/commands and keep status.json; autonomous hardware policy
-//! (input-driven timeouts, battery shutdown, X bridge) arrives in M3 behind runtime.conf.
-use crate::logic::{battery, rotation, screen_timeout as st};
+//! The core poll loop: IPC socket, devd.cmd FIFO, input devices and timers in one thread, no async
+//! runtime. The `Brain` decides; this module executes (sysfs writes, X requests, spawns).
+use crate::apps::Apps;
+use crate::brain::{Brain, Effect};
+use crate::inputs::Inputs;
+use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
+use crate::xbridge::{XBridge, XError};
 use rustix::event::{poll, PollFd, PollFlags, Timespec};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
@@ -11,14 +14,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use walpad_hw::{battery::read_battery, gsensor::read_gsensor, input, sysfs, Root};
 use walpad_proto::{
-    encode_line, parse_devd_line, parse_request, AppState, Command, ErrorCode, Event, Hardware,
-    LegacyStatus, LineDecoder, Response, Status, Topic, WifiRadio, WifiStatus, PROTO_VERSION,
+    encode_line, parse_devd_line, parse_request, Command, ErrorCode, Event, Hardware, KeyboardMode,
+    LegacyStatus, LineDecoder, PowerAction, Response, Status, Topic, WifiRadio, WifiStatus,
+    PROTO_VERSION,
 };
 
 const STATUS_EVERY: Duration = Duration::from_secs(2);
 const BATTERY_EVERY: Duration = Duration::from_secs(10);
 const CLIENT_STALL: Duration = Duration::from_secs(5);
+const X_RETRY: Duration = Duration::from_secs(2);
+const X_PING_EVERY: Duration = Duration::from_secs(5);
 const MAX_OUT: usize = 256 * 1024;
+const KEYBOARD_DOCK_DELAY_MS: u64 = 1500;
+
+type CmdResult = Result<Value, (ErrorCode, String)>;
 
 struct Client {
     stream: UnixStream,
@@ -64,13 +73,17 @@ impl Client {
     }
 }
 
+/// Which subsystems this core runs live (flags come from walpad-runtime via the init script).
+struct LiveState {
+    inputs: Inputs,
+    device: bool,
+    input: bool,
+}
+
 pub struct Daemon {
     root: Root,
     started: Instant,
-    screen: st::Screen,
-    rotation: rotation::Rotation,
-    guard: battery::Guard,
-    batt_cfg: battery::Cfg,
+    brain: Brain,
     listener: UnixListener,
     fifo: Option<std::fs::File>,
     fifo_buf: Vec<u8>,
@@ -80,13 +93,28 @@ pub struct Daemon {
     next_battery: Instant,
     sock_path: PathBuf,
     shadow: Option<crate::shadow_live::Live>,
+    live: Option<LiveState>,
+    apps: Apps,
+    xb: Option<XBridge>,
+    x_retry: Instant,
+    x_ping: Instant,
+    dock_at: Option<u64>,
 }
 
-fn load_json<T: serde::de::DeserializeOwned + Default>(root: &Root, path: &str) -> T {
-    std::fs::read_to_string(root.p(path))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+fn read_file(root: &Root, p: &str) -> String {
+    std::fs::read_to_string(root.p(p)).unwrap_or_default()
+}
+
+fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
+}
+
+fn internal<E: std::fmt::Display>(e: E) -> (ErrorCode, String) {
+    (ErrorCode::Internal, e.to_string())
 }
 
 impl Daemon {
@@ -104,15 +132,16 @@ impl Daemon {
             .map_err(|e| eprintln!("walpad-core: devd.cmd unavailable: {e}"))
             .ok();
         let now = Instant::now();
-        let screen_cfg: st::Cfg = load_json(&root, "/etc/walpad/devd.json");
-        let rot_cfg: rotation::Cfg = load_json(&root, "/etc/walpad/devd.json");
-        let batt_cfg: battery::Cfg = load_json(&root, "/etc/walpad/devd.json");
-        let backlight = sysfs::read_backlight(&root);
+        let brain = Brain::new(
+            &read_file(&root, "/etc/walpad/devd.json"),
+            &read_file(&root, "/etc/walpad/keys.json"),
+            &read_file(&root, "/etc/walpad/touch.json"),
+            sysfs::read_backlight(&root),
+            0,
+        );
+        let apps = Apps::load(&root);
         let mut d = Daemon {
-            screen: st::Screen::new(screen_cfg, backlight, 0),
-            rotation: rotation::Rotation::new(rot_cfg),
-            guard: battery::Guard::default(),
-            batt_cfg,
+            brain,
             listener,
             fifo,
             fifo_buf: Vec::new(),
@@ -123,44 +152,344 @@ impl Daemon {
             started: now,
             sock_path,
             shadow: None,
+            live: None,
+            apps,
+            xb: None,
+            x_retry: now,
+            x_ping: now,
+            dock_at: None,
             root,
         };
-        let init = d.rotation.init();
-        d.run_rotation(init);
+        // orientation is 0 at startup and the file is always written (struts need X: later)
+        let init = d.brain.rotation.init();
+        let mut fx = Vec::new();
+        Brain::rotation_effects(init, &mut fx);
+        d.apply(fx, true);
         Ok(d)
     }
 
     pub fn socket_path(&self) -> &std::path::Path {
         &self.sock_path
     }
-
     fn now_ms(&self) -> u64 {
         self.started.elapsed().as_millis() as u64
     }
-
-    // ---- executors
-    fn run_screen(&mut self, acts: Vec<st::Act>) {
-        for a in acts {
-            let st::Act::Backlight(v) = a;
-            if let Err(e) = sysfs::write_backlight(&self.root, v) {
-                eprintln!("walpad-core: backlight write failed: {e}");
-            }
-        }
+    fn real_root(&self) -> bool {
+        self.root.base() == std::path::Path::new("/")
     }
-    fn run_rotation(&mut self, acts: Vec<rotation::Act>) {
-        for a in acts {
-            if let rotation::Act::WriteOrientation(o) = a {
-                if let Err(e) =
-                    std::fs::write(self.root.p("/run/walpad/orientation"), o.to_string())
-                {
-                    eprintln!("walpad-core: orientation write failed: {e}");
+
+    /// Shadow mode: read the real inputs, log `WOULD ...`, write nothing by policy (M2.2).
+    pub fn enable_shadow(&mut self) {
+        self.shadow = Some(crate::shadow_live::Live::new(&self.root));
+    }
+
+    /// Live mode: run the device and/or input subsystem from the real inputs (M3.2/M3.3).
+    pub fn enable_live(&mut self, device: bool, input: bool) {
+        if !(device || input) {
+            return;
+        }
+        self.live = Some(LiveState {
+            inputs: Inputs::new(&self.root, "walpad-core"),
+            device,
+            input,
+        });
+        let init = self.brain.rotation.init();
+        let mut fx = Vec::new();
+        Brain::rotation_effects(init, &mut fx);
+        self.apply(fx, true);
+    }
+
+    // ---------------------------------------------------------------- X bridge
+    fn x_connect(&mut self) {
+        if self.xb.is_some() || Instant::now() < self.x_retry {
+            return;
+        }
+        match XBridge::connect(&self.root.p("/tmp/.X11-unix/X0")) {
+            Ok(mut b) => {
+                // X (re)started: restore struts and keyboard placement for the current orientation
+                let o = self.brain.orientation();
+                if let Err(e) = b.set_struts(o).and_then(|_| b.dock_keyboard(o).map(|_| ())) {
+                    eprintln!("walpad-core: X resync failed: {}", e.0);
+                    self.x_retry = Instant::now() + X_RETRY;
+                } else {
+                    eprintln!("walpad-core: connected to X");
+                    self.xb = Some(b);
                 }
             }
-            // SetStruts / DockKeyboard need the X bridge (M3.2).
+            Err(_) => self.x_retry = Instant::now() + X_RETRY,
         }
     }
 
-    // ---- model
+    /// Run an X operation; on failure drop the bridge (it reconnects with backoff).
+    fn x_try<T>(&mut self, f: impl FnOnce(&mut XBridge) -> Result<T, XError>) -> Option<T> {
+        self.x_connect();
+        let b = self.xb.as_mut()?;
+        match f(b) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                eprintln!("walpad-core: X error: {}", e.0);
+                if let Some(mut b) = self.xb.take() {
+                    b.release_if_down();
+                }
+                self.x_retry = Instant::now() + X_RETRY;
+                None
+            }
+        }
+    }
+
+    fn x_maintain(&mut self) {
+        if self.xb.is_none() {
+            self.x_connect();
+        } else if Instant::now() >= self.x_ping {
+            self.x_ping = Instant::now() + X_PING_EVERY;
+            self.x_try(|b| b.ping());
+        }
+    }
+
+    // ---------------------------------------------------------------- executor
+    fn spawn_simple(&self, exe: &str, args: &[&str]) {
+        let r = std::process::Command::new(exe)
+            .args(args)
+            .env("DISPLAY", ":0")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        if let Err(e) = r {
+            eprintln!("walpad-core: cannot start {exe}: {e}");
+        }
+    }
+
+    fn halt(&self, cmd: &str) {
+        if !self.real_root() {
+            eprintln!("walpad-core: (test root) would run `{cmd} -f`");
+            return;
+        }
+        rustix::fs::sync();
+        self.spawn_simple(cmd, &["-f"]);
+    }
+
+    fn pids_by_comm(&self, prefix: &str) -> Vec<i32> {
+        let Ok(rd) = std::fs::read_dir(self.root.p("/proc")) else {
+            return Vec::new();
+        };
+        rd.flatten()
+            .filter_map(|e| {
+                let pid: i32 = e.file_name().to_str()?.parse().ok()?;
+                let comm = std::fs::read_to_string(e.path().join("comm")).ok()?;
+                comm.trim().starts_with(prefix).then_some(pid)
+            })
+            .collect()
+    }
+
+    fn terminate(&self, prefix: &str) -> usize {
+        let mut n = 0;
+        for pid in self.pids_by_comm(prefix) {
+            if let Some(p) = rustix::process::Pid::from_raw(pid) {
+                if rustix::process::kill_process(p, rustix::process::Signal::TERM).is_ok() {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    fn keyboard(&mut self, mode: KeyboardMode) -> &'static str {
+        let running = !self.pids_by_comm("matchbox-keyb").is_empty();
+        let show = match mode {
+            KeyboardMode::Show => true,
+            KeyboardMode::Hide => false,
+            KeyboardMode::Toggle => !running,
+        };
+        if show && !running {
+            self.spawn_simple("matchbox-keyboard", &[]);
+            self.dock_at = Some(self.now_ms() + KEYBOARD_DOCK_DELAY_MS);
+            "shown"
+        } else if !show && running {
+            self.terminate("matchbox-keyb");
+            "hidden"
+        } else if show {
+            "shown"
+        } else {
+            "hidden"
+        }
+    }
+
+    fn launch(&mut self, id: &str) -> Result<&'static str, (ErrorCode, String)> {
+        let Some(def) = self.apps.def(id).cloned() else {
+            return Err((ErrorCode::InvalidArgs, format!("unknown app {id:?}")));
+        };
+        if !self.apps.installed(&def, &self.root) {
+            return Err((ErrorCode::Refused, format!("{id} is not installed")));
+        }
+        if def.single_instance {
+            if !def.wm_class.is_empty()
+                && self.x_try(|b| b.focus_class(&def.wm_class)) == Some(true)
+            {
+                return Ok("focused");
+            }
+            if self.apps.running(id) {
+                return Ok("already_running");
+            }
+        }
+        self.apps
+            .spawn(id, &self.root)
+            .map_err(|e| (ErrorCode::Internal, format!("{e:?}")))?;
+        Ok("launched")
+    }
+
+    fn screenshot(&self) -> CmdResult {
+        let src = self.root.p("/run/walpad/xfb/Xvfb_screen0");
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let virt = format!("/root/screenshots/shot-{t}.xwd");
+        let dst = self.root.p(&virt);
+        if let Some(d) = dst.parent() {
+            std::fs::create_dir_all(d).map_err(internal)?;
+        }
+        std::fs::copy(src, &dst).map_err(|e| (ErrorCode::Internal, format!("screenshot: {e}")))?;
+        Ok(json!({"path": virt}))
+    }
+
+    fn reload_cfg(&mut self) {
+        self.brain.reload(
+            &read_file(&self.root, "/etc/walpad/devd.json"),
+            &read_file(&self.root, "/etc/walpad/keys.json"),
+            &read_file(&self.root, "/etc/walpad/touch.json"),
+        );
+    }
+
+    fn set_setting(&mut self, key: &str, value: Value) -> CmdResult {
+        let virt = if key == "clock_24h" {
+            "/etc/walpad/shell.json"
+        } else {
+            "/etc/walpad/devd.json"
+        };
+        let path = self.root.p(virt);
+        let mut obj: serde_json::Map<String, Value> = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        obj.insert(key.to_string(), value.clone());
+        let bytes = serde_json::to_vec_pretty(&obj).map_err(internal)?;
+        write_atomic(&path, &bytes)
+            .map_err(|e| (ErrorCode::Internal, format!("cannot write {virt}: {e}")))?;
+        self.reload_cfg();
+        Ok(json!({"key": key, "value": value}))
+    }
+
+    fn run_action(&mut self, a: Action) {
+        match a {
+            Action::None => {}
+            Action::Key(spec) => {
+                self.x_try(|b| b.send_key(&spec));
+            }
+            Action::Ctl(line) => match parse_devd_line(&line) {
+                Ok(Some(cmd)) => {
+                    let device_live = self.live.as_ref().is_some_and(|l| l.device);
+                    if device_live {
+                        if let Err((_, m)) = self.execute(cmd) {
+                            eprintln!("walpad-core: ctl:{line}: {m}");
+                        }
+                    } else if let Err(e) = std::fs::OpenOptions::new()
+                        .write(true)
+                        .open(self.root.p("/run/walpad/devd.cmd"))
+                        .and_then(|mut f| writeln!(f, "{line}"))
+                    {
+                        eprintln!("walpad-core: devd.cmd not reachable: {e}");
+                    }
+                }
+                Ok(None) => self.reload_cfg(),
+                Err(e) => eprintln!("walpad-core: bad ctl action {line:?}: {e}"),
+            },
+            Action::Launch(id) => match self.launch(&id) {
+                Ok(how) => eprintln!("walpad-core: launch {id}: {how}"),
+                Err((_, m)) => eprintln!("walpad-core: launch {id}: {m}"),
+            },
+            Action::Run(c) => eprintln!("walpad-core: run:{c} rejected (use launch:<app-id>)"),
+            Action::Home => {
+                self.x_try(|b| b.focus_title("WalPad Home"));
+            }
+            Action::Keyboard => {
+                self.keyboard(KeyboardMode::Toggle);
+            }
+            Action::PowerMenu => self.spawn_simple("walpad-powermenu.py", &[]),
+            Action::Screenshot => {
+                if let Err((_, m)) = self.screenshot() {
+                    eprintln!("walpad-core: {m}");
+                }
+            }
+            Action::Volume(v) => {
+                let arg = if v >= 0 {
+                    format!("{v}%+")
+                } else {
+                    format!("{}%-", -v)
+                };
+                self.spawn_simple("amixer", &["-q", "sset", "Master", &arg]);
+            }
+            Action::Unknown(s) => eprintln!("walpad-core: unknown key action {s:?}"),
+        }
+    }
+
+    /// Execute effects. `forced` = explicit client request (always applied); otherwise only the
+    /// subsystems this core runs live.
+    fn apply(&mut self, effects: Vec<Effect>, forced: bool) {
+        let (dev, inp) = match &self.live {
+            Some(l) => (l.device, l.input),
+            None => (false, false),
+        };
+        for e in effects {
+            if !forced && ((e.is_device() && !dev) || (!e.is_device() && !inp)) {
+                continue;
+            }
+            match e {
+                Effect::Backlight(v) => {
+                    if let Err(err) = sysfs::write_backlight(&self.root, v) {
+                        eprintln!("walpad-core: backlight write failed: {err}");
+                    }
+                }
+                Effect::Orientation(o) => {
+                    if let Err(err) =
+                        std::fs::write(self.root.p("/run/walpad/orientation"), o.to_string())
+                    {
+                        eprintln!("walpad-core: orientation write failed: {err}");
+                    }
+                }
+                Effect::Struts(o) => {
+                    self.x_try(|b| b.set_struts(o));
+                }
+                Effect::KeyboardDock(o) => {
+                    self.x_try(|b| b.dock_keyboard(o).map(|_| ()));
+                }
+                Effect::PowerMenuOpen => self.spawn_simple("walpad-powermenu.py", &[]),
+                Effect::PowerMenuActivate => {
+                    self.x_try(|b| b.send_key("Return"));
+                }
+                Effect::Cover(c) => {
+                    eprintln!("walpad-core: cover {}", if c { "closed" } else { "open" })
+                }
+                Effect::LowBattery(l) => eprintln!("walpad-core: low battery flag -> {l}"),
+                Effect::CriticalPoweroff(mv) => {
+                    eprintln!("walpad-core: CRITICAL battery {mv} mV: safe power-off");
+                    self.halt("poweroff");
+                }
+                Effect::Pointer(tm::Act::Move(x, y)) => {
+                    self.x_try(|b| b.pointer_move(x, y));
+                }
+                Effect::Pointer(tm::Act::Press) => {
+                    self.x_try(|b| b.button(true));
+                }
+                Effect::Pointer(tm::Act::Release) => {
+                    self.x_try(|b| b.button(false));
+                }
+                Effect::Action(a) => self.run_action(a),
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- model
     pub fn status(&self) -> Status {
         let raw = read_battery(&self.root);
         let wifi =
@@ -168,14 +497,14 @@ impl Daemon {
         let devs = input::discover(&self.root);
         let ok = |b: bool| if b { "ok" } else { "unavailable" }.to_string();
         Status {
-            battery: battery::model(&raw, self.guard.low()),
-            screen: self.screen.state(),
-            brightness: self.screen.brightness(),
-            orientation: self.rotation.orientation(),
-            rotation_locked: self.rotation.locked(),
-            lid_closed: self.screen.lid_closed(),
+            battery: battery::model(&raw, self.brain.guard.low()),
+            screen: self.brain.screen.state(),
+            brightness: self.brain.screen.brightness(),
+            orientation: self.brain.rotation.orientation(),
+            rotation_locked: self.brain.rotation.locked(),
+            lid_closed: self.brain.screen.lid_closed(),
             wifi,
-            apps: Vec::<AppState>::new(),
+            apps: self.apps.status(&self.root),
             hardware: Hardware {
                 touch: ok(input::find(&devs, input::is_touch).is_some()),
                 gsensor: ok(read_gsensor(&self.root).is_some()),
@@ -196,23 +525,24 @@ impl Daemon {
         let up = sysfs::uptime_s(&self.root).unwrap_or(0.0);
         let legacy = LegacyStatus::from_status(s, time, up, &wifi_raw);
         let dst = self.root.p("/run/walpad/status.json");
-        let tmp = self.root.p("/run/walpad/status.json.tmp");
         if let Ok(js) = serde_json::to_vec(&legacy) {
-            if std::fs::write(&tmp, js).is_ok() {
-                let _ = std::fs::rename(&tmp, &dst);
-            }
+            let _ = write_atomic(&dst, &js);
         }
     }
 
-    // ---- commands
-    pub fn execute(&mut self, cmd: Command) -> Result<serde_json::Value, (ErrorCode, String)> {
+    // ---------------------------------------------------------------- commands
+    pub fn execute(&mut self, cmd: Command) -> CmdResult {
         let now = self.now_ms();
         match cmd {
             Command::GetStatus => Ok(serde_json::to_value(self.status()).unwrap_or_default()),
             Command::Screen { mode } => {
-                let a = self.screen.screen(mode, now);
-                self.run_screen(a);
-                Ok(json!({"screen": self.screen.state(), "brightness": self.screen.brightness()}))
+                let a = self.brain.screen.screen(mode, now);
+                let mut fx = Vec::new();
+                Brain::screen_effects(a, &mut fx);
+                self.apply(fx, true);
+                Ok(
+                    json!({"screen": self.brain.screen.state(), "brightness": self.brain.screen.brightness()}),
+                )
             }
             Command::SetBrightness(args) => {
                 let req = match (args.value, args.delta) {
@@ -220,20 +550,42 @@ impl Daemon {
                     (_, Some(d)) => st::Brightness::Delta(d),
                     _ => return Err((ErrorCode::InvalidArgs, "value or delta required".into())),
                 };
-                let a = self.screen.brightness_cmd(req);
-                self.run_screen(a);
-                Ok(json!({"brightness": self.screen.brightness()}))
+                let a = self.brain.screen.brightness_cmd(req);
+                let mut fx = Vec::new();
+                Brain::screen_effects(a, &mut fx);
+                self.apply(fx, true);
+                Ok(json!({"brightness": self.brain.screen.brightness()}))
             }
             Command::Rotate { mode } => {
-                let a = self.rotation.command(mode);
-                self.run_rotation(a);
+                let a = self.brain.rotation.command(mode);
+                let mut fx = Vec::new();
+                Brain::rotation_effects(a, &mut fx);
+                self.apply(fx, true);
                 Ok(
-                    json!({"orientation": self.rotation.orientation(), "rotation_locked": self.rotation.locked()}),
+                    json!({"orientation": self.brain.rotation.orientation(), "rotation_locked": self.brain.rotation.locked()}),
                 )
             }
+            Command::Keyboard { mode } => Ok(json!({"keyboard": self.keyboard(mode)})),
+            Command::Home => {
+                let ok = self
+                    .x_try(|b| b.focus_title("WalPad Home"))
+                    .unwrap_or(false);
+                Ok(json!({"focused": ok}))
+            }
+            Command::Launch { app } => self.launch(&app).map(|how| json!({"result": how})),
+            Command::RestartShell => Ok(json!({"terminated": self.terminate("walpad-shell")})),
+            Command::Screenshot => self.screenshot(),
+            Command::SetSetting { key, value } => self.set_setting(&key, value),
             Command::Power {
                 confirmed: false, ..
             } => Err((ErrorCode::Refused, "power requires confirmed: true".into())),
+            Command::Power { action, .. } => {
+                self.halt(match action {
+                    PowerAction::Poweroff => "poweroff",
+                    PowerAction::Reboot => "reboot",
+                });
+                Ok(json!({"action": action}))
+            }
             Command::Hello { .. } | Command::Subscribe { .. } => Ok(json!({})),
             other => Err((
                 ErrorCode::Internal,
@@ -308,6 +660,7 @@ impl Daemon {
                         eprintln!("walpad-core: devd.cmd {line:?}: {m}");
                     }
                 }
+                Ok(None) if line == "reload" => self.reload_cfg(),
                 Ok(None) => {}
                 Err(e) => eprintln!("walpad-core: devd.cmd {line:?}: {e}"),
             }
@@ -328,6 +681,33 @@ impl Daemon {
             }
             self.last_pushed = Some(s);
         }
+    }
+
+    /// Feed real input and timers to the Brain and execute what it decides (live mode).
+    fn pump_live(&mut self) {
+        let now = self.now_ms();
+        self.brain.menu_open = self.root.p("/run/walpad/powermenu-open").exists();
+        let evs = match self.live.as_mut() {
+            Some(l) => l.inputs.poll(&self.root),
+            None => return,
+        };
+        let mut fx = Vec::new();
+        for (role, ev) in evs {
+            fx.extend(self.brain.on_event(role, &ev, now));
+        }
+        let root = self.root.clone();
+        let mut g = || read_gsensor(&root);
+        let mut b = || read_battery(&root);
+        fx.extend(self.brain.tick(now, &mut g, &mut b));
+        self.apply(fx, false);
+        if let Some(t) = self.dock_at {
+            if now >= t {
+                self.dock_at = None;
+                let o = self.brain.orientation();
+                self.x_try(|b| b.dock_keyboard(o).map(|_| ()));
+            }
+        }
+        self.x_maintain();
     }
 
     /// One iteration: wait for I/O (bounded), then service everything that is ready.
@@ -436,18 +816,18 @@ impl Daemon {
                     .is_none_or(|t| now.duration_since(t) < CLIENT_STALL)
         });
 
+        if !self.apps.reap().is_empty() {
+            did = true;
+        }
         let now = Instant::now();
-        if now >= self.next_battery {
+        // outside live device mode the battery guard only logs (the Python daemon owns shutdown)
+        if self.live.as_ref().is_none_or(|l| !l.device) && now >= self.next_battery {
             self.next_battery = now + BATTERY_EVERY;
             let raw = read_battery(&self.root);
-            for a in self.guard.step(&raw, &self.batt_cfg) {
+            for a in self.brain.guard.step(&raw, &self.brain.batt_cfg) {
                 match a {
-                    battery::Act::CriticalPoweroff { mv } => eprintln!(
-                        "walpad-core: CRITICAL battery {mv} mV (shutdown not wired until M3.2)"
-                    ),
-                    battery::Act::LowChanged(l) => {
-                        eprintln!("walpad-core: low battery flag -> {l}")
-                    }
+                    battery::Act::CriticalPoweroff { mv } => eprintln!("walpad-core: CRITICAL battery {mv} mV (not acting: device subsystem is not live)"),
+                    battery::Act::LowChanged(l) => eprintln!("walpad-core: low battery flag -> {l}"),
                 }
             }
             did = true;
@@ -462,19 +842,21 @@ impl Daemon {
         }
     }
 
-    /// Shadow mode: read the real inputs, log `WOULD ...`, write nothing (M2.2).
-    pub fn enable_shadow(&mut self) {
-        self.shadow = Some(crate::shadow_live::Live::new(&self.root));
-    }
-
     pub fn run(&mut self, stop: &AtomicBool) {
         while !stop.load(Ordering::Relaxed) {
             if let Some(sh) = self.shadow.as_mut() {
                 sh.pump(&self.root);
                 self.step(Duration::from_millis(40));
+            } else if self.live.is_some() {
+                self.pump_live();
+                let wait = self.brain.poll_interval_ms().clamp(10, 40);
+                self.step(Duration::from_millis(wait));
             } else {
                 self.step(Duration::from_millis(200));
             }
+        }
+        if let Some(mut b) = self.xb.take() {
+            b.release_if_down();
         }
         let _ = std::fs::remove_file(&self.sock_path);
     }
