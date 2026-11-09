@@ -120,3 +120,23 @@ or erase partitions without explicit user approval.
   as exposed until it is closed.
 - Prefer reversible changes and verify the tablet remains reachable after every
   service, Wi-Fi, or boot modification.
+
+## Rust migration rules (plan v2, 2026-11-09)
+
+Plan docs: `docs/rust/CONTRACTS.md` (frozen interfaces), `docs/rust/TASKS.md` (cards), `docs/rust/UI.md`.
+
+Hard rules
+1. One task card per session. Do not start the next card until its done-when checks pass and the report is written.
+2. Do not change anything in `docs/rust/CONTRACTS.md` unless the card says so explicitly.
+3. Never run `mtk.py`, `flash_os.sh`, `flash_partition.sh`, `fastboot_py.py` or write to a block device. Prepare the command; the owner runs it.
+4. Never edit `config/boot/*`, `tools/propshim`, `scripts/mtk_stack_up.sh` or the CONNSYS section of `walpad-wifi`.
+5. Python stays the default runtime until a Rust component passes its shadow-mode diff and device checklist. Switching is a one-line change in `/etc/walpad/runtime.conf`, never a deletion.
+6. No secret in logs, argv, fixtures or commits. Wi-Fi passphrases go through the wpa_supplicant control socket only; log calls that could carry one use `redact()`.
+7. No arbitrary command execution. Apps launch by ID from `/etc/walpad/apps.json`.
+8. Every hardware read returns Option/Result; missing sensors are "unavailable", never guessed. The battery estimate is allowed only tagged `source: "voltage_estimate"`.
+9. Every blocking operation (spawn, socket, sysfs write, X request) has a timeout.
+10. New dependencies need a one-line justification in the report and must be pure Rust (no -sys crates) unless the card allows it.
+
+Stop and ask the owner when: a done-when check needs the tablet ([DEVICE] cards: write the script, give the command, wait for output); a contract looks wrong; real code contradicts the plan (record it, code wins); a fix would touch the boot image, partitions or vendor files.
+
+Session protocol: read plan sections + the card + listed files; state the plan in <=5 lines; implement (<~600 line diffs); run `scripts/check.sh`; write `docs/rust/reports/<card-id>.md` (Status, Files changed, What works, Checks run, Device checks pending, Measurements, Deviations, Rollback, Next card) and update `docs/rust/TASKS.md`.

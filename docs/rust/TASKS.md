@@ -1,0 +1,31 @@
+# Rust migration task cards (status: todo | doing | done | blocked)
+
+Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet unchanged; M2 30 min real use, zero unexplained shadow divergences; M3 three cold boots with rust device+input, rollback tested; M4 new network joined via walpad-ctl, walpad-wifi untouched; M5 UI checklist passes; M6 touch-only browse/type/home/recover; M7 rootfs builds without python3.
+[DEVICE] = owner runs a script on the tablet.
+
+| Card | Task | Status |
+|---|---|---|
+| M0.1 [DEVICE] | scripts/device/smoke.sh (processes, walpad-ok, wifi-state, ping, dropbear :22, telnetd scope, status.json age) + owner manual checks | partial (script written; owner must run it) |
+| M0.2 | scripts/deploy.sh with --dry-run, --rollback (hash-verified, current/previous symlinks) | partial (host-tested; see reports/M0.2.md) |
+| M0.3 [DEVICE] | scripts/device/baseline.sh -> docs/rust/baseline.md | todo |
+| M0.4 [DEVICE] | scripts/device/record_fixtures.sh -> tests/fixtures/ | todo |
+| M1.1 | Workspace, toolchain pin, profiles, lints, cargo config, build_rust.sh, check.sh | done |
+| M1.2 | walpad-proto: envelope, commands, status model, NDJSON 64 KiB, Secret | done |
+| M1.3 | walpad-hw: WALPAD_ROOT, input discovery, evdev, gsensor, backlight, power supply, fakes | done |
+| M1.4 | walpad-core skeleton: poll loop, IPC, get_status, status.json writer, --fake | done |
+| M1.5 | walpad-ctl | done |
+| M1.6 | scripts/dev/host_session.sh | done |
+| M1.7 | build_rootfs.sh installs binaries, runtime.conf (python), apps.json | done |
+| M2.1 | Logic modules (battery, screen_timeout, power_key, rotation, touch_map, key_gestures) | done |
+| M2.2-M2.4 | Shadow mode, shadow_diff.sh, owner session | todo |
+| M3.1-M3.4 | runtime.conf handling + fallback, device subsystem, input subsystem, device check | todo |
+| M4.1-M4.4 | wpa ctrl client, scan, connect/forget/disconnect (PBKDF2 PSK), device test | todo |
+| M5.1-M5.9 | walpad-ui, components, X11 presenter, screens, power menu, system dock, UI checklist | todo |
+| M6.1-M6.4 | Process manager, installed-only apps, crash notice, gate | todo |
+| M7.1-M7.2 | Remove Python from rootfs, re-baseline | todo |
+| M8.1-M8.3 | fbmirror pause when screen off, damage-driven mirror (if measured), Firefox memory | todo |
+| M9.1-M9.5 | Log caps, safe mode, reproducible build, security review, failure matrix | todo |
+
+Owner decisions (defaults apply unless changed here): D1 pure-Rust renderer (tiny-skia+fontdue); D2 Files tile only when installed; D3 system dock yes; D4 port one-reading critical rule first, then 3 readings in own commit; D5 defer boot image changes; D6 keep keys.json gestures, add volume: only after audio verified.
+
+Full card text: see the v2 plan sections 5-11 (behaviour parity spec, IPC v1, toolchain, UI) -- to be copied into docs/rust/ as each card needs them.
