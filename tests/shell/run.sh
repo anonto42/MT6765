@@ -244,4 +244,29 @@ eq "ALPINE_REL defined exactly once" "$(grep -c '^ALPINE_REL=' scripts/build_roo
 case $(sed -n 's/^ALPINE_REL=\([0-9.]*\).*/\1/p' scripts/build_rootfs.sh) in 3.[0-9][0-9]) ok "ALPINE_REL is an explicit 3.NN release";; *) bad "ALPINE_REL is an explicit 3.NN release" "$(grep '^ALPINE_REL=' scripts/build_rootfs.sh)" "3.NN";; esac
 for m in packages.txt config-hashes.txt image.sha256; do grep -q "$m" scripts/build_rootfs.sh && ok "build writes $m" || bad "build writes $m" missing present; done
 
+# ===== scripts/image_set_wifi.sh: add a Wi-Fi network to a built image without rebuilding =====
+if command -v mke2fs >/dev/null 2>&1 && command -v debugfs >/dev/null 2>&1 && command -v e2fsck >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  IW=$PWD/scripts/image_set_wifi.sh
+  bash -n "$IW" && ok "syntax image_set_wifi.sh" || bad "syntax image_set_wifi.sh" error ok
+  WD=$T/wifi-img; mkdir -p "$WD/root/etc" "$WD/root/root"; echo x > "$WD/root/etc/hostname"
+  mke2fs -q -t ext4 -F -d "$WD/root" "$WD/rootfs.ext4" 8M >/dev/null 2>&1
+  # IEEE 802.11i vector: SSID "IEEE", passphrase "password"
+  OUT=$(printf '%s\n' 'password' | bash "$IW" "$WD/rootfs.ext4" IEEE 2>&1); eq "image_set_wifi succeeds" "$?" 0
+  case $OUT in OK:*) ok "reports OK";; *) bad "reports OK" "$OUT" "OK: ...";; esac
+  CONF=$(debugfs -R "cat /etc/wpa_supplicant/wpa_supplicant.conf" "$WD/rootfs.ext4" 2>/dev/null)
+  case $CONF in *f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e*) ok "derived key matches the IEEE test vector";; *) bad "derived key matches the IEEE test vector" "$CONF" "...f42c6f...";; esac
+  case $CONF in *password*) bad "passphrase is not stored" "found" "absent";; *) ok "passphrase is not stored";; esac
+  case $CONF in *"ssid=49454545"*) ok "SSID stored as hex";; *) bad "SSID stored as hex" "$CONF" "ssid=49454545";; esac
+  case $(debugfs -R "stat /etc/wpa_supplicant/wpa_supplicant.conf" "$WD/rootfs.ext4" 2>/dev/null) in *"Mode:  0600"*) ok "config mode 0600";; *) bad "config mode 0600" "?" 0600;; esac
+  e2fsck -fn "$WD/rootfs.ext4" >/dev/null 2>&1; eq "filesystem is clean afterwards" "$?" 0
+  printf '%s\n' 'second-pass-1' | bash "$IW" "$WD/rootfs.ext4" Other >/dev/null 2>&1; eq "running again replaces the config" "$?" 0
+  case $(debugfs -R "cat /etc/wpa_supplicant/wpa_supplicant.conf" "$WD/rootfs.ext4" 2>/dev/null) in *"ssid=49454545"*) bad "old network replaced" "still there" gone;; *) ok "old network replaced";; esac
+  printf '%s\n' 'short' | bash "$IW" "$WD/rootfs.ext4" X >/dev/null 2>&1; eq "short passphrase rejected" "$?" 2
+  bash "$IW" "$WD/missing.ext4" X </dev/null >/dev/null 2>&1; eq "missing image rejected" "$?" 2
+  # the last flashed image is the rollback copy: never patch it, even through a different path
+  if [ -f build/rootfs/rootfs.ext4 ]; then printf '%s\n' 'password' | bash "$IW" ./build/rootfs/../rootfs/rootfs.ext4 X >/dev/null 2>&1; eq "refuses the flashed image" "$?" 2; fi
+else
+  echo "SKIP image_set_wifi tests (mke2fs/debugfs/e2fsck/python3 not installed)"
+fi
+
 exit $FAIL
