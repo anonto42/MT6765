@@ -17,8 +17,20 @@ pub enum CoreEvent {
     Status(Box<Status>),
     /// A `wifi` event payload (scan results, connect result, disconnected).
     Wifi(Value),
-    /// The core rejected a request (shown as a notice).
-    Error(String),
+    /// The response to a request we sent (handshake replies are not reported).
+    Reply {
+        id: u64,
+        ok: bool,
+        data: Value,
+        error: Option<ReplyError>,
+    },
+}
+
+/// `code` is the protocol error code ("busy", "invalid_args", ...).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReplyError {
+    pub code: String,
+    pub msg: String,
 }
 
 pub struct CoreClient {
@@ -59,14 +71,15 @@ impl CoreClient {
         }
     }
 
-    /// Fire-and-forget request; the result arrives as a status/wifi event (errors as `Error`).
-    pub fn send(&mut self, cmd: &str, args: Value) {
-        if self.stream.is_some() {
-            self.next_id += 1;
-            let id = self.next_id;
-            self.queue(id, cmd, args);
-            self.flush();
-        }
+    /// Send a request; returns its id (None when not connected). The response arrives as
+    /// `CoreEvent::Reply`, state changes as status/wifi events.
+    pub fn send(&mut self, cmd: &str, args: Value) -> Option<u64> {
+        self.stream.as_ref()?;
+        self.next_id += 1;
+        let id = self.next_id;
+        self.queue(id, cmd, args);
+        self.flush();
+        Some(id)
     }
 
     fn drop_connection(&mut self, out: &mut Vec<CoreEvent>) {
@@ -164,9 +177,22 @@ impl CoreClient {
         } else if v["id"] == 1 && v["ok"] == true {
             self.ready = true;
             out.push(CoreEvent::Connected);
-        } else if v["ok"] == false {
-            let m = v["error"]["msg"].as_str().unwrap_or("request failed");
-            out.push(CoreEvent::Error(m.to_string()));
+        } else if let (Some(id), Some(ok)) = (v["id"].as_u64(), v["ok"].as_bool()) {
+            if id > 2 {
+                let error = (!ok).then(|| ReplyError {
+                    code: v["error"]["code"].as_str().unwrap_or("error").to_string(),
+                    msg: v["error"]["msg"]
+                        .as_str()
+                        .unwrap_or("request failed")
+                        .to_string(),
+                });
+                out.push(CoreEvent::Reply {
+                    id,
+                    ok,
+                    data: v["data"].clone(),
+                    error,
+                });
+            }
         }
     }
 }
@@ -260,14 +286,34 @@ mod tests {
             "brightness 200",
             |e| matches!(e, CoreEvent::Status(s) if s.brightness == 200),
         );
-        // a rejected command comes back as an Error notice
-        c.send("set_brightness", json!({"value": 999}));
-        let CoreEvent::Error(m) = wait(&mut c, &mut log, "error notice", |e| {
-            matches!(e, CoreEvent::Error(_))
-        }) else {
+        // a rejected command comes back as a Reply with the protocol error
+        let id = c.send("set_brightness", json!({"value": 999})).unwrap();
+        let CoreEvent::Reply {
+            error: Some(e),
+            ok: false,
+            ..
+        } = wait(
+            &mut c,
+            &mut log,
+            "error reply",
+            |ev| matches!(ev, CoreEvent::Reply { id: rid, .. } if *rid == id),
+        )
+        else {
             unreachable!()
         };
-        assert!(m.contains("0-255"), "{m}");
+        assert_eq!(e.code, "invalid_args");
+        assert!(e.msg.contains("0-255"), "{}", e.msg);
+        // a successful request returns its data
+        let id = c.send("get_status", Value::Null).unwrap();
+        let CoreEvent::Reply { ok: true, data, .. } = wait(
+            &mut c,
+            &mut log,
+            "status reply",
+            |ev| matches!(ev, CoreEvent::Reply { id: rid, .. } if *rid == id),
+        ) else {
+            unreachable!()
+        };
+        assert_eq!(data["brightness"], 200);
 
         // the core goes away: Disconnected, then it reconnects when the core is back
         core.stop();

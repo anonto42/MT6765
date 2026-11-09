@@ -348,14 +348,11 @@ mod tests {
             icon: Icon::Apps,
         };
         let mut st = crate::app::tests::status(120, &[]);
-        let model = |st: walpad_proto::Status| Model {
-            status: Some(st),
-            connected: true,
-            tiles: vec![],
-            wall: WallTime::new(1, 1, "x", true),
-            pressed: None,
-            slider_active: false,
-            slider_value: 0.0,
+        let model = |st: walpad_proto::Status| {
+            let mut m = Model::blank(WallTime::new(1, 1, "x", true));
+            m.status = Some(st);
+            m.connected = true;
+            m
         };
         assert_eq!(
             wifi_card(&model(st.clone())).0,

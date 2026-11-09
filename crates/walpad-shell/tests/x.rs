@@ -315,3 +315,128 @@ fn shell_drives_the_core_and_shows_when_it_is_gone() {
             == (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
     });
 }
+
+// ---------------------------------------------------------------------------------------------
+// the Wi-Fi flow, clicked through for real: shell + core + fake supplicant + X server
+
+#[test]
+fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
+    use walpad_core::{daemon::Daemon, fake, wpa};
+    use walpad_shell::network::{layout, NetEntry, NetModel};
+    use walpad_shell::overlay::password_geom;
+    use walpad_ui::components::{keyboard_layout, Key, KeyboardLayer};
+    use walpad_ui::layout::Frame;
+
+    let n = 80 + std::process::id() % 9;
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-wifi-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("etc/wpa_supplicant")).unwrap();
+    std::fs::create_dir_all(root.join("etc/walpad")).unwrap();
+    fake::populate(&root).unwrap();
+    let sup = wpa::fake::spawn(
+        &root,
+        wpa::fake::default_aps(),
+        Some(root.join("etc/wpa_supplicant/wpa_supplicant.conf")),
+    )
+    .unwrap();
+    let mut core = Daemon::new(Root::new(&root)).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let s2 = stop.clone();
+    let core_thread = std::thread::spawn(move || core.run(&s2));
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("shell window", || probe.find_shell().is_some());
+    let win = probe.find_shell().unwrap();
+    wait_for("drawn and connected", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, 5, 1250) == (SURFACE.r, SURFACE.g, SURFACE.b)
+            && px(&img, 800, 400, 64) == (BG.r, BG.g, BG.b)
+    });
+    let click = |sx: i32, sy: i32| {
+        probe.click(sx as i16, sy as i16);
+        std::thread::sleep(Duration::from_millis(120));
+    };
+    let frame = Frame::new(800, 1280);
+    let view_y = frame.content.y; // no banner while connected
+
+    // Network tab (third nav item)
+    click(frame.nav.w / 5 * 2 + 20, frame.nav.y + 40);
+    // the status has an address but no SSID yet, so there is no "connected" card
+    let st = None;
+    let empty = NetModel::default();
+    let l = layout(&frame, &st, &empty);
+    // wait until the tab is showing: the Scan button is drawn (a Scan label region differs from bg)
+    let scan = l.scan_btn.center();
+    wait_for("network tab", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, 700, (view_y + l.scan_btn.y + 2) as usize) != (BG.r, BG.g, BG.b)
+    });
+    click(scan.0, view_y + scan.1);
+
+    // scan results arrive: the first row (Home, strongest) shows accent signal bars
+    let rows = 3;
+    let model = NetModel {
+        results: (0..rows)
+            .map(|i| NetEntry {
+                ssid_hex: String::new(),
+                ssid: format!("{i}"),
+                bars: 3,
+                secured: true,
+            })
+            .collect(),
+        ..NetModel::default()
+    };
+    let l2 = layout(&frame, &st, &model);
+    let row0 = l2.avail_rows[0];
+    wait_for("scan results", || {
+        let img = probe.image(win, 800, 1280);
+        let y = (view_y + row0.y + row0.h / 2) as usize;
+        (730..765).any(|xx| px(&img, 800, xx, y) == (ACCENT.r, ACCENT.g, ACCENT.b))
+    });
+    assert!(
+        sup.log.lock().unwrap().iter().any(|c| c == "SCAN"),
+        "the shell asked the core, the core asked the supplicant"
+    );
+
+    // tap "Home" (secured): the password sheet opens, type the passphrase on the on-screen keyboard
+    click(row0.center().0, view_y + row0.center().1);
+    let g = password_geom(&frame);
+    wait_for("password sheet", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, g.sheet.x as usize + 5, g.sheet.y as usize + 100)
+            == (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
+    });
+    for ch in "correct horse".chars() {
+        let want = if ch == ' ' { Key::Space } else { Key::Char(ch) };
+        let k = keyboard_layout(g.keyboard, KeyboardLayer::Lower)
+            .into_iter()
+            .find(|k| k.key == want)
+            .unwrap();
+        click(k.rect.center().0, k.rect.center().1);
+    }
+    click(g.connect.center().0, g.connect.center().1);
+
+    // the supplicant joined "Home" with the derived key and the core reports it
+    wait_for("connected to Home in the core", || {
+        core_status(&root).is_some_and(|s| s["wifi"]["ssid"] == "Home")
+    });
+    let log = sup.log.lock().unwrap().join("\n");
+    assert!(
+        !log.contains("correct horse"),
+        "the passphrase never reaches the supplicant, only the derived key"
+    );
+    assert!(log.contains("SET_NETWORK 1 psk "), "{log}");
+    // the sheet closes by itself on success
+    wait_for("sheet closed", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, g.sheet.x as usize + 5, g.sheet.y as usize + 100)
+            != (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
+    });
+
+    stop.store(true, Ordering::Relaxed);
+    core_thread.join().unwrap();
+}

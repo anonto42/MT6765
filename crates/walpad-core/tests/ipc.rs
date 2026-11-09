@@ -287,6 +287,47 @@ fn settings_launch_screenshot_power_and_restart_shell() {
         true
     );
 
+    // close_app stops what the core started; closing again (or an unknown app) is reported honestly
+    assert_eq!(
+        c.call(40, "close_app", json!({"app":"sleeper"}))["data"]["closed"],
+        true
+    );
+    assert_eq!(
+        c.call(41, "close_app", json!({"app":"sleeper"}))["data"]["closed"],
+        false
+    );
+    assert_eq!(
+        c.call(42, "close_app", json!({"app":"zzz"}))["error"]["code"],
+        "invalid_args"
+    );
+    assert_eq!(
+        c.call(43, "get_status", Value::Null)["data"]["apps"][0]["running"],
+        false
+    );
+    // pinned apps are stored in shell.json next to clock_24h
+    assert_eq!(
+        c.call(
+            44,
+            "set_setting",
+            json!({"key":"pinned_apps","value":["browser","files"]})
+        )["ok"],
+        true
+    );
+    let shell: Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("etc/walpad/shell.json")).unwrap())
+            .unwrap();
+    assert_eq!(shell["pinned_apps"], json!(["browser", "files"]));
+    assert_eq!(shell["clock_24h"], true, "other keys survive");
+    assert_eq!(
+        c.call(
+            45,
+            "set_setting",
+            json!({"key":"pinned_apps","value":["Bad Id"]})
+        )["error"]["code"],
+        "invalid_args"
+    );
+    c.call(9, "launch", json!({"app":"sleeper"}));
+
     // screenshot copies the XWD, power needs confirmation, restart_shell finds nothing in a test root
     let r = c.call(12, "screenshot", Value::Null);
     let path = r["data"]["path"].as_str().unwrap().to_string();

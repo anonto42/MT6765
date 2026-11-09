@@ -15,6 +15,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "wifi_disconnect",
     "wifi_forget",
     "launch",
+    "close_app",
     "home",
     "keyboard",
     "power",
@@ -42,6 +43,7 @@ pub const ALLOWED_SETTINGS: &[&str] = &[
     "off_after_s",
     "lid_off",
     "clock_24h",
+    "pinned_apps",
 ];
 
 #[derive(Debug, Clone, Deserialize)]
@@ -144,6 +146,10 @@ pub enum Command {
     Launch {
         app: String,
     },
+    /// Stop an app that the core started.
+    CloseApp {
+        app: String,
+    },
     Home,
     Keyboard {
         mode: KeyboardMode,
@@ -224,16 +230,11 @@ impl Command {
                 }
                 Ok(())
             }
-            Command::Launch { app } => {
-                if app.is_empty()
-                    || app.len() > 32
-                    || !app.bytes().all(|b| {
-                        b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_'
-                    })
-                {
-                    Err("app must be an id like \"browser\"".into())
-                } else {
+            Command::Launch { app } | Command::CloseApp { app } => {
+                if valid_app_id(app) {
                     Ok(())
+                } else {
+                    Err("app must be an id like \"browser\"".into())
                 }
             }
             Command::SetSetting { key, value } => validate_setting(key, value),
@@ -242,11 +243,26 @@ impl Command {
     }
 }
 
+/// App ids are short lower-case slugs ("browser", "system-monitor").
+pub fn valid_app_id(app: &str) -> bool {
+    !app.is_empty()
+        && app.len() <= 32
+        && app
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+}
+
 fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
     if !ALLOWED_SETTINGS.contains(&key) {
         return Err(format!("setting {key:?} is not allowed"));
     }
     match key {
+        "pinned_apps" => match v.as_array() {
+            Some(a) if a.len() <= 8 && a.iter().all(|x| x.as_str().is_some_and(valid_app_id)) => {
+                Ok(())
+            }
+            _ => Err("value must be a list of at most 8 app ids".into()),
+        },
         "auto_rotate" | "rotate_flip" | "lid_off" | "clock_24h" => v
             .is_boolean()
             .then_some(())

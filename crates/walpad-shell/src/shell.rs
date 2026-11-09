@@ -1,7 +1,7 @@
 //! The shell event loop: X events + core events -> gestures -> app -> render -> present. Redraws
 //! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
 //! after the first frame is on screen (the boot ramdisk health check).
-use crate::app::{load_catalog, read_clock_24h, App, Cmd, WallTime};
+use crate::app::{load_catalog, read_clock_24h, read_pinned, App, Cmd, WallTime};
 use crate::core_client::{CoreClient, CoreEvent};
 use crate::gesture::{Gesture, Recogniser};
 use crate::window::{WinEvent, Window};
@@ -78,7 +78,8 @@ impl Shell {
             core,
             canvas,
             fonts,
-            app: App::new(w, h, load_catalog(&opts.root), wall),
+            app: App::new(w, h, load_catalog(&opts.root), wall)
+                .with_pinned(read_pinned(&opts.root)),
             rec: Recogniser::new(),
             root: opts.root,
             clock_24h,
@@ -97,7 +98,9 @@ impl Shell {
     fn send(&mut self, cmds: Vec<Cmd>) {
         for c in cmds {
             let (name, args) = c.request();
-            self.core.send(name, args);
+            if let Some(id) = self.core.send(name, args) {
+                self.app.note_sent(id, &c);
+            }
         }
     }
 
@@ -158,12 +161,16 @@ impl Shell {
         let gs = self.rec.tick(now);
         self.apply_gestures(gs);
 
+        let now = self.now_ms();
         for ev in self.core.tick(Instant::now()) {
             if let CoreEvent::Connected = ev {
                 self.clock_24h = read_clock_24h(&self.root);
             }
-            self.dirty |= self.app.on_core(&ev);
+            let out = self.app.on_core(&ev, now);
+            self.dirty |= out.dirty;
+            self.send(out.cmds);
         }
+        self.dirty |= self.app.tick(now);
         if Instant::now() >= self.next_minute {
             let (wall, to_minute) = WallTime::now(self.clock_24h);
             self.next_minute = Instant::now() + Duration::from_millis(to_minute);

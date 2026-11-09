@@ -394,7 +394,7 @@ impl Daemon {
     }
 
     fn set_setting(&mut self, key: &str, value: Value) -> CmdResult {
-        let virt = if key == "clock_24h" {
+        let virt = if key == "clock_24h" || key == "pinned_apps" {
             "/etc/walpad/shell.json"
         } else {
             "/etc/walpad/devd.json"
@@ -611,6 +611,13 @@ impl Daemon {
                 Ok(json!({"focused": ok}))
             }
             Command::Launch { app } => self.launch(&app).map(|how| json!({"result": how})),
+            Command::CloseApp { app } => {
+                if self.apps.def(&app).is_none() {
+                    return Err((ErrorCode::InvalidArgs, format!("unknown app {app:?}")));
+                }
+                // only apps this core started can be closed (it owns their process)
+                Ok(json!({"closed": self.apps.close(&app)}))
+            }
             Command::RestartShell => Ok(json!({"terminated": self.terminate("walpad-shell")})),
             Command::Screenshot => self.screenshot(),
             Command::SetSetting { key, value } => self.set_setting(&key, value),

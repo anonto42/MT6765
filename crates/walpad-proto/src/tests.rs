@@ -121,6 +121,38 @@ fn commands_without_arguments_ignore_a_stray_args_object() {
 }
 
 #[test]
+fn close_app_and_pinned_apps_are_validated() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"close_app","args":{"app":"browser"}}"#)
+            .unwrap()
+            .1,
+        Command::CloseApp {
+            app: "browser".into()
+        }
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"close_app","args":{"app":"../etc"}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+    let ok = r#"{"v":1,"id":1,"cmd":"set_setting","args":{"key":"pinned_apps","value":["browser","terminal"]}}"#;
+    assert!(req(ok).is_ok());
+    for bad in [
+        r#"["Browser"]"#,
+        r#"["a b"]"#,
+        r#"[1]"#,
+        r#""browser""#,
+        r#"["a","b","c","d","e","f","g","h","i"]"#,
+    ] {
+        let line = format!(
+            r#"{{"v":1,"id":1,"cmd":"set_setting","args":{{"key":"pinned_apps","value":{bad}}}}}"#
+        );
+        assert_eq!(code(req(&line)), ErrorCode::InvalidArgs, "{bad}");
+    }
+}
+
+#[test]
 fn unknown_fields_ignored() {
     assert!(req(r#"{"v":1,"id":1,"cmd":"get_status","extra":5}"#).is_ok());
 }

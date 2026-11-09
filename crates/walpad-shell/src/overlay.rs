@@ -1,0 +1,288 @@
+//! Modal overlays: the Wi-Fi password sheet (with the on-screen keyboard), the app options sheet
+//! and the forget-network dialog. Geometry is pure so hit areas are testable.
+use crate::app::Target;
+use walpad_ui::components::{keyboard_layout, ButtonKind, ButtonState, KeyboardLayer, Painter};
+use walpad_ui::layout::Frame;
+use walpad_ui::tokens::*;
+use walpad_ui::Rect;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PasswordSheet {
+    pub ssid_hex: String,
+    pub ssid: String,
+    pub secret: String,
+    pub shown: bool,
+    pub layer: KeyboardLayer,
+    /// One-shot shift: the next letter is upper case.
+    pub shift: bool,
+    pub error: Option<String>,
+    pub connecting: bool,
+    pub pressed_key: Option<usize>,
+}
+
+impl PasswordSheet {
+    pub fn new(ssid_hex: String, ssid: String) -> Self {
+        PasswordSheet {
+            ssid_hex,
+            ssid,
+            secret: String::new(),
+            shown: false,
+            layer: KeyboardLayer::Lower,
+            shift: false,
+            error: None,
+            connecting: false,
+            pressed_key: None,
+        }
+    }
+    /// WPA2: 8-63 characters, or a 64-digit hex key.
+    pub fn valid(&self) -> bool {
+        let n = self.secret.len();
+        (8..=63).contains(&n) || (n == 64 && self.secret.bytes().all(|b| b.is_ascii_hexdigit()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppSheet {
+    pub id: String,
+    pub name: String,
+    pub running: bool,
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Overlay {
+    Password(PasswordSheet),
+    App(AppSheet),
+    Forget { id: u32, ssid: String },
+}
+
+const SHEET_W: i32 = 800;
+pub const PASSWORD_SHEET_H: i32 = 524;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PasswordGeom {
+    pub sheet: Rect,
+    pub field: Rect,
+    pub keyboard: Rect,
+    pub cancel: Rect,
+    pub connect: Rect,
+}
+
+pub fn password_geom(frame: &Frame) -> PasswordGeom {
+    let w = SHEET_W.min(frame.w);
+    let sheet = Rect::new(
+        (frame.w - w) / 2,
+        frame.h - PASSWORD_SHEET_H,
+        w,
+        PASSWORD_SHEET_H,
+    );
+    let content = Rect::new(
+        sheet.x + SP_5,
+        sheet.y + 68,
+        sheet.w - 2 * SP_5,
+        sheet.h - 68 - SP_5,
+    );
+    let field = Rect::new(content.x, content.y, content.w, 56);
+    let keyboard = Rect::new(sheet.x, field.bottom() + 34, sheet.w, 274);
+    let bw = (content.w - SP_3) / 2;
+    let by = keyboard.bottom() + SP_3;
+    PasswordGeom {
+        sheet,
+        field,
+        keyboard,
+        cancel: Rect::new(content.x, by, bw, BUTTON_H),
+        connect: Rect::new(content.x + bw + SP_3, by, bw, BUTTON_H),
+    }
+}
+
+pub fn render_password(
+    p: &mut Painter,
+    frame: &Frame,
+    s: &PasswordSheet,
+    spinner_deg: u16,
+) -> Vec<(Rect, Target)> {
+    let g = password_geom(frame);
+    let mut hits = Vec::new();
+    p.sheet(g.sheet, &s.ssid);
+    if let Some(eye) = p.text_field(
+        g.field,
+        &s.secret,
+        "Password",
+        true,
+        s.shown,
+        true,
+        s.error.as_deref(),
+    ) {
+        hits.push((eye, Target::Eye));
+    }
+    let keys = p.keyboard(g.keyboard, s.layer, s.pressed_key);
+    for (i, k) in keys.iter().enumerate() {
+        hits.push((k.rect, Target::Key(i)));
+    }
+    p.button(
+        g.cancel,
+        "Cancel",
+        ButtonKind::Secondary,
+        ButtonState::Default,
+        None,
+    );
+    let cs = if s.connecting {
+        ButtonState::Loading(spinner_deg)
+    } else if s.valid() {
+        ButtonState::Default
+    } else {
+        ButtonState::Disabled
+    };
+    p.button(g.connect, "Connect", ButtonKind::Primary, cs, None);
+    hits.push((g.cancel, Target::SheetCancel));
+    hits.push((g.connect, Target::SheetConnect));
+    hits
+}
+
+pub fn app_sheet_geom(frame: &Frame, running: bool) -> (Rect, Vec<(Rect, Target)>) {
+    let n = if running { 3 } else { 2 };
+    let h = 68 + n * (BUTTON_H + SP_3) + SP_4;
+    let w = SHEET_W.min(frame.w);
+    let sheet = Rect::new((frame.w - w) / 2, frame.h - h, w, h);
+    let mut y = sheet.y + 68;
+    let mut btns = Vec::new();
+    let mut add = |t: Target, y: &mut i32| {
+        btns.push((
+            Rect::new(sheet.x + SP_5, *y, sheet.w - 2 * SP_5, BUTTON_H),
+            t,
+        ));
+        *y += BUTTON_H + SP_3;
+    };
+    if running {
+        add(Target::CloseApp, &mut y);
+    }
+    add(Target::PinToggle, &mut y);
+    add(Target::SheetCancel, &mut y);
+    (sheet, btns)
+}
+
+pub fn render_app_sheet(p: &mut Painter, frame: &Frame, s: &AppSheet) -> Vec<(Rect, Target)> {
+    let (sheet, btns) = app_sheet_geom(frame, s.running);
+    p.sheet(sheet, &s.name);
+    for (r, t) in &btns {
+        match t {
+            Target::CloseApp => p.button(
+                *r,
+                "Close app",
+                ButtonKind::Danger,
+                ButtonState::Default,
+                None,
+            ),
+            Target::PinToggle => p.button(
+                *r,
+                if s.pinned {
+                    "Unpin from Home"
+                } else {
+                    "Pin to Home"
+                },
+                ButtonKind::Secondary,
+                ButtonState::Default,
+                None,
+            ),
+            _ => p.button(
+                *r,
+                "Cancel",
+                ButtonKind::Secondary,
+                ButtonState::Default,
+                None,
+            ),
+        }
+    }
+    btns
+}
+
+pub fn render_forget(p: &mut Painter, frame: &Frame, ssid: &str) -> Vec<(Rect, Target)> {
+    let screen = Rect::new(0, 0, frame.w, frame.h);
+    let (cancel, confirm) = p.dialog(
+        screen,
+        "Forget network?",
+        &format!("{ssid} will be removed from the saved networks."),
+        "Cancel",
+        "Forget",
+        "Forget",
+        true,
+        false,
+    );
+    vec![
+        (cancel, Target::DialogCancel),
+        (confirm, Target::DialogConfirm),
+    ]
+}
+
+/// Key index -> key for the current keyboard (same geometry the renderer uses).
+pub fn key_at(
+    frame: &Frame,
+    layer: KeyboardLayer,
+    idx: usize,
+) -> Option<walpad_ui::components::Key> {
+    keyboard_layout(password_geom(frame).keyboard, layer)
+        .get(idx)
+        .map(|k| k.key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn password_sheet_fits_both_orientations_and_targets_are_big_enough() {
+        for (w, h) in [(800, 1280), (1280, 800)] {
+            let g = password_geom(&Frame::new(w, h));
+            assert!(
+                g.sheet.x >= 0 && g.sheet.right() <= w && g.sheet.y >= 0 && g.sheet.bottom() == h,
+                "{w}x{h}: {:?}",
+                g.sheet
+            );
+            assert!(g.field.h >= TOUCH_MIN && g.cancel.h >= TOUCH_MIN && g.connect.h >= TOUCH_MIN);
+            assert!(
+                g.field.bottom() < g.keyboard.y
+                    && g.keyboard.bottom() < g.cancel.y
+                    && g.cancel.bottom() <= g.sheet.bottom()
+            );
+            assert!(g.cancel.right() < g.connect.x);
+        }
+    }
+
+    #[test]
+    fn secret_validity_follows_wpa2_rules() {
+        let mut s = PasswordSheet::new("00".into(), "Home".into());
+        for (v, ok) in [
+            ("", false),
+            ("1234567", false),
+            ("12345678", true),
+            (&"a".repeat(63), true),
+            (&"a".repeat(64), true),
+            (&"g".repeat(64), false),
+            (&"a".repeat(65), false),
+        ] {
+            s.secret = v.to_string();
+            assert_eq!(s.valid(), ok, "{} chars", v.len());
+        }
+    }
+
+    #[test]
+    fn app_sheet_has_close_only_when_running() {
+        let f = Frame::new(800, 1280);
+        let t = |r| {
+            app_sheet_geom(&f, r)
+                .1
+                .into_iter()
+                .map(|(_, t)| t)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            t(true),
+            [Target::CloseApp, Target::PinToggle, Target::SheetCancel]
+        );
+        assert_eq!(t(false), [Target::PinToggle, Target::SheetCancel]);
+        let (sheet, btns) = app_sheet_geom(&f, true);
+        assert!(btns
+            .iter()
+            .all(|(r, _)| r.h >= TOUCH_MIN && r.y >= sheet.y && r.bottom() <= sheet.bottom()));
+    }
+}

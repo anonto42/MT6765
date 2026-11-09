@@ -3,9 +3,12 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod app;
+pub mod apps_screen;
 pub mod core_client;
 pub mod gesture;
 pub mod home;
+pub mod network;
+pub mod overlay;
 pub mod present;
 pub mod shell;
 pub mod window;

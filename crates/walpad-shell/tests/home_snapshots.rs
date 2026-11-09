@@ -84,7 +84,7 @@ fn shot(name: &str, w: i32, h: i32, status: Option<Status>, clock_24h: bool) {
         WallTime::new(14, 22, "Monday, 09 November", clock_24h),
     );
     if let Some(s) = status {
-        app.on_core(&CoreEvent::Status(Box::new(s)));
+        app.on_core(&CoreEvent::Status(Box::new(s)), 0);
     }
     let mut c = Canvas::new(w as u32, h as u32, BG).unwrap();
     app.render(&mut Painter {
