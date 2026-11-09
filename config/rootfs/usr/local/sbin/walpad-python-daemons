@@ -1,0 +1,10 @@
+#!/bin/sh
+# walpad-python-daemons devd|keys|touchd ...   start the Python implementation of each subsystem.
+export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+export HOME=/root DISPLAY=:0 XDG_RUNTIME_DIR=/run/walpad
+for n in "$@"; do
+  case $n in
+    devd|keys|touchd) "walpad-$n.py" > "/var/log/walpad-$n.log" 2>&1 & ;;
+    *) echo "walpad-python-daemons: unknown $n" >&2 ;;
+  esac
+done

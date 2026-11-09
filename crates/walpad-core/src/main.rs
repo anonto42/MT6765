@@ -10,6 +10,12 @@ fn main() {
         println!("walpad-core {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+    if args.iter().any(|a| a == "--capabilities") {
+        // Subsystems this build can run live. `device` and `input` are added by M3.2/M3.3;
+        // until then walpad-runtime keeps Python for them.
+        println!("ipc shadow");
+        return;
+    }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("{USAGE}");
         return;

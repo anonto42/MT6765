@@ -29,6 +29,8 @@ else
     'apt-get update -qq >/dev/null && apt-get install -y -qq qemu-user >/dev/null &&
      for f in build/rust/aarch64/walpad-*; do case $f in *sizes.txt) continue;; esac; qemu-aarch64 "$f" --version || exit 1; done'
 fi
+echo "== shell tests"
+sh tests/shell/run.sh | grep -v '^PASS' && { echo "FAIL: shell tests"; exit 1; } || true
 echo "== secrets grep"
 if git grep -nI -e 'psk=' -e 'PSK=' -- crates tests 2>/dev/null; then echo "FAIL: psk literal found"; exit 1; fi
 echo "ALL CHECKS PASSED"

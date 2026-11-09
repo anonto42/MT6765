@@ -1,0 +1,37 @@
+#!/bin/sh
+# walpad-supervise NAME [--require PROC] [--on-fallback CMD] -- command args...
+# Restart loop.  If the command exits within WALPAD_MIN_UP seconds (default 10) three times in a
+# row, write /run/walpad/fallback-NAME, run CMD once (our own scripts only) and stop.
+# --require PROC: stop (exit 3) when PROC is no longer running, e.g. Xvfb died.
+NAME=$1; shift
+REQ=""; HOOK=""
+while [ $# -gt 0 ]; do
+  case $1 in
+    --require) REQ=$2; shift 2 ;;
+    --on-fallback) HOOK=$2; shift 2 ;;
+    --) shift; break ;;
+    *) echo "walpad-supervise: bad option $1" >&2; exit 2 ;;
+  esac
+done
+[ $# -gt 0 ] || { echo "walpad-supervise: no command" >&2; exit 2; }
+RUN=${WALPAD_RUN_DIR:-/run/walpad}; MIN=${WALPAD_MIN_UP:-10}; DELAY=${WALPAD_RESTART_DELAY:-1}
+LIMIT=${WALPAD_FAIL_LIMIT:-3}
+mkdir -p "$RUN"
+fails=0
+while :; do
+  if [ -n "$REQ" ] && ! pidof "$REQ" >/dev/null 2>&1; then
+    echo "walpad-supervise[$NAME]: $REQ is gone, stopping" >&2; exit 3
+  fi
+  start=$(date +%s)
+  "$@"; rc=$?
+  up=$(( $(date +%s) - start ))
+  echo "walpad-supervise[$NAME]: exited rc=$rc after ${up}s" >&2
+  if [ $up -lt $MIN ]; then fails=$((fails+1)); else fails=0; fi
+  if [ $fails -ge $LIMIT ]; then
+    echo "walpad-supervise[$NAME]: $fails quick exits in a row: falling back" >&2
+    : > "$RUN/fallback-$NAME"
+    [ -n "$HOOK" ] && sh -c "$HOOK"
+    exit 0
+  fi
+  sleep "$DELAY"
+done

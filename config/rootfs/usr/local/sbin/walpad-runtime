@@ -1,0 +1,24 @@
+#!/bin/sh
+# walpad-runtime KEY   -> prints python|rust (or 0|1 for WALPAD_SHADOW)
+# Reads /etc/walpad/runtime.conf.  `rust` is honoured only if the Rust binary is installed, reports
+# the needed capability (`<bin> --capabilities`) and has not fallen back this boot
+# (/run/walpad/fallback-core|shell).  Anything else yields python, so a bad config can never
+# leave the tablet without a working component.
+KEY=$1
+CONF=${WALPAD_RUNTIME_CONF:-/etc/walpad/runtime.conf}
+RUN=${WALPAD_RUN_DIR:-/run/walpad}
+val=$(sed -n "s/^$KEY=//p" "$CONF" 2>/dev/null | tail -n 1 | tr -d ' \r"')
+case $KEY in
+  WALPAD_SHADOW) [ "$val" = 1 ] && echo 1 || echo 0; exit 0 ;;
+  WALPAD_DEVICE) flag=fallback-core;  bin=walpad-core;  cap=device ;;
+  WALPAD_INPUT)  flag=fallback-core;  bin=walpad-core;  cap=input ;;
+  WALPAD_SHELL)  flag=fallback-shell; bin=walpad-shell; cap=shell ;;
+  *) echo python; exit 0 ;;
+esac
+[ "$val" = rust ] || { echo python; exit 0; }
+if [ -e "$RUN/$flag" ]; then echo "walpad-runtime: $KEY=rust ignored (fell back this boot)" >&2; echo python; exit 0; fi
+if ! command -v $bin >/dev/null 2>&1; then echo "walpad-runtime: $KEY=rust ignored ($bin not installed)" >&2; echo python; exit 0; fi
+case " $($bin --capabilities 2>/dev/null) " in
+  *" $cap "*) echo rust ;;
+  *) echo "walpad-runtime: $KEY=rust ignored ($bin lacks capability '$cap')" >&2; echo python ;;
+esac

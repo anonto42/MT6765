@@ -6,7 +6,7 @@ export HOME=/root DISPLAY=:0 XDG_RUNTIME_DIR=/run/walpad
 export LIBGL_ALWAYS_SOFTWARE=1 MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 \
        MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_WEBRENDER=0 MOZ_ACCELERATED=0 GTK_A11Y=none NO_AT_BRIDGE=1
 klog() { echo "WALPAD-SESSION: $*" > /dev/kmsg 2>/dev/null; }
-pkill Xvfb 2>/dev/null; pkill fbmirror 2>/dev/null; pkill -f walpad-touchd 2>/dev/null; pkill -f walpad-devd 2>/dev/null; pkill -f walpad-keys 2>/dev/null; pkill openbox 2>/dev/null; sleep 1
+pkill Xvfb 2>/dev/null; pkill fbmirror 2>/dev/null; pkill -f walpad-touchd 2>/dev/null; pkill -f walpad-devd 2>/dev/null; pkill -f walpad-keys 2>/dev/null; pkill openbox 2>/dev/null; pkill -f 'walpad-supervise shell' 2>/dev/null; pkill -x walpad-shell 2>/dev/null; sleep 1
 rm -f /run/walpad-ok /tmp/.X0-lock /tmp/.X11-unix/X0
 mkdir -p /tmp/.X11-unix; chmod 1777 /tmp/.X11-unix
 
@@ -20,11 +20,20 @@ i=0; while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 40 ]; do sleep 1; i=$((i+1)); 
 klog "Xvfb is up"
 echo 0 > /run/walpad/orientation
 fbmirror /run/walpad/xfb/Xvfb_screen0 > /var/log/fbmirror.log 2>&1 &
-walpad-touchd.py > /var/log/walpad-touchd.log 2>&1 &
+# Which implementation runs each subsystem (/etc/walpad/runtime.conf; python unless Rust is proven and healthy)
+RT_DEVICE=$(walpad-runtime WALPAD_DEVICE); RT_INPUT=$(walpad-runtime WALPAD_INPUT); RT_SHELL=$(walpad-runtime WALPAD_SHELL)
+klog "runtime: device=$RT_DEVICE input=$RT_INPUT shell=$RT_SHELL"
+[ "$RT_INPUT" = python ] && walpad-python-daemons touchd
 xset s off; xset -dpms; xset s noblank
 xsetroot -solid '#0b0e16' 2>/dev/null
 openbox --config-file /etc/walpad/openbox-rc.xml > /var/log/openbox.log 2>&1 &
 sleep 1
-walpad-devd.py > /var/log/walpad-devd.log 2>&1 &
-walpad-keys.py > /var/log/walpad-keys.log 2>&1 &
+[ "$RT_DEVICE" = python ] && walpad-python-daemons devd
+[ "$RT_INPUT" = python ] && walpad-python-daemons keys
+if [ "$RT_SHELL" = rust ]; then
+  # the shell runs in its own restart loop: a shell crash no longer restarts X or closes apps
+  walpad-supervise shell --require Xvfb -- walpad-shell > /var/log/walpad-shell.log 2>&1
+  if [ -e /run/walpad/fallback-shell ]; then klog "Rust shell failed 3 times: using the Tk launcher until reboot"; exec walpad-launcher.py; fi
+  klog "Xvfb is gone: restarting the session"; exit 1
+fi
 exec walpad-launcher.py
