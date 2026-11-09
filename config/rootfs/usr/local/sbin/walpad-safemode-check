@@ -1,0 +1,17 @@
+#!/bin/sh
+# walpad-safemode-check   exit 0 if safe mode was requested, 1 otherwise (card M9.2).
+# Safe mode = Volume Down (key 114, device "mtk-kpd") is held while walpad-init starts.  The key is
+# read with `walpad-ctl-rs key-held` (EVIOCGKEY).  ANY failure (binary missing, device missing,
+# error, timeout) means "not held": a broken check must never keep the tablet out of the UI.
+# Env (tests): WALPAD_CTL (default walpad-ctl-rs), WALPAD_SAFEMODE_KEY (114), WALPAD_SAFEMODE_TIMEOUT (1 s).
+export PATH="$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
+CTL=${WALPAD_CTL:-walpad-ctl-rs}
+KEY=${WALPAD_SAFEMODE_KEY:-114}
+T=${WALPAD_SAFEMODE_TIMEOUT:-1}
+command -v "$CTL" > /dev/null 2>&1 || exit 1
+if command -v timeout > /dev/null 2>&1; then
+  timeout "$T" "$CTL" key-held "$KEY" > /dev/null 2>&1
+else
+  "$CTL" key-held "$KEY" > /dev/null 2>&1   # key-held never blocks
+fi
+[ $? -eq 0 ]

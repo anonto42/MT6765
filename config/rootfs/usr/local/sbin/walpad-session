@@ -14,25 +14,25 @@ mkdir -p /tmp/.X11-unix; chmod 1777 /tmp/.X11-unix
 # in-memory framebuffer file and fbmirror copies it to /dev/fb0; touch is injected through XTEST.
 mkdir -p /run/walpad/xfb
 klog "starting Xvfb"
-Xvfb :0 -screen 0 1280x1280x24 -fbdir /run/walpad/xfb -nolisten tcp -ac > /var/log/Xvfb.log 2>&1 &
+Xvfb :0 -screen 0 1280x1280x24 -fbdir /run/walpad/xfb -nolisten tcp -ac >> /var/log/Xvfb.log 2>&1 &
 i=0; while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 40 ]; do sleep 1; i=$((i+1)); done
 [ -S /tmp/.X11-unix/X0 ] || { klog "Xvfb did not start"; exit 1; }
 klog "Xvfb is up"
 echo 0 > /run/walpad/orientation
-fbmirror /run/walpad/xfb/Xvfb_screen0 > /var/log/fbmirror.log 2>&1 &
+fbmirror /run/walpad/xfb/Xvfb_screen0 >> /var/log/fbmirror.log 2>&1 &
 # Which implementation runs each subsystem (/etc/walpad/runtime.conf; python unless Rust is proven and healthy)
 RT_DEVICE=$(walpad-runtime WALPAD_DEVICE); RT_INPUT=$(walpad-runtime WALPAD_INPUT); RT_SHELL=$(walpad-runtime WALPAD_SHELL)
 klog "runtime: device=$RT_DEVICE input=$RT_INPUT shell=$RT_SHELL"
 [ "$RT_INPUT" = python ] && walpad-python-daemons touchd
 xset s off; xset -dpms; xset s noblank
 xsetroot -solid '#0b0e16' 2>/dev/null
-openbox --config-file /etc/walpad/openbox-rc.xml > /var/log/openbox.log 2>&1 &
+openbox --config-file /etc/walpad/openbox-rc.xml >> /var/log/openbox.log 2>&1 &
 sleep 1
 [ "$RT_DEVICE" = python ] && walpad-python-daemons devd
 [ "$RT_INPUT" = python ] && walpad-python-daemons keys
 if [ "$RT_SHELL" = rust ]; then
   # the shell runs in its own restart loop: a shell crash no longer restarts X or closes apps
-  walpad-supervise shell --require Xvfb -- walpad-shell > /var/log/walpad-shell.log 2>&1
+  walpad-supervise shell --require Xvfb -- walpad-shell >> /var/log/walpad-shell.log 2>&1
   if [ -e /run/walpad/fallback-shell ]; then klog "Rust shell failed 3 times: using the Tk launcher until reboot"; exec walpad-launcher.py; fi
   klog "Xvfb is gone: restarting the session"; exit 1
 fi

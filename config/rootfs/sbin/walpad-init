@@ -9,8 +9,20 @@ klog "walpad-init started"
 /bin/busybox --install -s 2>/dev/null
 hostname walpad 2>/dev/null
 mkdir -p /var/log /var/lib/walpad /run/walpad /tmp/.X11-unix /root/.ssh /etc/dropbear
+walpad-logcap    # trim logs left by earlier boots (they live on the ext4 rootfs); then every 5 min below
 chmod 1777 /tmp /tmp/.X11-unix
 ip link set lo up 2>/dev/null
+# Safe mode (card M9.2): Volume Down held at start.  It is decided FIRST (the key is only held for a few seconds
+# after power-on); SSH and Wi-Fi still start below; the core and the graphical session are skipped and show the rescue UI (padui, from the rootfs) instead.  The
+# marker /run/walpad-ok tells the ramdisk the session is "healthy", so its 150 s fallback does not
+# start a second padui on the same framebuffer.
+SAFE=""
+if walpad-safemode-check; then
+  SAFE=1; klog "SAFE MODE: Volume Down held, not starting the core or the session; padui on the panel"
+  echo "volume-down held at boot" > /run/walpad/safemode; : > /run/walpad-ok
+  ( while :; do padui >> /var/log/padui.log 2>&1; sleep 1; done ) &
+fi
+
 [ -s /etc/resolv.conf ] || printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
 
 # first boot: grow the filesystem to fill the partition, build the font cache
@@ -43,12 +55,13 @@ fi
 [ -f /etc/dropbear/dropbear_ed25519_host_key ] || dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key > /dev/null 2>&1
 if [ -s /root/.ssh/authorized_keys ]; then
   chmod 700 /root /root/.ssh; chmod 600 /root/.ssh/authorized_keys
-  dropbear -s -R -E -p 22 > /var/log/dropbear.log 2>&1
+  dropbear -s -R -E -p 22 >> /var/log/dropbear.log 2>&1
 fi
 
 # Wi-Fi: stack bring-up, association and reconnection (own loop, never blocks the session)
-( walpad-wifi > /var/log/walpad-wifi.log 2>&1 ) &
+( walpad-wifi >> /var/log/walpad-wifi.log 2>&1 ) &
 
+if [ -z "$SAFE" ]; then
 # Rust core (own restart loop, outside the session so a UI/X crash never stops it).  Started only when
 # runtime.conf asks for it (rust device/input or shadow mode); the default config starts nothing new.
 RT_DEVICE=$(walpad-runtime WALPAD_DEVICE); RT_INPUT=$(walpad-runtime WALPAD_INPUT); RT_SHADOW=$(walpad-runtime WALPAD_SHADOW)
@@ -61,7 +74,10 @@ if [ "$RT_DEVICE" = rust ] || [ "$RT_INPUT" = rust ] || [ "$RT_SHADOW" = 1 ]; th
 fi
 
 # graphical session with automatic restart
-( while true; do walpad-session > /var/log/walpad-session.log 2>&1; klog "session exited, restarting in 3 s"; sleep 3; done ) &
+( while true; do walpad-session >> /var/log/walpad-session.log 2>&1; klog "session exited, restarting in 3 s"; sleep 3; done ) &
+
+fi  # SAFE
 
 klog "walpad-init finished starting services"
-while true; do sleep 3600; done
+# main loop: log size caps (card M9.1).  Init itself is the keeper, no extra daemon.
+while true; do sleep "${WALPAD_LOGCAP_INTERVAL:-300}"; walpad-logcap; done

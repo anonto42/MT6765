@@ -44,7 +44,11 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M8.1 | fbmirror pauses while the screen is off | done (host; never run on the tablet; see reports/M8.md) |
 | M8.2 [DEVICE] | decide from scripts/device/measure_fbmirror.sh | owner measures |
 | M8.3 [DEVICE] | Firefox memory: scripts/device/measure_firefox_mem.sh | owner measures |
-| M9.1-M9.5 | Log caps, safe mode, reproducible build, security review, failure matrix | todo |
+| M9.1 | Log size caps (walpad-logcap; every writer appends) | done (host; see reports/M9.1-M9.3.md) |
+| M9.2 | Safe mode: Volume Down at init start -> padui + SSH/Wi-Fi, no boot-image change | done (host; EVIOCGKEY untested on the kernel) |
+| M9.3 | Reproducible build: Alpine pinned to 3.24, manifests + hashes (the .ext4 itself is not byte-reproducible) | done (host) |
+| M9.4 [DEVICE] | Security review: listening ports, key-only SSH, secret file modes, leftover tunnel token | owner runs it |
+| M9.5 [DEVICE] | Failure matrix: 5 cold boots, Wi-Fi loss, app/shell/core crash, low battery | owner runs it |
 
 Owner decisions (defaults apply unless changed here): D1 pure-Rust renderer (tiny-skia+fontdue); D2 Files tile only when installed; D3 system dock yes; D4 port one-reading critical rule first, then 3 readings in own commit; D5 defer boot image changes; D6 keep keys.json gestures, add volume: only after audio verified.
 

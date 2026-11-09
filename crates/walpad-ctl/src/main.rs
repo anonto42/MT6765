@@ -6,6 +6,9 @@ fn main() {
         println!("walpad-ctl {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+    if args.first().map(String::as_str) == Some("key-held") {
+        std::process::exit(walpad_ctl::key_held_status(&args, &Root::from_env()));
+    }
     match walpad_ctl::run(&args, &Root::from_env()) {
         Ok(out) => {
             if !out.is_empty() {

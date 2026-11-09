@@ -60,6 +60,70 @@ pub fn parse_events(data: &[u8]) -> Vec<InputEvent> {
         .collect()
 }
 
+/// EVIOCGKEY(96): `_IOC(_IOC_READ, 'E', 0x18, 96)`.  Same value on aarch64 and x86_64 (the size
+/// field is the bitmap length, the direction bits are the generic read = 2).
+pub const EVIOCGKEY_96: u32 = 0x8060_4518;
+/// Bytes of the global key-state bitmap we ask for (768 keys; KEY_MAX is 0x2ff).
+pub const KEY_BITMAP_BYTES: usize = 96;
+
+/// Is `code` set in an EVIOCGKEY bitmap (bit `code % 8` of byte `code / 8`)?  A code beyond the
+/// buffer is "not held".
+pub fn key_bit(bitmap: &[u8], code: u16) -> bool {
+    bitmap
+        .get(usize::from(code) / 8)
+        .is_some_and(|b| b & (1u8 << (code % 8)) != 0)
+}
+
+struct GetKeys {
+    buf: [u8; KEY_BITMAP_BYTES],
+}
+// SAFETY: EVIOCGKEY(96) writes at most KEY_BITMAP_BYTES bytes at the pointer (the size is encoded
+// in the opcode), and the array is exactly that long.
+unsafe impl rustix::ioctl::Ioctl for GetKeys {
+    type Output = [u8; KEY_BITMAP_BYTES];
+    const IS_MUTATING: bool = true;
+    fn opcode(&self) -> rustix::ioctl::Opcode {
+        EVIOCGKEY_96 as _
+    }
+    fn as_ptr(&mut self) -> *mut std::ffi::c_void {
+        self.buf.as_mut_ptr().cast()
+    }
+    unsafe fn output_from_ptr(
+        _: rustix::ioctl::IoctlOutput,
+        p: *mut std::ffi::c_void,
+    ) -> rustix::io::Result<Self::Output> {
+        // SAFETY: p points at our KEY_BITMAP_BYTES-byte array.
+        Ok(unsafe { *(p as *const [u8; KEY_BITMAP_BYTES]) })
+    }
+}
+
+/// Current key state of an evdev node.  Never blocks (O_NONBLOCK, ioctl only).  On a character
+/// device this is EVIOCGKEY (CANNOT be exercised on the host: verified only on the tablet); on a
+/// plain file (tests) the first 96 bytes are the bitmap.
+pub fn read_key_bitmap(path: &std::path::Path) -> std::io::Result<[u8; KEY_BITMAP_BYTES]> {
+    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    let mut f = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+        .open(path)?;
+    if f.metadata()?.file_type().is_char_device() {
+        // SAFETY: GetKeys matches the EVIOCGKEY(96) ABI (see above).
+        unsafe {
+            rustix::ioctl::ioctl(
+                &f,
+                GetKeys {
+                    buf: [0; KEY_BITMAP_BYTES],
+                },
+            )
+        }
+        .map_err(std::io::Error::from)
+    } else {
+        let mut b = [0u8; KEY_BITMAP_BYTES];
+        let _ = f.read(&mut b)?;
+        Ok(b)
+    }
+}
+
 /// Reads events from an evdev node (or a recorded .bin). Never grabs the device.
 pub struct EvdevReader {
     file: File,
@@ -143,6 +207,31 @@ mod tests {
         assert_eq!(parse_events(&bytes), vec![a, b]);
         assert_eq!(a.ms(), 10_500);
         assert_eq!(EVENT_SIZE, 24);
+    }
+
+    #[test]
+    fn key_bitmap_bits() {
+        let mut b = [0u8; KEY_BITMAP_BYTES];
+        assert!(!key_bit(&b, KEY_VOLUMEDOWN));
+        b[14] = 1 << 2; // 114 = 14 * 8 + 2
+        assert!(key_bit(&b, KEY_VOLUMEDOWN));
+        assert!(!key_bit(&b, KEY_VOLUMEUP) && !key_bit(&b, KEY_POWER));
+        assert!(!key_bit(&b, 1000)); // beyond the buffer
+        assert!(!key_bit(&[], 0));
+        b[95] = 0x80; // code 767
+        assert!(key_bit(&b, 767));
+        assert_eq!(EVIOCGKEY_96, (2 << 30) | (96 << 16) | (0x45 << 8) | 0x18);
+    }
+
+    #[test]
+    fn key_bitmap_from_plain_file() {
+        let p = crate::testutil::tmp().join("kpd");
+        let mut b = vec![0u8; KEY_BITMAP_BYTES];
+        b[14] = 4;
+        std::fs::write(&p, &b).unwrap();
+        let got = read_key_bitmap(&p).unwrap();
+        assert!(key_bit(&got, 114));
+        assert!(read_key_bitmap(&p.with_extension("none")).is_err());
     }
 
     #[test]
