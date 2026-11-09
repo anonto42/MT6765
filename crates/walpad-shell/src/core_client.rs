@@ -17,6 +17,8 @@ pub enum CoreEvent {
     Status(Box<Status>),
     /// A `wifi` event payload (scan results, connect result, disconnected).
     Wifi(Value),
+    /// A `notice` event payload ({"kind":"app_crashed","app":..,"name":..}).
+    Notice(Value),
     /// The response to a request we sent (handshake replies are not reported).
     Reply {
         id: u64,
@@ -123,7 +125,11 @@ impl CoreClient {
                 Ok(s) if s.set_nonblocking(true).is_ok() => {
                     self.stream = Some(s);
                     self.queue(1, "hello", json!({"client": "walpad-shell", "proto": 1}));
-                    self.queue(2, "subscribe", json!({"topics": ["status", "wifi"]}));
+                    self.queue(
+                        2,
+                        "subscribe",
+                        json!({"topics": ["status", "wifi", "notice"]}),
+                    );
                 }
                 _ => return out,
             }
@@ -172,6 +178,7 @@ impl CoreClient {
                     }
                 }
                 "wifi" => out.push(CoreEvent::Wifi(v["data"].clone())),
+                "notice" => out.push(CoreEvent::Notice(v["data"].clone())),
                 _ => {}
             }
         } else if v["id"] == 1 && v["ok"] == true {

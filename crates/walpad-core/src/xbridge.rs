@@ -71,6 +71,31 @@ pub fn parse_key_spec(spec: &str) -> Option<(Vec<u32>, u32)> {
     Some((m, keysym(key)?))
 }
 
+/// A top-level client window with the properties the process manager needs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XWindow {
+    pub id: Window,
+    /// WM_CLASS components (instance, class), as written by the client.
+    pub class: Vec<String>,
+    /// _NET_WM_PID, if the client sets it.
+    pub pid: Option<u32>,
+    /// WM_PROTOCOLS lists WM_DELETE_WINDOW.
+    pub deletable: bool,
+}
+
+/// apps.json `wm_class` matches a window when it equals the instance or class name (any case);
+/// longer needles (4+ chars) may also be a substring (e.g. "firefox" for "firefox-esr").
+pub fn class_matches(class: &[String], needle: &str) -> bool {
+    let n = needle.trim().to_ascii_lowercase();
+    if n.is_empty() {
+        return false;
+    }
+    class.iter().any(|c| {
+        let c = c.to_ascii_lowercase();
+        c == n || (n.len() >= 4 && c.contains(&n))
+    })
+}
+
 pub struct XBridge {
     conn: RustConnection<TimedStream>,
     root: Window,
@@ -297,6 +322,89 @@ impl XBridge {
         Ok(())
     }
 
+    /// Top-level client windows: _NET_CLIENT_LIST when the window manager provides it, else the
+    /// first three levels of the window tree.
+    fn client_windows(&self) -> R<Vec<Window>> {
+        let atom = self.atom("_NET_CLIENT_LIST")?;
+        let p = self
+            .conn
+            .get_property(false, self.root, atom, AtomEnum::WINDOW, 0, 4096)?
+            .reply()?;
+        if let Some(v) = p.value32() {
+            let l: Vec<Window> = v.collect();
+            if !l.is_empty() {
+                return Ok(l);
+            }
+        }
+        let mut out = Vec::new();
+        let mut level = vec![self.root];
+        for _ in 0..3 {
+            let mut next = Vec::new();
+            for w in level {
+                for c in self.conn.query_tree(w)?.reply()?.children {
+                    out.push(c);
+                    next.push(c);
+                }
+            }
+            level = next;
+        }
+        Ok(out)
+    }
+
+    /// Windows that have a WM_CLASS, with pid and close support.
+    pub fn windows(&self) -> R<Vec<XWindow>> {
+        let pid_atom = self.atom("_NET_WM_PID")?;
+        let proto = self.atom("WM_PROTOCOLS")?;
+        let del = self.atom("WM_DELETE_WINDOW")?;
+        let mut out = Vec::new();
+        for w in self.client_windows()? {
+            let Ok(c) =
+                self.conn
+                    .get_property(false, w, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 64)
+            else {
+                continue;
+            };
+            let Ok(c) = c.reply() else { continue };
+            if c.value.is_empty() {
+                continue;
+            }
+            let class = String::from_utf8_lossy(&c.value)
+                .split('\0')
+                .filter(|x| !x.is_empty())
+                .map(String::from)
+                .collect();
+            let pid = self
+                .conn
+                .get_property(false, w, pid_atom, AtomEnum::CARDINAL, 0, 1)?
+                .reply()?
+                .value32()
+                .and_then(|mut v| v.next());
+            let deletable = self
+                .conn
+                .get_property(false, w, proto, AtomEnum::ATOM, 0, 32)?
+                .reply()?
+                .value32()
+                .is_some_and(|mut v| v.any(|a| a == del));
+            out.push(XWindow {
+                id: w,
+                class,
+                pid,
+                deletable,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Ask a window to close (WM_PROTOCOLS / WM_DELETE_WINDOW ClientMessage, ICCCM 4.2.8.1).
+    pub fn close_window(&mut self, w: Window) -> R<()> {
+        let proto = self.atom("WM_PROTOCOLS")?;
+        let del = self.atom("WM_DELETE_WINDOW")?;
+        let ev = ClientMessageEvent::new(32, w, proto, [del, 0, 0, 0, 0]);
+        self.conn.send_event(false, w, EventMask::NO_EVENT, ev)?;
+        self.conn.flush()?;
+        Ok(())
+    }
+
     // ---- focus
     fn activate(&mut self, w: Window) -> R<()> {
         let atom = self.atom("_NET_ACTIVE_WINDOW")?;
@@ -317,8 +425,12 @@ impl XBridge {
     }
     /// Raise the first window whose WM_CLASS matches. Returns false if none exists.
     pub fn focus_class(&mut self, needle: &str) -> R<bool> {
-        match self.find_by_class(needle)?.first().copied() {
-            Some(w) => self.activate(w).map(|_| true),
+        let w = self
+            .windows()?
+            .into_iter()
+            .find(|w| class_matches(&w.class, needle));
+        match w {
+            Some(w) => self.activate(w.id).map(|_| true),
             None => Ok(false),
         }
     }
@@ -351,6 +463,19 @@ mod tests {
     use super::*;
     use std::process::{Child, Command, Stdio};
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn wm_class_matching() {
+        let c = |a: &str, b: &str| vec![a.to_string(), b.to_string()];
+        assert!(class_matches(&c("st", "St"), "st"));
+        assert!(
+            !class_matches(&c("Navigator", "firefox-esr"), "st"),
+            "short needles are exact"
+        );
+        assert!(class_matches(&c("Navigator", "Firefox-esr"), "firefox-esr"));
+        assert!(class_matches(&c("Navigator", "Firefox-esr"), "firefox"));
+        assert!(!class_matches(&c("a", "b"), ""));
+    }
 
     #[test]
     fn keysym_and_spec_parsing() {
