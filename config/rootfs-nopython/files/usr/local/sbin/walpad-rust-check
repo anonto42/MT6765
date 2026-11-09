@@ -1,0 +1,16 @@
+#!/bin/sh
+# walpad-rust-check   exit 0 if device, input and shell all resolve to rust, else print why
+# (one line) and exit 1.  This image has no second implementation to fall back to, so any answer
+# other than `rust` from walpad-runtime (not requested, binary missing, capability missing, fell
+# back this boot) means "unavailable".  The capability guard in walpad-runtime is used as is.
+RT=${WALPAD_RUNTIME:-walpad-runtime}
+for key in WALPAD_DEVICE WALPAD_INPUT WALPAD_SHELL; do
+  err=$($RT $key 2>&1 >/dev/null | tr '\n' ' ')
+  val=$($RT $key 2>/dev/null)
+  if [ "$val" != rust ]; then
+    [ -n "$err" ] || err="$key is not rust in runtime.conf"
+    echo "$key unavailable: $err"
+    exit 1
+  fi
+done
+exit 0

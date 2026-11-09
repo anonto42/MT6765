@@ -1,0 +1,4 @@
+[
+  {"id": "browser",  "name": "Browser",  "icon": "globe",    "exec": ["firefox-esr", "--new-instance", "about:blank"], "env": {}, "single_instance": true,  "wm_class": "firefox-esr"},
+  {"id": "terminal", "name": "Terminal", "icon": "terminal", "exec": ["st", "-f", "DejaVu Sans Mono:size=14"],          "env": {}, "single_instance": false, "wm_class": "st"}
+]

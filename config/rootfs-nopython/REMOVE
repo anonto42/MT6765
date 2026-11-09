@@ -1,0 +1,10 @@
+# Paths (relative to the image root) deleted from config/rootfs in the no-Python image.
+usr/local/bin/walpad-devd.py
+usr/local/bin/walpad-keys.py
+usr/local/bin/walpad-touchd.py
+usr/local/bin/walpad-launcher.py
+usr/local/bin/walpad-powermenu.py
+usr/local/bin/walpad-wifi-ui.py
+usr/local/bin/walpad-keys-action
+usr/local/bin/walpad-ctl
+usr/local/sbin/walpad-python-daemons
