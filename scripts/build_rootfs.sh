@@ -7,10 +7,23 @@
 # No arm64 emulation needed: apk installs foreign-arch packages into a directory with --no-scripts
 # (busybox applet links are created on the device by /sbin/walpad-init).  Heavy packages (X11,
 # Firefox, ...) are installed later on the device itself, once Wi-Fi works.
+# Reproducibility (card M9.3): the Alpine release is pinned in ONE place (ALPINE_REL below; it names both
+# the container image tag and the apk repository path).  Next to the image the build writes
+#   packages.txt      `apk info -v | sort` of the installed packages (name-version)
+#   files.txt         every path in the tree
+#   config-hashes.txt sha256 + mode + path of every file the repo owns (config/rootfs, the no-Python
+#                     overlay, tools/ binaries, Rust binaries), as installed in the image
+#   release.txt       release, container image digest, apk-tools version
+#   image.sha256      sha256 of rootfs.ext4 (informational: see docs/rust/reports/M9.1-M9.3.md)
+# Two clean builds with the same inputs give identical packages.txt and config-hashes.txt.  The
+# package versions themselves still move when Alpine publishes a point update inside the release.
+# tools/propshim (libwpdprops.so) is NOT an input of this image: it only serves the legacy SD-card
+# Wi-Fi flow, so it is not built here (see the report).
 # Everything runs inside an x86_64 Alpine container (files are root-owned there); the final image
 # is chowned back to the calling user.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+ALPINE_REL=3.24   # the only place that names the Alpine release (image tag + repository path)
 SIZE_MIB=${1:-auto}
 NO_PY=${WALPAD_NO_PYTHON:-0}
 case $NO_PY in 0|1) ;; *) echo "WALPAD_NO_PYTHON must be 0 or 1" >&2; exit 2;; esac
@@ -35,11 +48,19 @@ fi
 PKGS="$BASE_PKGS"; [ "${WALPAD_GUI:-1}" = "1" ] && PKGS="$BASE_PKGS $GUI_PKGS"
 [ -z "${WALPAD_PRINT_PKGS:-}" ] || { echo "$PKGS"; exit 0; }   # dry run for tests/shell/run.sh
 mkdir -p "$OUT"
+# host-built static tools that go into the image (gitignored binaries): build them if missing
+for t in dmlinear padui fbmirror; do
+  [ -x "tools/$t/$t" ] || { echo "building tools/$t"; bash "tools/$t/build.sh" >&2; }
+done
+ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || true)
+[ -n "$ALPINE_DIGEST" ] || { docker pull -q "alpine:$ALPINE_REL" >/dev/null; ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || echo unknown); }
 AUTH=""; [ -f "$HOME/.ssh/id_ed25519.pub" ] && AUTH="$(cat "$HOME/.ssh/id_ed25519.pub")"
 docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro \
-  -e NO_PY="$NO_PY" -e SIZE_MIB="$SIZE_MIB" -e PKGS="$PKGS" -e WALPAD_GUI="${WALPAD_GUI:-1}" -e AUTH="$AUTH" -e UID_="$(id -u)" -e GID_="$(id -g)" \
-  alpine:latest sh -euc '
-  REL=$(cut -d. -f1,2 /etc/alpine-release); R=https://dl-cdn.alpinelinux.org/alpine/v$REL
+  -e ALPINE_REL="$ALPINE_REL" -e ALPINE_DIGEST="$ALPINE_DIGEST" -e SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}" -e NO_PY="$NO_PY" -e SIZE_MIB="$SIZE_MIB" -e PKGS="$PKGS" -e WALPAD_GUI="${WALPAD_GUI:-1}" -e AUTH="$AUTH" -e UID_="$(id -u)" -e GID_="$(id -g)" \
+  "alpine:$ALPINE_REL" sh -euc '
+  REL=$(cut -d. -f1,2 /etc/alpine-release)
+  [ "$REL" = "$ALPINE_REL" ] || { echo "container is Alpine $REL, expected pinned $ALPINE_REL"; exit 1; }
+  R=https://dl-cdn.alpinelinux.org/alpine/v$REL
   rm -rf /out/root /out/rootfs.ext4; mkdir -p /out/root
   for try in 1 2 3 4 5 6; do
     apk add --root /out/root --arch aarch64 --initdb --no-scripts --keys-dir /usr/share/apk/keys/aarch64 \
@@ -48,7 +69,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
     [ $try = 6 ] && exit 1
   done
   printf "%s\n%s\n" "$R/main" "$R/community" > /out/root/etc/apk/repositories
-  echo "alpine v$REL aarch64" > /out/release.txt
+  { echo "alpine v$REL aarch64"; echo "image $ALPINE_DIGEST"; echo "apk-tools $(apk --version | cut -d" " -f2 | tr -d ,)"; } > /out/release.txt
   mkdir -p /out/root/sbin /out/root/root/.ssh /out/root/run /out/root/proc /out/root/sys /out/root/dev /out/root/tmp
   echo walpad > /out/root/etc/hostname
   printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /out/root/etc/resolv.conf
@@ -72,14 +93,27 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
     ! ls /out/root/usr/bin/python* /out/root/usr/bin/wish* > /dev/null 2>&1 || { echo "no-python build: python/tk binary present"; exit 1; }
     ! apk info --root /out/root 2>/dev/null | grep -E "^(python3|py3-|tk|tcl)" || { echo "no-python build: python/tk package installed"; exit 1; }
   fi
-  apk info --root /out/root -v 2>/dev/null | sort > /out/packages.txt || true
-  (cd /out/root && find . | sort) > /out/files.txt
+  apk info --root /out/root -v 2>/dev/null | LC_ALL=C sort > /out/packages.txt || true
+  [ -s /out/packages.txt ] || { echo "empty package manifest"; exit 1; }
+  (cd /out/root && find . | LC_ALL=C sort) > /out/files.txt
+  # sha256 + mode + path of everything the repo owns, as it ended up in the image (before the per-host ssh key)
+  { (cd /cfg && find . -type f); [ "$NO_PY" = 1 ] && (cd /cfg-np/files && find . -type f)
+    echo ./usr/local/bin/dmlinear; echo ./usr/local/bin/padui; echo ./usr/local/bin/fbmirror
+    [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl; do echo ./usr/local/lib/walpad/image/$b; done
+    true; } | LC_ALL=C sort -u | while read -r f; do
+      [ -f "/out/root/$f" ] || continue
+      echo "$(sha256sum "/out/root/$f" | cut -d" " -f1) $(stat -c %a "/out/root/$f") $f"
+    done > /out/config-hashes.txt
+  [ -s /out/config-hashes.txt ] || { echo "empty config hash listing"; exit 1; }
   [ -n "$AUTH" ] && { echo "$AUTH" > /out/root/root/.ssh/authorized_keys; chmod 700 /out/root/root; chmod 600 /out/root/root/.ssh/authorized_keys; }
   for try in 1 2 3 4 5; do apk add --no-cache e2fsprogs >/dev/null && break; sleep 10; done
   # 4.19 does not know the newest ext4 features (orphan_file, ...): keep to the classic set
   if [ "$SIZE_MIB" = "auto" ]; then USED=$(du -sm /out/root | cut -f1); SIZE_MIB=$(( USED * 13 / 10 + 400 )); [ $SIZE_MIB -lt 1536 ] && SIZE_MIB=1536; fi
-  mke2fs -q -t ext4 -b 4096 -L walpad-root -O ^orphan_file,^metadata_csum_seed -d /out/root /out/rootfs.ext4 ${SIZE_MIB}M
+  find /out/root -exec touch -h -d @$SOURCE_DATE_EPOCH {} +   # same mtimes in every build
+  # fixed UUID/hash seed/time: no random or wall-clock input of our own in the image
+  E2FSPROGS_FAKE_TIME=$SOURCE_DATE_EPOCH mke2fs -q -t ext4 -U 0f1e2d3c-4b5a-4968-8776-655443322110 -E hash_seed=0f1e2d3c-4b5a-4968-8776-655443322110  -b 4096 -L walpad-root -O ^orphan_file,^metadata_csum_seed -d /out/root /out/rootfs.ext4 ${SIZE_MIB}M
   echo "image size: ${SIZE_MIB} MiB"
   echo "files: $(du -sh /out/root | cut -f1)"
   chown -R $UID_:$GID_ /out'
-echo "built $OUT/rootfs.ext4 ($(cat "$OUT/release.txt"))"
+(cd "$OUT" && sha256sum rootfs.ext4 > image.sha256)
+echo "built $OUT/rootfs.ext4 ($(head -n 1 "$OUT/release.txt"))"

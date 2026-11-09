@@ -1,0 +1,42 @@
+#!/bin/sh
+# walpad-logcap   keep the log files on the rootfs from growing without bound (card M9.1).
+# Dependency-free busybox sh.  walpad-init runs it once at start and then from its own main loop
+# every WALPAD_LOGCAP_INTERVAL seconds (300); there is no separate daemon that could die silently.
+#
+# For every capped log larger than WALPAD_LOG_MAX bytes (default 262144):
+#   1. cp FILE FILE.1        previous generation, full copy (atomic mv), so nothing is lost for debugging
+#   2. tail -c KEEP of FILE.1 -> temp (the last WALPAD_LOG_KEEP bytes, default 65536; a cut first line is dropped)
+#   3. : > FILE              truncate IN PLACE (same inode, so the running writer keeps its descriptor)
+#   4. cat temp >> FILE      put the newest lines back
+# This is only correct because every writer opens its log with `>>` (O_APPEND): after the truncation
+# its next write lands at the new end of file, so no sparse hole appears.  walpad-init, walpad-session
+# and the daemon starter therefore all redirect with `>>`, and wpa_supplicant/padui append by themselves.
+# Race (accepted): lines written between step 1 and step 3 (a few ms) are in neither FILE.1 nor FILE;
+# a line written between step 3 and 4 ends up BEFORE the restored tail.  Worst case: a handful of lines.
+# Disk use per log is bounded by about 2 x MAX (+ what is written between runs).
+# Env: WALPAD_LOG_DIR (/var/log), WALPAD_LOG_MAX, WALPAD_LOG_KEEP.
+D=${WALPAD_LOG_DIR:-/var/log}
+MAX=${WALPAD_LOG_MAX:-262144}
+KEEP=${WALPAD_LOG_KEEP:-65536}
+case $MAX$KEEP in *[!0-9]*|'') echo "walpad-logcap: WALPAD_LOG_MAX/KEEP must be numbers" >&2; exit 2;; esac
+[ "$KEEP" -lt "$MAX" ] || KEEP=$((MAX / 4))
+
+cap() {
+  f=$1
+  [ -f "$f" ] || return 0
+  sz=$(wc -c < "$f" 2>/dev/null) || return 0
+  [ "${sz:-0}" -gt "$MAX" ] || return 0
+  cp "$f" "$f.1.tmp" 2>/dev/null && mv "$f.1.tmp" "$f.1" || { rm -f "$f.1.tmp"; return 0; }
+  tail -c "$KEEP" "$f.1" > "$f.cap.tmp" 2>/dev/null || { rm -f "$f.cap.tmp"; return 0; }
+  # the first line is usually cut in the middle: drop it when there is more than one line
+  if [ "$(wc -l < "$f.cap.tmp")" -gt 1 ]; then sed '1d' "$f.cap.tmp" > "$f.cap.tmp2" && mv "$f.cap.tmp2" "$f.cap.tmp"; fi
+  : > "$f"
+  cat "$f.cap.tmp" >> "$f"
+  rm -f "$f.cap.tmp" "$f.cap.tmp2"
+}
+
+for f in "$D"/walpad-*.log "$D"/Xvfb.log "$D"/fbmirror.log "$D"/openbox.log "$D"/padui.log \
+         "$D"/dropbear.log "$D"/wpa_supplicant.log; do
+  cap "$f"
+done
+exit 0

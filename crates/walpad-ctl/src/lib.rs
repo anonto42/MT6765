@@ -19,7 +19,9 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   wifi-scan                       scan and print the networks (waits for the result)
   wifi-connect <ssid> [--open]    join a network; the passphrase is read from stdin (never argv)
   wifi-saved | wifi-disconnect | wifi-forget <id>
-  power poweroff|reboot --yes     refuses without --yes";
+  power poweroff|reboot --yes     refuses without --yes
+  key-held <name|code>            volumedown|volumeup|power or 114|115|116; exit 0 held, 1 not held,
+                                  2 error/unknown device (never blocks, needs no core)";
 
 /// Translate CLI words into (cmd, args). Legacy syntax is kept as-is.
 pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
@@ -165,6 +167,25 @@ fn wifi_scan_text(data: &Value) -> String {
     out.trim_end().to_string()
 }
 
+/// `key-held <name|code>`: Ok(true) held, Ok(false) not held, Err = unknown key/device/read error.
+pub fn key_held(args: &[String], root: &Root) -> Result<bool, String> {
+    let k = args.get(1).ok_or_else(|| USAGE.to_string())?;
+    let code = walpad_hw::input::parse_key(k).ok_or_else(|| format!("unknown key {k:?}"))?;
+    walpad_hw::input::key_held(root, code)
+}
+
+/// Process exit status of `key-held`: 0 held, 1 not held, 2 error.
+pub fn key_held_status(args: &[String], root: &Root) -> i32 {
+    match key_held(args, root) {
+        Ok(true) => 0,
+        Ok(false) => 1,
+        Err(e) => {
+            eprintln!("{e}");
+            2
+        }
+    }
+}
+
 pub fn run(args: &[String], root: &Root) -> Result<String, String> {
     run_with_stdin(args, root, &mut std::io::stdin().lock())
 }
@@ -262,6 +283,30 @@ mod tests {
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn key_held_exit_status() {
+        let root = std::env::temp_dir().join(format!("walpad-ctl-key-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let r = Root::new(&root);
+        let a = s(&["key-held", "volumedown"]);
+        assert_eq!(key_held_status(&a, &r), 2); // no device
+        std::fs::create_dir_all(root.join("sys/class/input/input2/event1")).unwrap();
+        std::fs::write(root.join("sys/class/input/input2/name"), "mtk-kpd\n").unwrap();
+        std::fs::create_dir_all(root.join("dev/input")).unwrap();
+        std::fs::write(root.join("dev/input/event1"), vec![0u8; 96]).unwrap();
+        assert_eq!(key_held_status(&a, &r), 1);
+        let mut b = vec![0u8; 96];
+        b[14] = 4;
+        std::fs::write(root.join("dev/input/event1"), b).unwrap();
+        assert_eq!(key_held_status(&a, &r), 0);
+        assert_eq!(key_held_status(&s(&["key-held", "114"]), &r), 0);
+        assert_eq!(key_held_status(&s(&["key-held", "115"]), &r), 1); // same device, not held
+        assert_eq!(key_held_status(&s(&["key-held", "116"]), &r), 2); // no mtk-pmic-keys here
+        assert_eq!(key_held_status(&s(&["key-held", "bogus"]), &r), 2);
+        assert_eq!(key_held_status(&s(&["key-held"]), &r), 2);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

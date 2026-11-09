@@ -26,19 +26,19 @@ mkdir -p /tmp/.X11-unix; chmod 1777 /tmp/.X11-unix
 # in-memory framebuffer file and fbmirror copies it to /dev/fb0; touch is injected through XTEST.
 mkdir -p /run/walpad/xfb
 klog "starting Xvfb"
-Xvfb :0 -screen 0 1280x1280x24 -fbdir /run/walpad/xfb -nolisten tcp -ac > /var/log/Xvfb.log 2>&1 &
+Xvfb :0 -screen 0 1280x1280x24 -fbdir /run/walpad/xfb -nolisten tcp -ac >> /var/log/Xvfb.log 2>&1 &
 i=0; while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 40 ]; do sleep 1; i=$((i+1)); done
 [ -S /tmp/.X11-unix/X0 ] || rescue_and_idle "Xvfb did not start"
 klog "Xvfb is up"
 echo 0 > /run/walpad/orientation
-fbmirror /run/walpad/xfb/Xvfb_screen0 > /var/log/fbmirror.log 2>&1 &
+fbmirror /run/walpad/xfb/Xvfb_screen0 >> /var/log/fbmirror.log 2>&1 &
 xset s off; xset -dpms; xset s noblank
 xsetroot -solid '#0b0e16' 2>/dev/null
-openbox --config-file /etc/walpad/openbox-rc.xml > /var/log/openbox.log 2>&1 &
+openbox --config-file /etc/walpad/openbox-rc.xml >> /var/log/openbox.log 2>&1 &
 sleep 1
 # The shell runs in its own restart loop: a shell crash does not restart X or close apps.  3 exits
 # within 10 s in a row stop the loop and call walpad-rescue.
-walpad-supervise shell --require Xvfb --on-fallback "walpad-rescue walpad-shell exited 3 times within 10 s" -- walpad-shell > /var/log/walpad-shell.log 2>&1
+walpad-supervise shell --require Xvfb --on-fallback "walpad-rescue walpad-shell exited 3 times within 10 s" -- walpad-shell >> /var/log/walpad-shell.log 2>&1
 [ -d $RUN/rescue.d ] && rescue_and_idle "rescue already active: $(cat $RUN/rescue.d/reason 2>/dev/null)"
 if [ ! -f /run/walpad-ok ]; then
   # Xvfb died before the shell showed its first frame, or the ramdisk health check killed it at
