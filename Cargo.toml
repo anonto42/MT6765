@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["crates/walpad-proto", "crates/walpad-hw", "crates/walpad-core", "crates/walpad-ui", "crates/walpad-shell", "crates/walpad-ctl"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.release-dbg]
+inherits = "release"
+strip = false
+debug = "line-tables-only"

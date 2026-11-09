@@ -1,0 +1,231 @@
+use super::*;
+use serde_json::json;
+
+fn req(s: &str) -> Result<(u64, Command), Response> {
+    parse_request(s.as_bytes())
+}
+fn code(r: Result<(u64, Command), Response>) -> ErrorCode {
+    r.err()
+        .and_then(|e| e.error)
+        .map(|e| e.code)
+        .unwrap_or(ErrorCode::Internal)
+}
+
+#[test]
+fn parses_basic_commands() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"get_status"}"#).unwrap(),
+        (1, Command::GetStatus)
+    );
+    let (_, c) = req(r#"{"v":1,"id":7,"cmd":"set_brightness","args":{"value":180}}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::SetBrightness(BrightnessArgs {
+            value: Some(180),
+            delta: None
+        })
+    );
+    let (_, c) = req(r#"{"v":1,"id":2,"cmd":"rotate","args":{"mode":"90"}}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::Rotate {
+            mode: RotateMode::R90
+        }
+    );
+}
+
+#[test]
+fn rejects_invalid() {
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"set_brightness","args":{"value":300}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+    assert_eq!(
+        code(req(r#"{"v":1,"id":1,"cmd":"set_brightness"}"#)),
+        ErrorCode::InvalidArgs
+    );
+    assert_eq!(
+        code(req(r#"{"v":1,"id":1,"cmd":"rm_rf"}"#)),
+        ErrorCode::UnknownCommand
+    );
+    assert_eq!(
+        code(req(r#"{"v":2,"id":1,"cmd":"get_status"}"#)),
+        ErrorCode::Version
+    );
+    assert_eq!(code(req("not json")), ErrorCode::InvalidArgs);
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"launch","args":{"app":"x; reboot"}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"set_setting","args":{"key":"/etc/passwd","value":1}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"set_setting","args":{"key":"dim_after_s","value":-1}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"wifi_connect","args":{"ssid":"zz"}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+}
+
+#[test]
+fn power_defaults_to_unconfirmed() {
+    let (_, c) = req(r#"{"v":1,"id":1,"cmd":"power","args":{"action":"poweroff"}}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::Power {
+            action: PowerAction::Poweroff,
+            confirmed: false
+        }
+    );
+}
+
+#[test]
+fn unknown_fields_ignored() {
+    assert!(req(r#"{"v":1,"id":1,"cmd":"get_status","extra":5}"#).is_ok());
+}
+
+#[test]
+fn secret_is_redacted_everywhere() {
+    let (_, c) = req(r#"{"v":1,"id":1,"cmd":"wifi_connect","args":{"ssid":"486f6d65","secret":"hunter2hunter2"}}"#).unwrap();
+    let dbg = format!("{c:?}");
+    assert!(!dbg.contains("hunter2"), "{dbg}");
+    assert!(dbg.contains("***"));
+    assert_eq!(format!("{}", Secret::new("x")), "***");
+}
+
+#[test]
+fn wire_roundtrip_of_secret() {
+    let c = Command::WifiConnect {
+        ssid: Some("486f6d65".into()),
+        secret: Some(Secret::new("hunter2hunter2")),
+        saved_id: None,
+    };
+    let line = encode_line(&json!({"v":1,"id":3,"cmd":"wifi_connect","args":c_args(&c)}));
+    assert!(parse_request(&line[..line.len() - 1]).is_ok());
+}
+fn c_args(c: &Command) -> serde_json::Value {
+    serde_json::to_value(c).unwrap()["args"].clone()
+}
+
+#[test]
+fn decoder_splits_and_limits() {
+    let mut d = LineDecoder::new();
+    assert!(d.feed(b"{\"a\":").unwrap().is_empty());
+    assert_eq!(
+        d.feed(b"1}\n{\"b\":2}\n").unwrap(),
+        vec![b"{\"a\":1}".to_vec(), b"{\"b\":2}".to_vec()]
+    );
+    let big = vec![b'x'; MAX_LINE + 1];
+    assert_eq!(d.feed(&big), Err(LineError::TooLong));
+    let mut d = LineDecoder::new();
+    let ok = vec![b'x'; MAX_LINE];
+    assert!(d.feed(&ok).is_ok());
+}
+
+#[test]
+fn response_shapes() {
+    let r = Response::ok(7, json!({"brightness":180}));
+    assert_eq!(
+        serde_json::to_value(&r).unwrap(),
+        json!({"v":1,"id":7,"ok":true,"data":{"brightness":180}})
+    );
+    let e = Response::err(8, ErrorCode::InvalidArgs, "value must be 0-255");
+    assert_eq!(
+        serde_json::to_value(&e).unwrap(),
+        json!({"v":1,"id":8,"ok":false,"error":{"code":"invalid_args","msg":"value must be 0-255"}})
+    );
+}
+
+fn sample_status() -> Status {
+    Status {
+        battery: Battery {
+            percent: Some(62),
+            source: BatterySource::VoltageEstimate,
+            state: Some("Discharging".into()),
+            mv: Some(3920),
+            temp_c: Some(34.0),
+            low: false,
+        },
+        screen: ScreenState::On,
+        brightness: 180,
+        orientation: 0,
+        rotation_locked: false,
+        lid_closed: false,
+        wifi: WifiStatus {
+            radio: WifiRadio::Up,
+            state: Some("COMPLETED".into()),
+            ssid: Some("Home".into()),
+            ip: Some("192.168.0.100".into()),
+            signal_dbm: Some(-58),
+        },
+        apps: vec![AppState {
+            app: "browser".into(),
+            running: true,
+        }],
+        hardware: Hardware {
+            touch: "ok".into(),
+            gsensor: "ok".into(),
+            audio: "unverified".into(),
+            bluetooth: "unavailable".into(),
+            sd_card: "unavailable".into(),
+        },
+    }
+}
+
+#[test]
+fn unknown_battery_is_null() {
+    let mut s = sample_status();
+    s.battery = Battery {
+        percent: None,
+        source: BatterySource::Unknown,
+        state: None,
+        mv: None,
+        temp_c: None,
+        low: false,
+    };
+    let v = serde_json::to_value(&s).unwrap();
+    assert!(v["battery"]["percent"].is_null());
+    assert_eq!(v["battery"]["source"], "unknown");
+}
+
+#[test]
+fn legacy_status_has_old_field_set() {
+    let l = LegacyStatus::from_status(&sample_status(), 100, 12.5, "COMPLETED 192.168.0.100");
+    let v = serde_json::to_value(&l).unwrap();
+    let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "battery",
+            "brightness",
+            "lid_closed",
+            "low_battery",
+            "orientation",
+            "rotation_locked",
+            "screen",
+            "time",
+            "uptime_s",
+            "wifi"
+        ]
+    );
+    let mut bk: Vec<_> = v["battery"].as_object().unwrap().keys().cloned().collect();
+    bk.sort();
+    assert_eq!(bk, ["estimated", "mv", "percent", "status", "temp_dC"]);
+    assert_eq!(v["battery"]["temp_dC"], "340");
+    assert_eq!(v["wifi"], "COMPLETED 192.168.0.100");
+}

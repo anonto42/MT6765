@@ -1,0 +1,61 @@
+use crate::{sysfs::read_trim, Root};
+
+const PS: &str = "/sys/class/power_supply/battery";
+
+/// Raw power-supply readings; every field is None when unavailable.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RawBattery {
+    /// Gauge capacity as reported (the stock gauge reads -1).
+    pub capacity: Option<i32>,
+    pub status: Option<String>,
+    pub mv: Option<u32>,
+    /// Tenths of a degree C as reported.
+    pub temp_dc: Option<i32>,
+}
+
+pub fn read_battery(root: &Root) -> RawBattery {
+    let g = |n: &str| read_trim(root, &format!("{PS}/{n}"));
+    RawBattery {
+        capacity: g("capacity").and_then(|s| s.parse().ok()),
+        status: g("status"),
+        mv: g("voltage_now").and_then(|s| parse_voltage_mv(&s)),
+        temp_dc: g("temp").and_then(|s| s.parse().ok()),
+    }
+}
+
+/// voltage_now is in uV (divide by 1000 when above 100000), already mV otherwise.
+pub fn parse_voltage_mv(s: &str) -> Option<u32> {
+    let v: u64 = s.trim().parse().ok()?;
+    Some(if v > 100_000 {
+        (v / 1000) as u32
+    } else {
+        v as u32
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{put, tmp};
+
+    #[test]
+    fn voltage_units() {
+        assert_eq!(parse_voltage_mv("3920000"), Some(3920));
+        assert_eq!(parse_voltage_mv("3920"), Some(3920));
+        assert_eq!(parse_voltage_mv("x"), None);
+    }
+    #[test]
+    fn reads_tree_and_missing() {
+        let r = Root::new(tmp());
+        assert_eq!(read_battery(&r), RawBattery::default());
+        put(&r, &format!("{PS}/capacity"), "-1\n");
+        put(&r, &format!("{PS}/status"), "Discharging\n");
+        put(&r, &format!("{PS}/voltage_now"), "3880000\n");
+        put(&r, &format!("{PS}/temp"), "340\n");
+        let b = read_battery(&r);
+        assert_eq!(b.capacity, Some(-1));
+        assert_eq!(b.mv, Some(3880));
+        assert_eq!(b.temp_dc, Some(340));
+        assert_eq!(b.status.as_deref(), Some("Discharging"));
+    }
+}

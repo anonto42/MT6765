@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SIZE_MIB=${1:-auto}
-OUT=build/rootfs; mkdir -p "$OUT"
+OUT=${WALPAD_ROOTFS_OUT:-build/rootfs}; mkdir -p "$OUT"
 BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-utils libc-utils dropbear dropbear-ssh \
       wpa_supplicant iw wireless-regdb e2fsprogs e2fsprogs-extra util-linux-misc ca-certificates-bundle tzdata \
       iproute2 procps curl nano htop kbd"
@@ -19,7 +19,7 @@ GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xr
       python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr"
 PKGS="$BASE_PKGS"; [ "${WALPAD_GUI:-1}" = "1" ] && PKGS="$BASE_PKGS $GUI_PKGS"
 AUTH=""; [ -f "$HOME/.ssh/id_ed25519.pub" ] && AUTH="$(cat "$HOME/.ssh/id_ed25519.pub")"
-docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro \
+docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/build/rust/aarch64":/rust:ro \
   -e SIZE_MIB="$SIZE_MIB" -e PKGS="$PKGS" -e WALPAD_GUI="${WALPAD_GUI:-1}" -e AUTH="$AUTH" -e UID_="$(id -u)" -e GID_="$(id -g)" \
   alpine:latest sh -euc '
   REL=$(cut -d. -f1,2 /etc/alpine-release); R=https://dl-cdn.alpinelinux.org/alpine/v$REL
@@ -39,6 +39,15 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   install -m 755 /tools/dmlinear/dmlinear /out/root/usr/local/bin/dmlinear
   install -m 755 /tools/padui/padui /out/root/usr/local/bin/padui
   install -m 755 /tools/fbmirror/fbmirror /out/root/usr/local/bin/fbmirror
+  # Rust binaries (additions only; runtime.conf keeps Python as the default).  Skipped if not built.
+  if [ -f /rust/walpad-core ]; then
+    REL=/out/root/usr/local/lib/walpad/image
+    mkdir -p $REL && install -m 755 /rust/walpad-core /rust/walpad-shell /rust/walpad-ctl $REL/
+    ln -sfn image /out/root/usr/local/lib/walpad/current
+    ln -sfn ../lib/walpad/current/walpad-core /out/root/usr/local/bin/walpad-core
+    ln -sfn ../lib/walpad/current/walpad-shell /out/root/usr/local/bin/walpad-shell
+    ln -sfn ../lib/walpad/current/walpad-ctl /out/root/usr/local/bin/walpad-ctl-rs
+  fi
   chmod 755 /out/root/sbin/walpad-init /out/root/usr/local/sbin/* /out/root/usr/local/bin/*
   [ -n "$AUTH" ] && { echo "$AUTH" > /out/root/root/.ssh/authorized_keys; chmod 700 /out/root/root; chmod 600 /out/root/root/.ssh/authorized_keys; }
   for try in 1 2 3 4 5; do apk add --no-cache e2fsprogs >/dev/null && break; sleep 10; done
