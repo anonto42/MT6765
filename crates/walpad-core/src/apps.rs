@@ -310,7 +310,13 @@ mod tests {
 
     #[test]
     fn loads_filters_and_reports_installed_only() {
-        let r = root_with(JSON, &["sleep"]);
+        // The child ignores SIGTERM, so it is still alive while "closing" (a plain `sleep` can die
+        // in milliseconds and make the Closing assertion below race); SIGKILL ends it after the grace period.
+        let json = JSON.replace(
+            r#"["sleep","30"]"#,
+            r#"["sh","-c","trap '' TERM; exec sleep 30"]"#,
+        );
+        let r = root_with(&json, &["sh"]);
         let mut a = Apps::load(&r);
         assert!(a.def("noexec").is_none() && a.def("").is_none());
         let st = a.status(&r);
