@@ -62,7 +62,25 @@ pub enum Overlay {
         poweroff: bool,
         armed_until: Option<u64>,
     },
+    /// The power menu (long power press / Settings): `focus` is the hardware-key focus, `armed`
+    /// the Restart/Shut down item whose first tap happened and when that arming ends, `until`
+    /// when the sheet closes itself.
+    PowerMenu {
+        focus: usize,
+        armed: Option<(usize, u64)>,
+        until: u64,
+    },
 }
+
+/// Items of the power menu: (label, needs two taps).
+pub const POWER_ITEMS: [(&str, bool); 4] = [
+    ("Screen off", false),
+    ("Restart", true),
+    ("Shut down", true),
+    ("Cancel", false),
+];
+/// Index of Cancel: the focus when the menu opens.
+pub const POWER_CANCEL: usize = 3;
 
 const SHEET_W: i32 = 800;
 pub const PASSWORD_SHEET_H: i32 = 524;
@@ -249,6 +267,20 @@ pub fn render_power_confirm(
         (cancel, Target::DialogCancel),
         (confirm, Target::DialogConfirm),
     ]
+}
+
+pub fn render_power_menu(
+    p: &mut Painter,
+    frame: &Frame,
+    focus: usize,
+    armed: Option<usize>,
+) -> Vec<(Rect, Target)> {
+    let screen = Rect::new(0, 0, frame.w, frame.h);
+    p.power_menu(screen, &POWER_ITEMS, focus, armed)
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (r, Target::PowerItem(i)))
+        .collect()
 }
 
 /// Key index -> key for the current keyboard (same geometry the renderer uses).

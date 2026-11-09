@@ -1,11 +1,11 @@
-//! Client for walpad-core's control socket: non-blocking, subscribes to status and wifi events,
+//! Client for walpad-core's control socket: non-blocking, subscribes to status, wifi and input events,
 //! reconnects every 2 s when the core is not there (it restarts independently of X).
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use walpad_proto::{encode_line, LineDecoder, Status};
+use walpad_proto::{encode_line, LineDecoder, ShellInput, Status};
 
 const RETRY_EVERY: Duration = Duration::from_secs(2);
 const MAX_OUT: usize = 64 * 1024;
@@ -19,6 +19,8 @@ pub enum CoreEvent {
     Wifi(Value),
     /// A `notice` event payload ({"kind":"app_crashed","app":..,"name":..}).
     Notice(Value),
+    /// A hardware-key event for the shell (`input` topic): long power press, volume keys, power.
+    Input(ShellInput),
     /// The response to a request we sent (handshake replies are not reported).
     Reply {
         id: u64,
@@ -128,7 +130,7 @@ impl CoreClient {
                     self.queue(
                         2,
                         "subscribe",
-                        json!({"topics": ["status", "wifi", "notice"]}),
+                        json!({"topics": ["status", "wifi", "notice", "input"]}),
                     );
                 }
                 _ => return out,
@@ -179,6 +181,11 @@ impl CoreClient {
                 }
                 "wifi" => out.push(CoreEvent::Wifi(v["data"].clone())),
                 "notice" => out.push(CoreEvent::Notice(v["data"].clone())),
+                "input" => {
+                    if let Ok(k) = serde_json::from_value::<ShellInput>(v["data"].clone()) {
+                        out.push(CoreEvent::Input(k));
+                    }
+                }
                 _ => {}
             }
         } else if v["id"] == 1 && v["ok"] == true {

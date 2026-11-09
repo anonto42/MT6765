@@ -10,8 +10,8 @@ mod status;
 
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
-    BrightnessArgs, Command, KeyboardMode, PowerAction, RawRequest, RotateMode, ScreenMode, Topic,
-    ALLOWED_SETTINGS, COMMAND_NAMES,
+    BrightnessArgs, Command, KeyboardMode, PowerAction, RawRequest, RotateMode, ScreenMode,
+    ShellInput, Topic, ALLOWED_SETTINGS, COMMAND_NAMES,
 };
 pub use devd::parse_devd_line;
 pub use secret::{redact_hex_ssid, Secret};

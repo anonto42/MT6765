@@ -104,8 +104,10 @@ mod tests {
     use super::*;
 
     fn root_with(files: &[(&str, &str)]) -> Root {
-        let d =
-            std::env::temp_dir().join(format!("walpad-cfg-{}-{}", std::process::id(), files.len()));
+        // tests run in parallel: every call gets its own directory
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let d = std::env::temp_dir().join(format!("walpad-cfg-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("etc/walpad")).unwrap();
         for (n, c) in files {

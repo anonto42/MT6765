@@ -12,7 +12,7 @@ use crate::settings_screen::{self, Page, SysInfo};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use walpad_hw::Root;
-use walpad_proto::{Secret, Status};
+use walpad_proto::{Secret, ShellInput, Status};
 use walpad_ui::components::{Key, KeyboardLayer, Painter, Tab, Tone};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
@@ -22,6 +22,8 @@ pub type Ms = u64;
 
 const TOAST_MS: Ms = 3000;
 const POWER_ARM_MS: Ms = 3000;
+/// The power menu closes itself this long after it opened.
+const POWER_MENU_MS: Ms = 20_000;
 const SPIN_EVERY_MS: Ms = 100;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,6 +165,8 @@ pub enum Target {
     RestartShell,
     Reboot,
     Shutdown,
+    /// Settings > Maintenance: open the power menu.
+    PowerMenu,
     // overlays
     Eye,
     Key(usize),
@@ -172,6 +176,8 @@ pub enum Target {
     PinToggle,
     DialogCancel,
     DialogConfirm,
+    /// Power menu item (index into `overlay::POWER_ITEMS`).
+    PowerItem(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,6 +207,9 @@ pub enum Cmd {
     Power {
         poweroff: bool,
     },
+    /// Tell the core the power menu opened/closed (it routes the volume and power keys to us
+    /// while it is open).
+    PowerMenuState(bool),
 }
 
 /// What a request was for, to interpret its reply.
@@ -254,6 +263,7 @@ impl Cmd {
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
+            Cmd::PowerMenuState(open) => ("power_menu", json!({"open": open})),
             Cmd::Power { poweroff } => (
                 "power",
                 json!({"action": if *poweroff { "poweroff" } else { "reboot" }, "confirmed": true}),
@@ -342,6 +352,7 @@ impl Model {
     fn armed_until(&self) -> Option<Ms> {
         match &self.overlay {
             Some(Overlay::PowerConfirm { armed_until, .. }) => *armed_until,
+            Some(Overlay::PowerMenu { armed, .. }) => armed.map(|(_, t)| t),
             _ => None,
         }
     }
@@ -386,6 +397,8 @@ pub struct App {
     last_spin: Ms,
     pending: HashMap<u64, Purpose>,
     now: Ms,
+    /// Commands produced by time (tick), drained by the event loop with `take_cmds`.
+    queued: Vec<Cmd>,
 }
 
 fn native_brightness(v: f32) -> u8 {
@@ -417,6 +430,7 @@ impl App {
             last_spin: 0,
             pending: HashMap::new(),
             now: 0,
+            queued: Vec::new(),
         };
         a.rebuild_tiles();
         a
@@ -539,6 +553,9 @@ impl App {
                     s.connecting = false;
                 }
                 self.pending.clear();
+                if matches!(self.model.overlay, Some(Overlay::PowerMenu { .. })) {
+                    self.model.overlay = None;
+                }
                 self.rebuild_tiles();
                 out.dirty = true;
             }
@@ -556,6 +573,7 @@ impl App {
                     out.dirty = true;
                 }
             }
+            CoreEvent::Input(k) => self.on_hw_key(*k, &mut out),
             CoreEvent::Reply {
                 id,
                 ok,
@@ -709,9 +727,15 @@ impl App {
             dirty = true;
         }
         if self.armed_until().is_some_and(|t| now >= t) {
-            if let Some(Overlay::PowerConfirm { armed_until, .. }) = &mut self.model.overlay {
-                *armed_until = None;
+            match &mut self.model.overlay {
+                Some(Overlay::PowerConfirm { armed_until, .. }) => *armed_until = None,
+                Some(Overlay::PowerMenu { armed, .. }) => *armed = None,
+                _ => {}
             }
+            dirty = true;
+        }
+        if matches!(&self.model.overlay, Some(Overlay::PowerMenu { until, .. }) if now >= *until) {
+            self.close_power_menu();
             dirty = true;
         }
         if self.model.spinning() && now.saturating_sub(self.last_spin) >= SPIN_EVERY_MS {
@@ -729,7 +753,11 @@ impl App {
             .spinning()
             .then_some(self.last_spin + SPIN_EVERY_MS);
         let toast = self.model.toast.as_ref().map(|t| t.until);
-        [spin, toast, self.armed_until()]
+        let menu = match &self.model.overlay {
+            Some(Overlay::PowerMenu { until, .. }) => Some(*until),
+            _ => None,
+        };
+        [spin, toast, self.armed_until(), menu]
             .into_iter()
             .flatten()
             .min()
@@ -1027,6 +1055,8 @@ impl App {
                     armed_until: None,
                 })
             }
+            Target::PowerMenu => self.open_power_menu(out),
+            Target::PowerItem(i) => self.power_item(i, out),
             // ---- overlays
             Target::SheetCancel => self.close_overlay(),
             Target::DialogCancel => self.close_overlay(),
@@ -1093,7 +1123,87 @@ impl App {
         }
     }
 
+    /// Commands the clock produced (the power menu closing itself); the loop sends them.
+    pub fn take_cmds(&mut self) -> Vec<Cmd> {
+        std::mem::take(&mut self.queued)
+    }
+
+    /// Open the power menu with Cancel focused and tell the core to route the hardware keys here.
+    fn open_power_menu(&mut self, out: &mut Outcome) {
+        if !self.model.connected {
+            return;
+        }
+        self.close_overlay();
+        self.model.overlay = Some(Overlay::PowerMenu {
+            focus: overlay::POWER_CANCEL,
+            armed: None,
+            until: self.now + POWER_MENU_MS,
+        });
+        out.cmd(Cmd::PowerMenuState(true));
+        out.dirty = true;
+    }
+
+    /// Close the menu from the clock (no `Outcome` to put the command in).
+    fn close_power_menu(&mut self) {
+        if matches!(self.model.overlay, Some(Overlay::PowerMenu { .. })) {
+            self.model.overlay = None;
+            self.queued.push(Cmd::PowerMenuState(false));
+        }
+    }
+
+    /// Hardware keys from the core: only the power menu uses them.
+    fn on_hw_key(&mut self, k: ShellInput, out: &mut Outcome) {
+        if k == ShellInput::PowerMenuOpen {
+            if !matches!(self.model.overlay, Some(Overlay::PowerMenu { .. })) {
+                self.open_power_menu(out);
+            }
+            return;
+        }
+        let Some(Overlay::PowerMenu { focus, .. }) = &mut self.model.overlay else {
+            return;
+        };
+        let n = overlay::POWER_ITEMS.len();
+        match k {
+            ShellInput::VolumeDown => *focus = (*focus + 1) % n,
+            ShellInput::VolumeUp => *focus = (*focus + n - 1) % n,
+            ShellInput::PowerShort => {
+                let i = *focus;
+                self.power_item(i, out);
+            }
+            ShellInput::PowerMenuOpen => {}
+        }
+        out.dirty = true;
+    }
+
+    /// Activate a power menu item: Screen off and Cancel act at once, Restart and Shut down need
+    /// a second tap within 3 s.
+    fn power_item(&mut self, i: usize, out: &mut Outcome) {
+        let Some(Overlay::PowerMenu { focus, armed, .. }) = &mut self.model.overlay else {
+            return;
+        };
+        let Some((_, two_step)) = overlay::POWER_ITEMS.get(i).copied() else {
+            return;
+        };
+        *focus = i;
+        out.dirty = true;
+        if two_step && !armed.is_some_and(|(a, t)| a == i && self.now < t) {
+            *armed = Some((i, self.now + POWER_ARM_MS));
+            return;
+        }
+        self.model.overlay = None;
+        out.cmd(Cmd::PowerMenuState(false));
+        match i {
+            0 if self.model.connected => out.cmd(Cmd::ScreenOff),
+            1 | 2 if self.model.connected => out.cmd(Cmd::Power { poweroff: i == 2 }),
+            _ => {}
+        }
+    }
+
     fn close_overlay(&mut self) {
+        if matches!(self.model.overlay, Some(Overlay::PowerMenu { .. })) {
+            self.close_power_menu();
+            return;
+        }
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
             s.secret.clear();
         }
@@ -1246,6 +1356,9 @@ impl App {
                 poweroff,
                 armed_until,
             }) => overlay::render_power_confirm(p, &self.frame, *poweroff, armed_until.is_some()),
+            Some(Overlay::PowerMenu { focus, armed, .. }) => {
+                overlay::render_power_menu(p, &self.frame, *focus, armed.map(|(i, _)| i))
+            }
             None => Vec::new(),
         };
         if let Some(t) = &self.model.toast {

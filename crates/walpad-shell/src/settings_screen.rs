@@ -272,6 +272,11 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
         Page::Maintenance => vec![
             Row::Link("View logs", Page::Logs),
             Row::Action {
+                label: "Power menu",
+                target: Target::PowerMenu,
+                danger: false,
+            },
+            Row::Action {
                 label: "Restart shell",
                 target: Target::RestartShell,
                 danger: false,
@@ -651,6 +656,7 @@ mod tests {
         assert_eq!(
             acts,
             [
+                ("Power menu", false),
                 ("Restart shell", false),
                 ("Restart tablet", true),
                 ("Shut down", true)

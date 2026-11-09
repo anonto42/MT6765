@@ -240,3 +240,130 @@ fn touch_drives_the_x_pointer_in_every_orientation() {
         });
     }
 }
+
+/// A shell-like client: hello + subscribe(input); `next_input` returns the next `input` event.
+struct ShellClient {
+    w: UnixStream,
+    r: BufReader<UnixStream>,
+}
+impl ShellClient {
+    fn connect(root: &Path) -> ShellClient {
+        let s = UnixStream::connect(root.join("run/walpad/control.sock")).unwrap();
+        s.set_read_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
+        let mut c = ShellClient {
+            w: s.try_clone().unwrap(),
+            r: BufReader::new(s),
+        };
+        c.send(1, "hello", json!({"client": "t", "proto": 1}));
+        c.send(2, "subscribe", json!({"topics": ["input"]}));
+        c
+    }
+    fn send(&mut self, id: u64, cmd: &str, args: Value) {
+        writeln!(self.w, "{}", json!({"v":1,"id":id,"cmd":cmd,"args":args})).unwrap();
+    }
+    /// Next `input` event payload within `secs`, skipping responses.
+    fn next_input(&mut self, secs: u64) -> Option<Value> {
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(secs) {
+            let mut l = String::new();
+            if self.r.read_line(&mut l).is_ok() && !l.is_empty() {
+                let v: Value = serde_json::from_str(&l).unwrap();
+                if v["event"] == "input" {
+                    return Some(v["data"].clone());
+                }
+            }
+        }
+        None
+    }
+}
+
+fn append_events(root: &Path, n: u32, evs: &[InputEvent]) {
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(root.join(format!("dev/input/event{n}")))
+        .unwrap();
+    f.write_all(&evs.iter().flat_map(|e| e.to_bytes()).collect::<Vec<u8>>())
+        .unwrap();
+}
+
+#[test]
+fn long_power_opens_the_shell_menu_and_the_keys_are_routed_to_the_shell() {
+    let root = tmp("shellmenu");
+    fake::populate(&root).unwrap();
+    put_device(&root, 1, "mtk-kpd", &[]);
+    put_device(&root, 2, "mtk-pmic-keys", &[]);
+    let mut d = Daemon::new(Root::new(&root)).unwrap();
+    d.enable_live(true, true);
+    let _r = Running::start(d);
+    let mut shell = ShellClient::connect(&root);
+    std::thread::sleep(Duration::from_millis(300));
+
+    // hold power for 1.3 s (the core's clock is real time): the shell is told to open the menu
+    append_events(&root, 2, &[ev(EV_KEY, KEY_POWER, 1)]);
+    std::thread::sleep(Duration::from_millis(1300));
+    append_events(&root, 2, &[ev(EV_KEY, KEY_POWER, 0)]);
+    assert_eq!(
+        shell.next_input(3),
+        Some(json!({"kind": "power_menu_open"}))
+    );
+
+    // while the menu is open volume down / up and a short power press reach the shell
+    append_events(
+        &root,
+        1,
+        &[ev(EV_KEY, KEY_VOLUMEDOWN, 1), ev(EV_KEY, KEY_VOLUMEDOWN, 0)],
+    );
+    assert_eq!(shell.next_input(3), Some(json!({"kind": "volume_down"})));
+    append_events(
+        &root,
+        1,
+        &[ev(EV_KEY, KEY_VOLUMEUP, 1), ev(EV_KEY, KEY_VOLUMEUP, 0)],
+    );
+    assert_eq!(shell.next_input(3), Some(json!({"kind": "volume_up"})));
+    append_events(
+        &root,
+        2,
+        &[ev(EV_KEY, KEY_POWER, 1), ev(EV_KEY, KEY_POWER, 0)],
+    );
+    assert_eq!(shell.next_input(3), Some(json!({"kind": "power_short"})));
+    // a short power press while the menu is open must not toggle the screen
+    assert_eq!(
+        read(&root, "sys/class/leds/lcd-backlight/brightness"),
+        "120"
+    );
+
+    // the shell closes its menu: volume keys are ordinary again (no input event)
+    shell.send(3, "power_menu", json!({"open": false}));
+    std::thread::sleep(Duration::from_millis(300));
+    append_events(
+        &root,
+        1,
+        &[ev(EV_KEY, KEY_VOLUMEUP, 1), ev(EV_KEY, KEY_VOLUMEUP, 0)],
+    );
+    assert_eq!(shell.next_input(1), None);
+}
+
+#[test]
+fn without_a_subscribed_shell_the_old_menu_path_is_used() {
+    // no shell client: the long press must not publish anything and must not panic; the Tk menu
+    // is spawned (walpad-powermenu.py does not exist in the test environment: logged and ignored)
+    let root = tmp("nomenu");
+    fake::populate(&root).unwrap();
+    put_device(&root, 2, "mtk-pmic-keys", &[]);
+    let mut d = Daemon::new(Root::new(&root)).unwrap();
+    d.enable_live(true, true);
+    let _r = Running::start(d);
+    std::thread::sleep(Duration::from_millis(300));
+    append_events(&root, 2, &[ev(EV_KEY, KEY_POWER, 1)]);
+    std::thread::sleep(Duration::from_millis(1300));
+    append_events(&root, 2, &[ev(EV_KEY, KEY_POWER, 0)]);
+    std::thread::sleep(Duration::from_millis(300));
+    // a late subscriber sees no replayed event and the screen is still on
+    let mut late = ShellClient::connect(&root);
+    assert_eq!(late.next_input(1), None);
+    assert_eq!(
+        read(&root, "sys/class/leds/lcd-backlight/brightness"),
+        "120"
+    );
+}

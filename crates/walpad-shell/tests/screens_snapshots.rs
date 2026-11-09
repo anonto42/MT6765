@@ -356,3 +356,18 @@ fn power_confirm_dialogs() {
     });
     shot("power_confirm_restart", 800, 1280, &mut a);
 }
+
+#[test]
+fn power_menu_snapshots() {
+    use walpad_proto::ShellInput;
+    for (w, h, tag) in [(800, 1280, "portrait"), (1280, 800, "landscape")] {
+        // opened by a long power press: Cancel is focused
+        let mut a = app(w, h, Tab::Settings, true);
+        a.on_core(&CoreEvent::Input(ShellInput::PowerMenuOpen), 1000);
+        shot(&format!("power_menu_cancel_{tag}"), w, h, &mut a);
+        // volume up -> Shut down focused, short power press -> armed ("Tap again to shut down")
+        a.on_core(&CoreEvent::Input(ShellInput::VolumeUp), 1100);
+        a.on_core(&CoreEvent::Input(ShellInput::PowerShort), 1200);
+        shot(&format!("power_menu_shutdown_armed_{tag}"), w, h, &mut a);
+    }
+}

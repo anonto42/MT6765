@@ -7,6 +7,7 @@ pub mod apps_screen;
 pub mod config;
 pub mod core_client;
 pub mod device_screen;
+pub mod dock;
 pub mod gesture;
 pub mod home;
 pub mod network;

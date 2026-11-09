@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 use walpad_hw::{battery::read_battery, gsensor::read_gsensor, input, sysfs, Root};
 use walpad_proto::{
     encode_line, parse_devd_line, parse_request, Command, ErrorCode, Event, Hardware, KeyboardMode,
-    LegacyStatus, LineDecoder, PowerAction, Response, Status, Topic, WifiRadio, WifiStatus,
-    PROTO_VERSION,
+    LegacyStatus, LineDecoder, PowerAction, Response, ShellInput, Status, Topic, WifiRadio,
+    WifiStatus, PROTO_VERSION,
 };
 
 const STATUS_EVERY: Duration = Duration::from_secs(2);
@@ -29,6 +29,9 @@ const X_PING_EVERY: Duration = Duration::from_secs(5);
 const APPS_X_EVERY: Duration = Duration::from_millis(700);
 const MAX_OUT: usize = 256 * 1024;
 const KEYBOARD_DOCK_DELAY_MS: u64 = 1500;
+/// Safety net: the shell closes its power menu after 20 s and says so (`power_menu` closed); if it
+/// never does (crash), the core stops routing keys to it after this long.
+const SHELL_MENU_MAX_MS: u64 = 25_000;
 
 type CmdResult = Result<Value, (ErrorCode, String)>;
 
@@ -106,6 +109,8 @@ pub struct Daemon {
     apps_x_at: Instant,
     ext_close: Vec<ExtClose>,
     close_grace: Duration,
+    /// Until when (ms) the shell's power menu owns the volume and power keys.
+    shell_menu_until: Option<u64>,
 }
 
 /// Close app for an app we did not start: WM_DELETE_WINDOW sent, SIGTERM of its pid at `deadline`
@@ -204,6 +209,7 @@ impl Daemon {
             apps_x_at: now,
             ext_close: Vec::new(),
             close_grace: Duration::from_secs(3),
+            shell_menu_until: None,
             root,
         };
         // orientation is 0 at startup and the file is always written (struts need X: later)
@@ -601,6 +607,41 @@ impl Daemon {
         Ok(json!({"key": key, "value": value}))
     }
 
+    /// A shell client has subscribed to the `input` topic.
+    fn shell_listening(&self) -> bool {
+        self.clients
+            .iter()
+            .any(|c| c.hello && c.topics.contains(&Topic::Input))
+    }
+
+    /// The shell's power menu is open (it told us, or we opened it, and it is not stale).
+    fn shell_menu_active(&self) -> bool {
+        self.shell_menu_until.is_some_and(|t| self.now_ms() < t) && self.shell_listening()
+    }
+
+    fn publish_input(&mut self, k: ShellInput) {
+        let ev = encode_line(&Event::new(
+            "input",
+            serde_json::to_value(k).unwrap_or_default(),
+        ));
+        for c in &mut self.clients {
+            if c.hello && c.topics.contains(&Topic::Input) {
+                c.queue(ev.clone());
+            }
+        }
+    }
+
+    /// Long power press / `powermenu` key action: the shell draws the menu when it listens for
+    /// hardware keys, otherwise the Tk fallback runs.
+    fn open_power_menu(&mut self) {
+        if self.shell_listening() {
+            self.shell_menu_until = Some(self.now_ms() + SHELL_MENU_MAX_MS);
+            self.publish_input(ShellInput::PowerMenuOpen);
+        } else {
+            self.spawn_simple("walpad-powermenu.py", &[]);
+        }
+    }
+
     fn run_action(&mut self, a: Action) {
         match a {
             Action::None => {}
@@ -636,7 +677,7 @@ impl Daemon {
             Action::Keyboard => {
                 self.keyboard(KeyboardMode::Toggle);
             }
-            Action::PowerMenu => self.spawn_simple("walpad-powermenu.py", &[]),
+            Action::PowerMenu => self.open_power_menu(),
             Action::Screenshot => {
                 if let Err((_, m)) = self.screenshot() {
                     eprintln!("walpad-core: {m}");
@@ -684,10 +725,15 @@ impl Daemon {
                 Effect::KeyboardDock(o) => {
                     self.x_try(|b| b.dock_keyboard(o).map(|_| ()));
                 }
-                Effect::PowerMenuOpen => self.spawn_simple("walpad-powermenu.py", &[]),
+                Effect::PowerMenuOpen => self.open_power_menu(),
                 Effect::PowerMenuActivate => {
-                    self.x_try(|b| b.send_key("Return"));
+                    if self.shell_menu_active() {
+                        self.publish_input(ShellInput::PowerShort);
+                    } else {
+                        self.x_try(|b| b.send_key("Return"));
+                    }
                 }
+                Effect::ShellKey(k) => self.publish_input(k),
                 Effect::Cover(c) => {
                     eprintln!("walpad-core: cover {}", if c { "closed" } else { "open" })
                 }
@@ -835,6 +881,10 @@ impl Daemon {
             }
             Command::WifiDisconnect => self.wifi.disconnect().map(|_| json!({})).map_err(wifi_err),
             Command::WifiForget { saved_id } => self.wifi.forget(saved_id).map(|_| json!({})).map_err(wifi_err),
+            Command::PowerMenu { open } => {
+                self.shell_menu_until = open.then(|| now + SHELL_MENU_MAX_MS);
+                Ok(json!({"open": open}))
+            }
             Command::Hello { .. } | Command::Subscribe { .. } => Ok(json!({})),
         }
     }
@@ -931,7 +981,9 @@ impl Daemon {
     /// Feed real input and timers to the Brain and execute what it decides (live mode).
     fn pump_live(&mut self) {
         let now = self.now_ms();
-        self.brain.menu_open = self.root.p("/run/walpad/powermenu-open").exists();
+        let shell_menu = self.shell_menu_active();
+        self.brain.shell_keys = shell_menu;
+        self.brain.menu_open = shell_menu || self.root.p("/run/walpad/powermenu-open").exists();
         let evs = match self.live.as_mut() {
             Some(l) => l.inputs.poll(&self.root),
             None => return,

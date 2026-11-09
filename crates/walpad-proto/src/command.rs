@@ -22,6 +22,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "restart_shell",
     "screenshot",
     "set_setting",
+    "power_menu",
 ];
 
 /// Commands without arguments.
@@ -165,6 +166,23 @@ pub enum Command {
         key: String,
         value: Value,
     },
+    /// The shell tells the core its power menu opened or closed (the core routes the volume and
+    /// power keys to the shell while it is open). `open: true` from a client also opens it.
+    PowerMenu {
+        open: bool,
+    },
+}
+
+/// Hardware-key events published on the `input` topic for the shell (never touch).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ShellInput {
+    /// Long power press: open the power menu.
+    PowerMenuOpen,
+    VolumeUp,
+    VolumeDown,
+    /// Short power press while the power menu is open: activate the focused item.
+    PowerShort,
 }
 
 impl Command {
