@@ -29,10 +29,21 @@ fn main() {
             }
         }
     }
+    let mut _fake_supplicant = None;
     if args.iter().any(|a| a == "--fake") {
         if let Err(e) = fake::populate(root.base()) {
             eprintln!("walpad-core: cannot populate fake root: {e}");
             std::process::exit(1);
+        }
+        let conf = root.p("/etc/wpa_supplicant/wpa_supplicant.conf");
+        let _ = std::fs::create_dir_all(root.p("/etc/wpa_supplicant"));
+        match walpad_core::wpa::fake::spawn(
+            root.base(),
+            walpad_core::wpa::fake::default_aps(),
+            Some(conf),
+        ) {
+            Ok(s) => _fake_supplicant = Some(s),
+            Err(e) => eprintln!("walpad-core: fake supplicant unavailable: {e}"),
         }
     }
     let conf_path = root.p("/etc/walpad/runtime.conf");

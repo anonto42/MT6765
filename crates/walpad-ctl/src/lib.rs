@@ -16,7 +16,9 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   keyboard [show|hide|toggle]
   home | screenshot | restart-shell
   launch <app-id>
-  wifi-scan | wifi-saved | wifi-disconnect | wifi-forget <id>
+  wifi-scan                       scan and print the networks (waits for the result)
+  wifi-connect <ssid> [--open]    join a network; the passphrase is read from stdin (never argv)
+  wifi-saved | wifi-disconnect | wifi-forget <id>
   power poweroff|reboot --yes     refuses without --yes";
 
 /// Translate CLI words into (cmd, args). Legacy syntax is kept as-is.
@@ -50,7 +52,6 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
         Some("screenshot") => ("screenshot".into(), Value::Null),
         Some("restart-shell") => ("restart_shell".into(), Value::Null),
         Some("launch") => ("launch".into(), json!({"app": need(1)?})),
-        Some("wifi-scan") => ("wifi_scan".into(), Value::Null),
         Some("wifi-saved") => ("wifi_list_saved".into(), Value::Null),
         Some("wifi-disconnect") => ("wifi_disconnect".into(), Value::Null),
         Some("wifi-forget") => {
@@ -103,7 +104,129 @@ fn legacy_line(args: &[String]) -> Option<String> {
     }
 }
 
+/// Request that finishes with a `wifi` event of `kind` (scan, connect). Waits up to `wait`.
+fn rpc_wifi(
+    sock: &std::path::Path,
+    cmd: &str,
+    args: Value,
+    kind: &str,
+    wait: Duration,
+) -> Result<Value, String> {
+    let s = UnixStream::connect(sock).map_err(|e| format!("connect: {e}"))?;
+    s.set_read_timeout(Some(wait)).map_err(|e| e.to_string())?;
+    let mut w = s.try_clone().map_err(|e| e.to_string())?;
+    let mut r = BufReader::new(s);
+    let mut send = |id: u64, cmd: &str, args: Value| {
+        writeln!(w, "{}", json!({"v": 1, "id": id, "cmd": cmd, "args": args}))
+            .map_err(|e| format!("send: {e}"))
+    };
+    let mut read = || -> Result<Value, String> {
+        let mut line = String::new();
+        r.read_line(&mut line)
+            .map_err(|e| format!("waiting for the result: {e}"))?;
+        serde_json::from_str(&line).map_err(|e| format!("bad reply: {e}"))
+    };
+    let expect_ok = |v: Value| -> Result<(), String> {
+        if v["ok"] == true {
+            Ok(())
+        } else {
+            Err(format!(
+                "{}: {}",
+                v["error"]["code"].as_str().unwrap_or("error"),
+                v["error"]["msg"].as_str().unwrap_or("")
+            ))
+        }
+    };
+    send(1, "hello", json!({"client": "walpad-ctl", "proto": 1}))?;
+    expect_ok(read()?)?;
+    send(2, "subscribe", json!({"topics": ["wifi"]}))?;
+    expect_ok(read()?)?;
+    send(3, cmd, args)?;
+    loop {
+        let v = read()?;
+        if v["id"] == 3 {
+            expect_ok(v)?;
+        } else if v["event"] == "wifi" && v["data"]["kind"] == kind {
+            return Ok(v["data"].clone());
+        }
+    }
+}
+
+fn wifi_scan_text(data: &Value) -> String {
+    let mut out = String::new();
+    for n in data["networks"].as_array().unwrap_or(&Vec::new()) {
+        out.push_str(&format!(
+            "{:>4} dBm  {:<5} {}\n",
+            n["signal_dbm"],
+            n["security"].as_str().unwrap_or("?"),
+            n["ssid"].as_str().unwrap_or("")
+        ));
+    }
+    out.trim_end().to_string()
+}
+
 pub fn run(args: &[String], root: &Root) -> Result<String, String> {
+    run_with_stdin(args, root, &mut std::io::stdin().lock())
+}
+
+/// `run` with an injectable stdin (the passphrase for wifi-connect is read from it).
+pub fn run_with_stdin(
+    args: &[String],
+    root: &Root,
+    stdin: &mut dyn BufRead,
+) -> Result<String, String> {
+    let sock = root.p(walpad_proto::SOCKET_PATH);
+    match args.first().map(String::as_str) {
+        Some("wifi-scan") => {
+            let d = rpc_wifi(
+                &sock,
+                "wifi_scan",
+                Value::Null,
+                "scan",
+                Duration::from_secs(15),
+            )?;
+            return Ok(wifi_scan_text(&d));
+        }
+        Some("wifi-connect") => {
+            let ssid = args.get(1).ok_or_else(|| USAGE.to_string())?;
+            let mut req = json!({"ssid": walpad_hex(ssid.as_bytes())});
+            if !args.iter().any(|a| a == "--open") {
+                let mut line = String::new();
+                stdin
+                    .read_line(&mut line)
+                    .map_err(|e| format!("reading the passphrase: {e}"))?;
+                let secret = line.trim_end_matches(['\n', '\r']).to_string();
+                if secret.is_empty() {
+                    return Err("no passphrase on stdin (use --open for an open network)".into());
+                }
+                req["secret"] = Value::String(secret);
+            }
+            let d = rpc_wifi(
+                &sock,
+                "wifi_connect",
+                req,
+                "connect",
+                Duration::from_secs(35),
+            )?;
+            return if d["ok"] == true {
+                Ok(format!("connected to {}", d["ssid"].as_str().unwrap_or("")))
+            } else {
+                Err(format!(
+                    "could not connect: {}",
+                    d["error"].as_str().unwrap_or("failed")
+                ))
+            };
+        }
+        _ => {}
+    }
+    run_simple(args, root)
+}
+
+fn walpad_hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn run_simple(args: &[String], root: &Root) -> Result<String, String> {
     let (cmd, a) = build_request(args)?;
     if cmd == "power" && a["confirmed"] != true {
         return Err("refusing: add --yes to confirm".into());
@@ -181,7 +304,7 @@ mod tests {
         std::fs::create_dir_all(root.join("run/walpad")).unwrap();
         std::fs::write(root.join("run/walpad/status.json"), "{\"legacy\":true}").unwrap();
         assert!(run(&s(&["status"]), &r).unwrap().contains("legacy"));
-        assert!(run(&s(&["wifi-scan"]), &r)
+        assert!(run(&s(&["wifi-saved"]), &r)
             .unwrap_err()
             .contains("not running"));
         std::fs::write(root.join("run/walpad/devd.cmd"), "").unwrap();
@@ -205,9 +328,47 @@ mod tests {
         assert!(run(&s(&["power", "reboot"]), &r)
             .unwrap_err()
             .contains("--yes"));
-        assert!(run(&s(&["wifi-scan"]), &r)
+        // Wi-Fi through the core with a fake supplicant: scan prints networks, connect reads the passphrase from stdin
+        std::fs::create_dir_all(root.join("etc/wpa_supplicant")).unwrap();
+        let _sup =
+            walpad_core::wpa::fake::spawn(&root, walpad_core::wpa::fake::default_aps(), None)
+                .unwrap();
+        let t = std::time::Instant::now();
+        let scan = loop {
+            match run(&s(&["wifi-scan"]), &r) {
+                Ok(t) => break t,
+                Err(e) if t.elapsed() < Duration::from_secs(5) && e.contains("unavailable") => {
+                    std::thread::sleep(Duration::from_millis(100))
+                }
+                Err(e) => panic!("wifi-scan failed: {e}"),
+            }
+        };
+        assert!(
+            scan.contains("Home") && scan.contains("wpa") && scan.contains("Cafe Open"),
+            "{scan}"
+        );
+        let mut pw = std::io::Cursor::new(b"correct horse\n".to_vec());
+        assert_eq!(
+            run_with_stdin(&s(&["wifi-connect", "Home"]), &r, &mut pw).unwrap(),
+            "connected to Home"
+        );
+        let mut wrong = std::io::Cursor::new(b"definitely wrong\n".to_vec());
+        assert!(
+            run_with_stdin(&s(&["wifi-connect", "Home"]), &r, &mut wrong)
+                .unwrap_err()
+                .contains("wrong_password")
+        );
+        let mut none = std::io::Cursor::new(Vec::new());
+        assert!(run_with_stdin(&s(&["wifi-connect", "Home"]), &r, &mut none)
             .unwrap_err()
-            .contains("not implemented"));
+            .contains("no passphrase"));
+        assert!(run_with_stdin(
+            &s(&["wifi-connect", "Cafe Open", "--open"]),
+            &r,
+            &mut std::io::Cursor::new(Vec::new())
+        )
+        .unwrap()
+        .contains("connected"));
         stop.store(true, Ordering::Relaxed);
         h.join().unwrap();
         let _ = std::fs::remove_dir_all(&root);

@@ -4,6 +4,8 @@ use crate::apps::Apps;
 use crate::brain::{Brain, Effect};
 use crate::inputs::Inputs;
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
+use crate::wpa::manager::{Wifi, WifiError, WifiEvent};
+use crate::wpa::parse::{hex, ssid_display, unhex};
 use crate::xbridge::{XBridge, XError};
 use rustix::event::{poll, PollFd, PollFlags, Timespec};
 use serde_json::{json, Value};
@@ -95,6 +97,7 @@ pub struct Daemon {
     shadow: Option<crate::shadow_live::Live>,
     live: Option<LiveState>,
     apps: Apps,
+    wifi: Wifi,
     xb: Option<XBridge>,
     x_retry: Instant,
     x_ping: Instant,
@@ -115,6 +118,34 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
 
 fn internal<E: std::fmt::Display>(e: E) -> (ErrorCode, String) {
     (ErrorCode::Internal, e.to_string())
+}
+
+fn wifi_err(e: WifiError) -> (ErrorCode, String) {
+    match e {
+        WifiError::Busy => (ErrorCode::Busy, "another Wi-Fi operation is running".into()),
+        WifiError::Unavailable => (
+            ErrorCode::Internal,
+            "Wi-Fi control is unavailable (wpa_supplicant socket)".into(),
+        ),
+        WifiError::Invalid(m) => (ErrorCode::InvalidArgs, m),
+        WifiError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
+fn wifi_event_json(e: &WifiEvent) -> Value {
+    match e {
+        WifiEvent::Scan { networks } => json!({
+            "kind": "scan",
+            "networks": networks.iter().map(|n| json!({
+                "ssid_hex": hex(&n.ssid), "ssid": ssid_display(&n.ssid), "signal_dbm": n.signal_dbm,
+                "security": n.security.as_str(), "freq_mhz": n.freq_mhz,
+            })).collect::<Vec<_>>(),
+        }),
+        WifiEvent::Connect { ok, error, ssid } => {
+            json!({"kind": "connect", "ok": ok, "error": error, "ssid_hex": hex(ssid), "ssid": ssid_display(ssid)})
+        }
+        WifiEvent::Disconnected => json!({"kind": "disconnected"}),
+    }
 }
 
 impl Daemon {
@@ -154,6 +185,7 @@ impl Daemon {
             shadow: None,
             live: None,
             apps,
+            wifi: Wifi::new(&root),
             xb: None,
             x_retry: now,
             x_ping: now,
@@ -492,8 +524,14 @@ impl Daemon {
     // ---------------------------------------------------------------- model
     pub fn status(&self) -> Status {
         let raw = read_battery(&self.root);
-        let wifi =
+        let mut wifi =
             parse_wifi_state(sysfs::read_trim(&self.root, "/run/walpad/wifi-state").as_deref());
+        let live = self.wifi.live();
+        wifi.ssid = live.ssid.clone();
+        wifi.signal_dbm = live.signal_dbm;
+        if wifi.ip.is_none() {
+            wifi.ip = live.ip.clone();
+        }
         let devs = input::discover(&self.root);
         let ok = |b: bool| if b { "ok" } else { "unavailable" }.to_string();
         Status {
@@ -586,11 +624,22 @@ impl Daemon {
                 });
                 Ok(json!({"action": action}))
             }
+            Command::WifiScan => self.wifi.scan(Instant::now()).map(|_| json!({"accepted": true})).map_err(wifi_err),
+            Command::WifiListSaved => self
+                .wifi
+                .list_saved()
+                .map(|v| Value::Array(v.iter().map(|s| json!({"id": s.id, "ssid": ssid_display(&s.ssid), "ssid_hex": hex(&s.ssid)})).collect()))
+                .map_err(wifi_err),
+            Command::WifiConnect { ssid, secret, saved_id } => {
+                let bytes = match ssid.as_deref() {
+                    Some(h) => unhex(h).ok_or((ErrorCode::InvalidArgs, "ssid must be hex".to_string()))?,
+                    None => Vec::new(),
+                };
+                self.wifi.connect(bytes, secret.as_ref(), saved_id, Instant::now()).map(|_| json!({"accepted": true})).map_err(wifi_err)
+            }
+            Command::WifiDisconnect => self.wifi.disconnect().map(|_| json!({})).map_err(wifi_err),
+            Command::WifiForget { saved_id } => self.wifi.forget(saved_id).map(|_| json!({})).map_err(wifi_err),
             Command::Hello { .. } | Command::Subscribe { .. } => Ok(json!({})),
-            other => Err((
-                ErrorCode::Internal,
-                format!("{} is not implemented in this build", cmd_name(&other)),
-            )),
         }
     }
 
@@ -819,6 +868,15 @@ impl Daemon {
         if !self.apps.reap().is_empty() {
             did = true;
         }
+        for ev in self.wifi.tick(Instant::now()) {
+            let line = encode_line(&Event::new("wifi", wifi_event_json(&ev)));
+            for c in &mut self.clients {
+                if c.hello && c.topics.contains(&Topic::Wifi) {
+                    c.queue(line.clone());
+                }
+            }
+            did = true;
+        }
         let now = Instant::now();
         // outside live device mode the battery guard only logs (the Python daemon owns shutdown)
         if self.live.as_ref().is_none_or(|l| !l.device) && now >= self.next_battery {
@@ -860,13 +918,6 @@ impl Daemon {
         }
         let _ = std::fs::remove_file(&self.sock_path);
     }
-}
-
-fn cmd_name(c: &Command) -> String {
-    serde_json::to_value(c)
-        .ok()
-        .and_then(|v| v.get("cmd").and_then(|x| x.as_str().map(String::from)))
-        .unwrap_or_else(|| "command".into())
 }
 
 fn open_fifo(root: &Root) -> std::io::Result<std::fs::File> {

@@ -204,7 +204,7 @@ impl Command {
                 }
                 if let Some(s) = secret {
                     let n = s.expose().len();
-                    if !(8..=63).contains(&n) && n != 64 && n != 5 && n != 13 {
+                    if !(8..=63).contains(&n) && n != 64 {
                         return Err("secret length is not valid".into());
                     }
                 }

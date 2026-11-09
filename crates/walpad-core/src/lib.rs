@@ -9,4 +9,5 @@ pub mod inputs;
 pub mod logic;
 pub mod shadow;
 pub mod shadow_live;
+pub mod wpa;
 pub mod xbridge;
