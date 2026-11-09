@@ -89,6 +89,10 @@ impl Fonts {
 
     /// The tablet's font directory, falling back to the repository copy (host runs).
     pub fn load_default() -> Result<Fonts, FontError> {
+        // WALPAD_FONTS overrides the location (host sessions)
+        if let Some(dir) = std::env::var_os("WALPAD_FONTS") {
+            return Fonts::load(Path::new(&dir));
+        }
         Fonts::load(Path::new("/usr/share/fonts/dejavu"))
             .or_else(|_| Fonts::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")))
     }

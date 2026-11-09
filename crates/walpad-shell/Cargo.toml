@@ -6,3 +6,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+walpad-ui = { path = "../walpad-ui" }
+walpad-hw = { path = "../walpad-hw" }
+walpad-x = { path = "../walpad-x" }
+x11rb = { version = "0.13", default-features = false }
+
+[dev-dependencies]
+x11rb = { version = "0.13", default-features = false, features = ["xtest"] }

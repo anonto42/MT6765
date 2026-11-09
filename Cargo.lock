@@ -457,6 +457,7 @@ dependencies = [
  "sha1",
  "walpad-hw",
  "walpad-proto",
+ "walpad-x",
  "x11rb",
 ]
 
@@ -488,6 +489,12 @@ dependencies = [
 [[package]]
 name = "walpad-shell"
 version = "0.1.0"
+dependencies = [
+ "walpad-hw",
+ "walpad-ui",
+ "walpad-x",
+ "x11rb",
+]
 
 [[package]]
 name = "walpad-ui"
@@ -495,6 +502,14 @@ version = "0.1.0"
 dependencies = [
  "fontdue",
  "tiny-skia",
+]
+
+[[package]]
+name = "walpad-x"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+ "x11rb",
 ]
 
 [[package]]

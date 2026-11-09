@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/walpad-proto", "crates/walpad-hw", "crates/walpad-core", "crates/walpad-ui", "crates/walpad-shell", "crates/walpad-ctl"]
+members = ["crates/walpad-x", "crates/walpad-proto", "crates/walpad-hw", "crates/walpad-core", "crates/walpad-ui", "crates/walpad-shell", "crates/walpad-ctl"]
 
 [workspace.package]
 version = "0.1.0"

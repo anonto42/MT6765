@@ -1,70 +1,19 @@
 //! X bridge (M3.2/M3.3): struts, keyboard docking, key and pointer injection (XTEST) and window
 //! focus, over a stream whose every wait has a deadline (a hung X server cannot hang the core).
 //! The core connects lazily and drops/reconnects the bridge when X goes away (session restarts).
-use rustix::event::{poll, PollFd, PollFlags, Timespec};
-use std::io::{ErrorKind, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::Path;
+use walpad_x::TimedStream;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
     self, AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _, CreateWindowAux,
     EventMask, PropMode, Window, WindowClass,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
-use x11rb::rust_connection::{PollMode, RustConnection, Stream};
-use x11rb::utils::RawFdContainer;
+use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
-const X_TIMEOUT_S: i64 = 2;
-
-/// Bridge error (message only). Deliberately not `Display`, so the blanket `From` below is coherent.
-#[derive(Debug)]
-pub struct XError(pub String);
-impl<E: std::fmt::Display> From<E> for XError {
-    fn from(e: E) -> Self {
-        XError(e.to_string())
-    }
-}
+pub use walpad_x::XError;
 type R<T> = Result<T, XError>;
-
-/// Unix stream with a deadline on every poll.
-pub struct TimedStream(UnixStream);
-
-impl Stream for TimedStream {
-    fn poll(&self, mode: PollMode) -> std::io::Result<()> {
-        let mut flags = PollFlags::empty();
-        if mode.readable() {
-            flags |= PollFlags::IN;
-        }
-        if mode.writable() {
-            flags |= PollFlags::OUT;
-        }
-        loop {
-            let mut fds = [PollFd::new(&self.0, flags)];
-            let t = Timespec {
-                tv_sec: X_TIMEOUT_S,
-                tv_nsec: 0,
-            };
-            match poll(&mut fds, Some(&t)) {
-                Ok(0) => {
-                    return Err(std::io::Error::new(
-                        ErrorKind::TimedOut,
-                        "X server did not respond",
-                    ))
-                }
-                Ok(_) => return Ok(()),
-                Err(rustix::io::Errno::INTR) => continue,
-                Err(e) => return Err(e.into()),
-            }
-        }
-    }
-    fn read(&self, buf: &mut [u8], _fds: &mut Vec<RawFdContainer>) -> std::io::Result<usize> {
-        (&self.0).read(buf)
-    }
-    fn write(&self, buf: &[u8], _fds: &mut Vec<RawFdContainer>) -> std::io::Result<usize> {
-        (&self.0).write(buf)
-    }
-}
 
 /// X keysyms for the names used in keys.json (xdotool syntax).
 pub fn keysym(name: &str) -> Option<u32> {
@@ -135,15 +84,9 @@ pub struct XBridge {
 impl XBridge {
     /// Connect to the X server listening on `socket` (e.g. /tmp/.X11-unix/X0).
     pub fn connect(socket: &Path) -> R<Self> {
-        let s = UnixStream::connect(socket)?;
-        s.set_nonblocking(true)?;
-        let conn = RustConnection::connect_to_stream(TimedStream(s), 0)?;
+        let xc = walpad_x::connect(socket)?;
+        let (conn, root) = (xc.conn, xc.root);
         let setup = conn.setup();
-        let root = setup
-            .roots
-            .first()
-            .ok_or_else(|| XError("no screen".into()))?
-            .root;
         let (min, max) = (setup.min_keycode, setup.max_keycode);
         let km = conn.get_keyboard_mapping(min, max - min + 1)?.reply()?;
         Ok(XBridge {

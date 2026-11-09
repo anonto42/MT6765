@@ -1,0 +1,9 @@
+//! walpad-shell library: gesture recogniser, X11 presenter/window, application state and the
+//! event loop. The binary is a thin wrapper (src/main.rs).
+#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
+
+pub mod app;
+pub mod gesture;
+pub mod present;
+pub mod shell;
+pub mod window;

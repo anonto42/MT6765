@@ -1,0 +1,12 @@
+[package]
+name = "walpad-x"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+x11rb = { version = "0.13", default-features = false }
+rustix = { version = "1", features = ["event", "std"] }

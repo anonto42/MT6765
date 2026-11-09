@@ -30,8 +30,9 @@ if command -v openbox >/dev/null; then
 else echo "note: openbox not installed; running without a window manager" >&2; fi
 spawn "$BIN/walpad-core" --fake
 for _ in $(seq 50); do [ -S "$ROOT/run/walpad/control.sock" ] && break; sleep 0.1; done
-spawn "$BIN/walpad-shell"
-sleep 1
+spawn env WALPAD_X_SOCKET=/tmp/.X11-unix/X5 WALPAD_FONTS="$PWD/crates/walpad-ui/assets/fonts" "$BIN/walpad-shell"
+for _ in $(seq 60); do [ -f "$ROOT/run/walpad-ok" ] && break; sleep 0.1; done
+if [ -f "$ROOT/run/walpad-ok" ]; then echo "shell wrote /run/walpad-ok"; else echo "WARNING: shell did not write /run/walpad-ok (see $OUT/session.log)" >&2; fi
 "$BIN/walpad-ctl" status > "$OUT/status.json"
 xwd -root -display :5 | convert xwd:- "png:$OUT/screenshot.png"
 echo "screenshot: $OUT/screenshot.png  status: $OUT/status.json  log: $OUT/session.log"
