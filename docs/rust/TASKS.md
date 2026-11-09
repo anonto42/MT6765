@@ -28,7 +28,8 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M4.2 | scan (single flight, escapes, merge, security) | done |
 | M4.3 | connect/forget/disconnect (PBKDF2 PSK, mode 600) | done |
 | M4.4 [DEVICE] | join, forget, reboot test | script written (scripts/device/m4_check.sh); owner runs it |
-| M5.1-M5.9 | walpad-ui, components, X11 presenter, screens, power menu, system dock, UI checklist | todo |
+| M5.1 | walpad-ui: tokens, canvas, text, icons, PNG presenter, snapshot harness | done |
+| M5.2-M5.9 | components, X11 presenter, screens, power menu, system dock, UI checklist | todo |
 | M6.1-M6.4 | Process manager, installed-only apps, crash notice, gate | todo |
 | M7.1-M7.2 | Remove Python from rootfs, re-baseline | todo |
 | M8.1-M8.3 | fbmirror pause when screen off, damage-driven mirror (if measured), Firefox memory | todo |
