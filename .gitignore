@@ -44,3 +44,6 @@ data/dumps/
 
 # Rust
 /target/
+
+# core dumps from crash tests
+core.[0-9]*

@@ -1,8 +1,10 @@
 //! App allowlist (/etc/walpad/apps.json): apps launch only by ID, with the contract environment.
 //! Never takes a path, shell string or executable name from a client.
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 use walpad_hw::Root;
 use walpad_proto::AppState;
 
@@ -45,6 +47,28 @@ pub struct AppDef {
     pub single_instance: bool,
     #[serde(default)]
     pub wm_class: String,
+    /// Extra exit codes that count as a normal exit (e.g. a terminal returns its shell's status).
+    #[serde(default)]
+    pub exit_ok: Vec<i32>,
+}
+
+/// How a child we started ended (M6.3: only `Crashed` raises a notice).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Exit {
+    Clean,
+    /// We asked it to close (Close app): never a crash, whatever the status.
+    Closed,
+    Crashed {
+        code: Option<i32>,
+        signal: Option<i32>,
+    },
+}
+
+struct Kid {
+    child: Child,
+    /// Set when Close app was requested: SIGTERM sent, SIGKILL after the grace period.
+    closing: Option<Instant>,
+    killed: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -52,12 +76,29 @@ pub enum LaunchError {
     Unknown,
     NotInstalled,
     Spawn(String),
+    /// A previous copy is still shutting down after Close app.
+    Closing,
+}
+
+/// Terminate a process politely. Refuses pid 0/1 and our own pid.
+pub fn terminate_pid(pid: u32, hard: bool) -> bool {
+    use rustix::process::{kill_process, Pid, Signal};
+    if pid <= 1 || pid == std::process::id() {
+        return false;
+    }
+    let Some(p) = Pid::from_raw(pid as i32) else {
+        return false;
+    };
+    kill_process(p, if hard { Signal::KILL } else { Signal::TERM }).is_ok()
 }
 
 #[derive(Default)]
 pub struct Apps {
     defs: Vec<AppDef>,
-    children: HashMap<String, Child>,
+    children: HashMap<String, Kid>,
+    /// Apps with a window on screen that we did not start (from the X scan).
+    ext: HashSet<String>,
+    grace: Option<Duration>,
 }
 
 impl Apps {
@@ -72,6 +113,8 @@ impl Apps {
         Apps {
             defs,
             children: HashMap::new(),
+            ext: HashSet::new(),
+            grace: None,
         }
     }
 
@@ -90,21 +133,94 @@ impl Apps {
             .any(|dir| root.p(&format!("{dir}/{exe}")).is_file())
     }
 
-    /// Reap exited children (non-blocking waitpid; kernel 4.19 has no pidfd_open).
-    pub fn reap(&mut self) -> Vec<String> {
+    pub fn defs(&self) -> &[AppDef] {
+        &self.defs
+    }
+
+    /// How long a closing child gets before SIGKILL.
+    pub fn set_close_grace(&mut self, d: Duration) {
+        self.grace = Some(d);
+    }
+    fn grace(&self) -> Duration {
+        self.grace.unwrap_or(Duration::from_secs(3))
+    }
+
+    /// Reap exited children (non-blocking waitpid; kernel 4.19 has no pidfd_open) and escalate
+    /// closing children that ignored SIGTERM.
+    pub fn reap(&mut self, now: Instant) -> Vec<(String, Exit)> {
+        let grace = self.grace();
         let mut gone = Vec::new();
-        self.children.retain(|id, c| match c.try_wait() {
-            Ok(Some(_)) | Err(_) => {
-                gone.push(id.clone());
-                false
+        for (id, k) in self.children.iter_mut() {
+            match k.child.try_wait() {
+                Ok(Some(st)) => {
+                    let exit = if k.closing.is_some() {
+                        Exit::Closed
+                    } else if st.success()
+                        || self.defs.iter().any(|d| {
+                            &d.id == id && st.code().is_some_and(|c| d.exit_ok.contains(&c))
+                        })
+                    {
+                        Exit::Clean
+                    } else {
+                        Exit::Crashed {
+                            code: st.code(),
+                            signal: st.signal(),
+                        }
+                    };
+                    gone.push((id.clone(), exit));
+                }
+                Err(_) => gone.push((id.clone(), Exit::Closed)),
+                Ok(None) => {
+                    if let Some(t) = k.closing {
+                        if !k.killed && now.duration_since(t) >= grace {
+                            let _ = k.child.kill();
+                            k.killed = true;
+                        }
+                    }
+                }
             }
-            Ok(None) => true,
-        });
+        }
+        for (id, _) in &gone {
+            self.children.remove(id);
+            self.ext.remove(id);
+        }
         gone
     }
 
-    pub fn running(&self, id: &str) -> bool {
+    /// Do we own a live (possibly closing) child for this app?
+    pub fn owns(&self, id: &str) -> bool {
         self.children.contains_key(id)
+    }
+
+    /// Running = a child we started (not already closing) or a window found on screen.
+    pub fn running(&self, id: &str) -> bool {
+        match self.children.get(id) {
+            Some(k) => k.closing.is_none(),
+            None => self.ext.contains(id),
+        }
+    }
+
+    /// Apps with a wm_class we can look for on screen.
+    pub fn watches_windows(&self) -> bool {
+        self.defs.iter().any(|d| !d.wm_class.is_empty())
+    }
+
+    /// Replace the set of apps seen on screen. Returns (id, now_running) for apps that are not
+    /// our children (children report through `reap`).
+    pub fn set_ext(&mut self, seen: HashSet<String>) -> Vec<(String, bool)> {
+        let mut changes = Vec::new();
+        for id in seen.difference(&self.ext) {
+            if !self.children.contains_key(id) {
+                changes.push((id.clone(), true));
+            }
+        }
+        for id in self.ext.difference(&seen) {
+            if !self.children.contains_key(id) {
+                changes.push((id.clone(), false));
+            }
+        }
+        self.ext = seen;
+        changes
     }
 
     pub fn status(&self, root: &Root) -> Vec<AppState> {
@@ -118,10 +234,17 @@ impl Apps {
             .collect()
     }
 
-    pub fn spawn(&mut self, id: &str, root: &Root) -> Result<(), LaunchError> {
+    /// Start an app; returns its pid.
+    pub fn spawn(&mut self, id: &str, root: &Root) -> Result<u32, LaunchError> {
         let d = self.def(id).cloned().ok_or(LaunchError::Unknown)?;
         if !self.installed(&d, root) {
             return Err(LaunchError::NotInstalled);
+        }
+        if let Some(k) = self.children.get_mut(id) {
+            // an old copy that is still alive must not be forgotten (it would never be reaped)
+            if matches!(k.child.try_wait(), Ok(None)) {
+                return Err(LaunchError::Closing);
+            }
         }
         let child = Command::new(&d.exec[0])
             .args(&d.exec[1..])
@@ -132,18 +255,29 @@ impl Apps {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| LaunchError::Spawn(e.to_string()))?;
-        self.children.insert(id.to_string(), child);
-        Ok(())
+        let pid = child.id();
+        self.children.insert(
+            id.to_string(),
+            Kid {
+                child,
+                closing: None,
+                killed: false,
+            },
+        );
+        Ok(pid)
     }
 
-    /// Kill a running child (used by "Close app").
-    pub fn close(&mut self, id: &str) -> bool {
-        match self.children.remove(id) {
-            Some(mut c) => {
-                let _ = c.kill();
-                let _ = c.wait();
+    /// Close an app we started: SIGTERM now, SIGKILL after the grace period; its exit is
+    /// reported as `Exit::Closed`, never as a crash.
+    pub fn request_close(&mut self, id: &str, now: Instant) -> bool {
+        match self.children.get_mut(id) {
+            Some(k) if k.closing.is_none() => {
+                k.closing = Some(now);
+                terminate_pid(k.child.id(), false);
                 true
             }
+            // already closing: nothing more to do (and nothing new was closed)
+            Some(_) => false,
             None => false,
         }
     }
@@ -154,8 +288,9 @@ mod tests {
     use super::*;
 
     fn root_with(apps: &str, bins: &[&str]) -> Root {
-        let d =
-            std::env::temp_dir().join(format!("walpad-apps-{}-{}", std::process::id(), apps.len()));
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("walpad-apps-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("etc/walpad")).unwrap();
         std::fs::create_dir_all(d.join("usr/bin")).unwrap();
@@ -192,7 +327,101 @@ mod tests {
         a.spawn("sleeper", &r).unwrap();
         assert!(a.running("sleeper"));
         assert!(a.status(&r)[0].running);
-        assert!(a.close("sleeper"));
+        assert!(a.request_close("sleeper", Instant::now()));
+        assert!(!a.running("sleeper"), "closing counts as not running");
+        assert_eq!(
+            a.spawn("sleeper", &r),
+            Err(LaunchError::Closing),
+            "an old copy must not be forgotten"
+        );
+        let gone = reap_all(&mut a, 1);
+        assert_eq!(gone, vec![("sleeper".to_string(), Exit::Closed)]);
+        assert!(!a.owns("sleeper"));
+    }
+
+    fn reap_all(a: &mut Apps, want: usize) -> Vec<(String, Exit)> {
+        let t = Instant::now();
+        let mut gone = vec![];
+        while gone.len() < want && t.elapsed() < Duration::from_secs(5) {
+            gone.extend(a.reap(Instant::now()));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        gone
+    }
+
+    #[test]
+    fn app_that_disappears_from_disk_is_unlisted_again() {
+        let r = root_with(JSON, &["sleep"]);
+        let a = Apps::load(&r);
+        assert_eq!(a.status(&r).len(), 1);
+        std::fs::remove_file(r.p("/usr/bin/sleep")).unwrap();
+        assert!(a.status(&r).is_empty(), "missing executable: not listed");
+    }
+
+    #[test]
+    fn exit_kinds_clean_crash_signal_exit_ok_and_closed() {
+        let json = r#"[
+            {"id":"ok","exec":["true"]},
+            {"id":"bad","exec":["false"]},
+            {"id":"term","exec":["sh","-c","kill -9 $$"]},
+            {"id":"shellish","exec":["false"],"exit_ok":[1]}
+        ]"#;
+        let r = root_with(json, &["true", "false", "sh"]);
+        let mut a = Apps::load(&r);
+        for id in ["ok", "bad", "term", "shellish"] {
+            a.spawn(id, &r).unwrap();
+        }
+        let mut gone = reap_all(&mut a, 4);
+        gone.sort_by(|x, y| x.0.cmp(&y.0));
+        assert_eq!(
+            gone,
+            vec![
+                (
+                    "bad".to_string(),
+                    Exit::Crashed {
+                        code: Some(1),
+                        signal: None
+                    }
+                ),
+                ("ok".to_string(), Exit::Clean),
+                ("shellish".to_string(), Exit::Clean),
+                (
+                    "term".to_string(),
+                    Exit::Crashed {
+                        code: None,
+                        signal: Some(9)
+                    }
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn closing_child_that_ignores_sigterm_is_killed_after_the_grace_period() {
+        let json =
+            r#"[{"id":"stubborn","exec":["sh","-c","trap '' TERM; while :; do sleep 1; done"]}]"#;
+        let r = root_with(json, &["sh"]);
+        let mut a = Apps::load(&r);
+        a.set_close_grace(Duration::from_millis(300));
+        a.spawn("stubborn", &r).unwrap();
+        std::thread::sleep(Duration::from_millis(200)); // let sh install its trap
+        assert!(a.request_close("stubborn", Instant::now()));
+        let gone = reap_all(&mut a, 1);
+        assert_eq!(gone, vec![("stubborn".to_string(), Exit::Closed)]);
+    }
+
+    #[test]
+    fn ext_windows_count_as_running_and_report_changes() {
+        let r = root_with(JSON, &["sleep"]);
+        let mut a = Apps::load(&r);
+        let set = |ids: &[&str]| ids.iter().map(|s| s.to_string()).collect::<HashSet<_>>();
+        assert_eq!(
+            a.set_ext(set(&["sleeper"])),
+            vec![("sleeper".to_string(), true)]
+        );
+        assert!(a.running("sleeper") && a.status(&r)[0].running);
+        assert!(a.set_ext(set(&["sleeper"])).is_empty());
+        assert_eq!(a.set_ext(set(&[])), vec![("sleeper".to_string(), false)]);
         assert!(!a.running("sleeper"));
     }
 
@@ -201,13 +430,8 @@ mod tests {
         let r = root_with(r#"[{"id":"quick","exec":["true"]}]"#, &["true"]);
         let mut a = Apps::load(&r);
         a.spawn("quick", &r).unwrap();
-        let t = std::time::Instant::now();
-        let mut gone = vec![];
-        while gone.is_empty() && t.elapsed() < std::time::Duration::from_secs(3) {
-            gone = a.reap();
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        assert_eq!(gone, vec!["quick".to_string()]);
+        let gone = reap_all(&mut a, 1);
+        assert_eq!(gone, vec![("quick".to_string(), Exit::Clean)]);
         assert!(!a.running("quick"));
     }
 

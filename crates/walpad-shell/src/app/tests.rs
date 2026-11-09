@@ -1124,3 +1124,22 @@ fn clock_toggle_restart_shell_and_two_step_power_confirm() {
     // cancel closes without doing anything
     assert!(tap(&mut app, Target::DialogCancel).cmds.is_empty() && app.model.overlay.is_none());
 }
+
+#[test]
+fn app_crash_notice_shows_a_danger_toast_that_expires() {
+    let mut app = online();
+    let o = app.on_core(
+        &CoreEvent::Notice(json!({"kind":"app_crashed","app":"browser","name":"Browser"})),
+        1000,
+    );
+    assert!(o.dirty);
+    let t = app.model.toast.clone().expect("toast");
+    assert_eq!(t.text, "Browser closed unexpectedly");
+    assert_eq!(t.tone, Tone::Danger);
+    render(&mut app);
+    assert!(app.tick(1000 + 3000));
+    assert!(app.model.toast.is_none());
+    // other notice kinds are ignored
+    app.on_core(&CoreEvent::Notice(json!({"kind":"something_else"})), 5000);
+    assert!(app.model.toast.is_none());
+}

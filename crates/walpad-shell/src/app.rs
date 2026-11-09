@@ -549,6 +549,13 @@ impl App {
                 out.dirty = true;
             }
             CoreEvent::Wifi(v) => self.on_wifi_event(v, &mut out),
+            CoreEvent::Notice(v) => {
+                if v["kind"] == "app_crashed" {
+                    let name = v["name"].as_str().or(v["app"].as_str()).unwrap_or("An app");
+                    self.toast(format!("{name} closed unexpectedly"), Tone::Danger);
+                    out.dirty = true;
+                }
+            }
             CoreEvent::Reply {
                 id,
                 ok,
