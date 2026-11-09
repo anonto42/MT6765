@@ -1,6 +1,7 @@
 //! Golden-image harness. `assert_snapshot("name", &canvas)` compares with
 //! tests/golden/<name>.png; UPDATE_SNAPSHOTS=1 regenerates (and prints the changed names).
 //! Tolerance: per-channel difference <= 2 and at most 0.1% of pixels differ (anti-aliasing noise).
+#![allow(clippy::expect_used)]
 use crate::canvas::Canvas;
 use std::path::PathBuf;
 

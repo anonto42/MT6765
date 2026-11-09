@@ -10,5 +10,5 @@ pub mod tokens;
 
 pub use canvas::{Canvas, Rect};
 pub use icons::Icon;
-pub use text::{Align, Face, Fonts};
+pub use text::{Align, Face, Fonts, Style};
 pub use tokens::Color;

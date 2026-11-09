@@ -2,7 +2,7 @@
 use std::path::Path;
 use walpad_ui::snapshot::assert_snapshot;
 use walpad_ui::tokens::*;
-use walpad_ui::{Align, Canvas, Face, Fonts, Icon, Rect};
+use walpad_ui::{Align, Canvas, Face, Fonts, Icon, Rect, Style};
 
 fn fonts() -> Fonts {
     Fonts::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")).unwrap()
@@ -30,14 +30,32 @@ fn tokens_and_shapes() {
     for (i, (name, col)) in tokens.iter().enumerate() {
         let (x, y) = (24 + (i as i32 % 7) * 108, 24 + (i as i32 / 7) * 96);
         c.rrect_border(Rect::new(x, y, 96, 64), RADIUS, *col, BORDER);
-        f.draw_in(&mut c, name, Face::Regular, SIZE_CAPTION, Rect::new(x, y + 68, 96, 18), Align::Center, TEXT_SECONDARY);
+        f.draw_in(
+            &mut c,
+            name,
+            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Rect::new(x, y + 68, 96, 18),
+            Align::Center,
+        );
     }
     // card, button states, field, toggle-like pill, circle
     c.rrect_border(Rect::new(24, 230, 360, 140), RADIUS_CARD, SURFACE, BORDER);
     c.rrect(Rect::new(48, 254, 150, BUTTON_H), RADIUS, ACCENT);
-    f.draw_in(&mut c, "Primary", Face::Bold, SIZE_BODY, Rect::new(48, 254, 150, BUTTON_H), Align::Center, ON_ACCENT);
+    f.draw_in(
+        &mut c,
+        "Primary",
+        Style::new(Face::Bold, SIZE_BODY, ON_ACCENT),
+        Rect::new(48, 254, 150, BUTTON_H),
+        Align::Center,
+    );
     c.rrect(Rect::new(214, 254, 150, BUTTON_H), RADIUS, ACCENT_PRESSED);
-    f.draw_in(&mut c, "Pressed", Face::Bold, SIZE_BODY, Rect::new(214, 254, 150, BUTTON_H), Align::Center, ON_ACCENT);
+    f.draw_in(
+        &mut c,
+        "Pressed",
+        Style::new(Face::Bold, SIZE_BODY, ON_ACCENT),
+        Rect::new(214, 254, 150, BUTTON_H),
+        Align::Center,
+    );
     c.rrect_border(Rect::new(48, 322, 150, 32), RADIUS, SURFACE_RAISED, BORDER);
     c.rrect(Rect::new(214, 322, 150, 32), RADIUS, DANGER);
     c.rrect_border(Rect::new(420, 230, 356, 140), RADIUS_CARD, SURFACE, BORDER);
@@ -54,16 +72,76 @@ fn tokens_and_shapes() {
 fn type_roles() {
     let mut f = fonts();
     let mut c = Canvas::new(800, 360, BG).unwrap();
-    f.draw_in(&mut c, "14:22", Face::ExtraLight, SIZE_CLOCK, Rect::new(24, 8, 400, 110), Align::Left, TEXT);
-    f.draw_in(&mut c, "Network", Face::Bold, SIZE_TITLE, Rect::new(24, 124, 400, 40), Align::Left, TEXT);
-    f.draw_in(&mut c, "AVAILABLE NETWORKS", Face::Bold, SIZE_SECTION, Rect::new(24, 168, 400, 24), Align::Left, TEXT_SECONDARY);
-    f.draw_in(&mut c, "Home network (row title)", Face::Regular, SIZE_BODY, Rect::new(24, 196, 500, 28), Align::Left, TEXT);
-    f.draw_in(&mut c, "Secondary text, units and hints", Face::Regular, SIZE_SECONDARY, Rect::new(24, 228, 500, 24), Align::Left, TEXT_SECONDARY);
-    f.draw_in(&mut c, "Caption / nav label", Face::Regular, SIZE_CAPTION, Rect::new(24, 256, 500, 20), Align::Left, TEXT_SECONDARY);
-    f.draw_in(&mut c, "192.168.0.100  wlan0  COMPLETED", Face::Mono, SIZE_MONO, Rect::new(24, 280, 500, 24), Align::Left, TEXT);
-    f.draw_in(&mut c, "Warning: estimated from voltage", Face::Regular, SIZE_SECONDARY, Rect::new(24, 308, 400, 24), Align::Left, WARNING);
-    f.draw_in(&mut c, "Café ✓ ünïcödé", Face::Regular, SIZE_BODY, Rect::new(420, 196, 360, 28), Align::Right, TEXT);
-    f.draw_in(&mut c, "A very long network name that must be cut off with an ellipsis", Face::Regular, SIZE_BODY, Rect::new(420, 228, 360, 28), Align::Left, TEXT);
+    f.draw_in(
+        &mut c,
+        "14:22",
+        Style::new(Face::ExtraLight, SIZE_CLOCK, TEXT),
+        Rect::new(24, 8, 400, 110),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "Network",
+        Style::new(Face::Bold, SIZE_TITLE, TEXT),
+        Rect::new(24, 124, 400, 40),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "AVAILABLE NETWORKS",
+        Style::new(Face::Bold, SIZE_SECTION, TEXT_SECONDARY),
+        Rect::new(24, 168, 400, 24),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "Home network (row title)",
+        Style::new(Face::Regular, SIZE_BODY, TEXT),
+        Rect::new(24, 196, 500, 28),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "Secondary text, units and hints",
+        Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+        Rect::new(24, 228, 500, 24),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "Caption / nav label",
+        Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+        Rect::new(24, 256, 500, 20),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "192.168.0.100  wlan0  COMPLETED",
+        Style::new(Face::Mono, SIZE_MONO, TEXT),
+        Rect::new(24, 280, 500, 24),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "Warning: estimated from voltage",
+        Style::new(Face::Regular, SIZE_SECONDARY, WARNING),
+        Rect::new(24, 308, 400, 24),
+        Align::Left,
+    );
+    f.draw_in(
+        &mut c,
+        "Café ✓ ünïcödé",
+        Style::new(Face::Regular, SIZE_BODY, TEXT),
+        Rect::new(420, 196, 360, 28),
+        Align::Right,
+    );
+    f.draw_in(
+        &mut c,
+        "A very long network name that must be cut off with an ellipsis",
+        Style::new(Face::Regular, SIZE_BODY, TEXT),
+        Rect::new(420, 228, 360, 28),
+        Align::Left,
+    );
     assert_snapshot("primitives_type", &c);
 }
 
@@ -76,7 +154,13 @@ fn icon_sheet() {
         let (cx, cy) = ((i % cols) as i32 * 88 + 8, (i / cols) as i32 * 120 + 8);
         c.rrect_border(Rect::new(cx, cy, 80, 80), RADIUS, SURFACE, BORDER);
         c.icon(*icon, cx + 28, cy + 28, ICON, TEXT);
-        f.draw_in(&mut c, &format!("{icon:?}"), Face::Regular, 11.0, Rect::new(cx, cy + 84, 80, 16), Align::Center, TEXT_SECONDARY);
+        f.draw_in(
+            &mut c,
+            &format!("{icon:?}"),
+            Style::new(Face::Regular, 11.0, TEXT_SECONDARY),
+            Rect::new(cx, cy + 84, 80, 16),
+            Align::Center,
+        );
     }
     // accent, scaled 2x, small
     c.icon(Icon::Wifi, 24, 376, 48, ACCENT);

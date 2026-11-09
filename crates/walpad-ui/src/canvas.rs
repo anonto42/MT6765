@@ -54,7 +54,7 @@ fn rounded_rect_path(r: Rect, radius: f32) -> Option<Path> {
 
 pub(crate) fn rounded_rect_f(x: f32, y: f32, w: f32, h: f32, radius: f32) -> Option<Path> {
     let rad = radius.min(w / 2.0).min(h / 2.0).max(0.0);
-    let k = 0.552_284_75 * rad;
+    let k = 0.552_284_8 * rad;
     let mut pb = PathBuilder::new();
     pb.move_to(x + rad, y);
     pb.line_to(x + w - rad, y);

@@ -79,6 +79,9 @@ pub const TAP_MAX_MS: u64 = 500;
 pub const LONG_PRESS_MS: u64 = 500;
 pub const SLOP_PX: i32 = 10;
 
+// Compile-time guard: every row/button is at least a minimum touch target.
+const _: () = assert!(ROW_H >= TOUCH_MIN && BUTTON_H >= TOUCH_MIN && ROW_WIFI_H >= TOUCH_MIN);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,7 +110,6 @@ mod tests {
     #[test]
     fn spacing_scale_and_minimums() {
         assert_eq!(SP, [4, 8, 12, 16, 24, 32, 48]);
-        assert!(ROW_H >= TOUCH_MIN && BUTTON_H >= TOUCH_MIN && ROW_WIFI_H >= TOUCH_MIN);
         // portrait: status bar + content + nav = 1280
         assert_eq!(STATUS_BAR_H + (1280 - STATUS_BAR_H - NAV_H) + NAV_H, 1280);
         assert_eq!(1280 - NAV_H, 1192, "content ends at y 1192 as in the spec");

@@ -29,6 +29,20 @@ impl Face {
     }
 }
 
+/// Face, size and colour of a piece of text.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Style {
+    pub face: Face,
+    pub px: f32,
+    pub color: Color,
+}
+
+impl Style {
+    pub const fn new(face: Face, px: f32, color: Color) -> Self {
+        Style { face, px, color }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Align {
     Left,
@@ -137,12 +151,11 @@ impl Fonts {
         &mut self,
         cv: &mut Canvas,
         s: &str,
-        face: Face,
-        px: f32,
+        style: Style,
         x: f32,
         baseline: f32,
-        color: Color,
     ) -> f32 {
+        let Style { face, px, color } = style;
         let mut pen = x;
         for ch in s.chars() {
             let (xmin, ymin, w, h, adv) = {
@@ -165,16 +178,8 @@ impl Fonts {
     }
 
     /// Draw `s` inside `r`, vertically centred, with horizontal alignment and ellipsis.
-    pub fn draw_in(
-        &mut self,
-        cv: &mut Canvas,
-        s: &str,
-        face: Face,
-        px: f32,
-        r: Rect,
-        align: Align,
-        color: Color,
-    ) {
+    pub fn draw_in(&mut self, cv: &mut Canvas, s: &str, style: Style, r: Rect, align: Align) {
+        let Style { face, px, color: _ } = style;
         let s = self.fit(s, face, px, r.w as f32);
         let w = self.measure(&s, face, px);
         let (asc, desc) = self.line_metrics(face, px);
@@ -184,7 +189,7 @@ impl Fonts {
             Align::Center => r.x as f32 + (r.w as f32 - w) / 2.0,
             Align::Right => r.right() as f32 - w,
         };
-        self.draw_at(cv, &s, face, px, x, baseline, color);
+        self.draw_at(cv, &s, style, x, baseline);
     }
 }
 
@@ -230,11 +235,9 @@ mod tests {
         f.draw_in(
             &mut c,
             "Home",
-            Face::Regular,
-            18.0,
+            Style::new(Face::Regular, 18.0, TEXT),
             Rect::new(10, 10, 120, 40),
             Align::Left,
-            TEXT,
         );
         let lit = (0..200)
             .flat_map(|x| (0..60).map(move |y| (x, y)))
@@ -255,11 +258,9 @@ mod tests {
         f.draw_in(
             &mut c,
             "Café ✓ 日本",
-            Face::Regular,
-            18.0,
+            Style::new(Face::Regular, 18.0, TEXT),
             Rect::new(0, 0, 120, 40),
             Align::Center,
-            TEXT,
         );
     }
 
