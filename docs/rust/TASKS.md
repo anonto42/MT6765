@@ -23,7 +23,7 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M3.1 | runtime.conf handling + fallback | done (host; see reports/M3.1.md) |
 | M3.2 | device subsystem live | done (host; see reports/M3.2-M3.3.md) |
 | M3.3 | input subsystem live | done (host) |
-| M3.4 [DEVICE] | m3_check.sh + owner checklist | todo |
+| M3.4 [DEVICE] | m3_check.sh + owner checklist | script written; owner runs it after flash |
 | M4.1-M4.4 | wpa ctrl client, scan, connect/forget/disconnect (PBKDF2 PSK), device test | todo |
 | M5.1-M5.9 | walpad-ui, components, X11 presenter, screens, power menu, system dock, UI checklist | todo |
 | M6.1-M6.4 | Process manager, installed-only apps, crash notice, gate | todo |
