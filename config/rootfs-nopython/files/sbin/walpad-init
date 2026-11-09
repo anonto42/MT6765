@@ -51,6 +51,19 @@ else
   klog "no super / device-mapper: Wi-Fi stack unavailable"
 fi
 
+# Kernel firmware loading (request_firmware: the MediaTek WMT patches, WIFI_RAM_CODE, regulatory.db)
+# runs in kernel threads, and those still have the boot ramdisk as their root: switch_root only changed
+# the root of init and its children.  There /vendor does not exist, so the kernel answered "file not
+# found" (-2) and the radio never powered on.  Bind the firmware folders into that old root, reached
+# through kthreadd's /proc/2/root.  Harmless when the roots are the same (no switch_root).
+if [ -d /vendor/firmware ] && ! [ /proc/2/root/. -ef / ]; then
+  for fwd in /vendor/firmware /lib/firmware; do
+    [ -d $fwd ] || continue
+    mkdir -p /proc/2/root$fwd 2>/dev/null
+    mount --bind $fwd /proc/2/root$fwd 2>/dev/null && klog "firmware: $fwd visible to kernel threads" || klog "firmware: cannot bind $fwd into the boot root"
+  done
+fi
+
 # SSH (keys only; password login disabled)
 [ -f /etc/dropbear/dropbear_ed25519_host_key ] || dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key > /dev/null 2>&1
 if [ -s /root/.ssh/authorized_keys ]; then
