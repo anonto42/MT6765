@@ -9,6 +9,7 @@ typedef unsigned long u64; typedef long i64; typedef unsigned int u32; typedef u
 #define H 1280
 #define PAGE_PX (W * H)
 #define PAGE_BYTES (PAGE_PX * 4)
+#include "logic.h"
 
 static long sc6(long n, long a, long b, long c, long d, long e, long f) {
     register long x8 __asm__("x8") = n; register long x0 __asm__("x0") = a; register long x1 __asm__("x1") = b;
@@ -23,6 +24,7 @@ static long sc6(long n, long a, long b, long c, long d, long e, long f) {
 #define SYS_write 64
 #define SYS_fstat 80
 #define SYS_nanosleep 101
+#define SYS_clock_gettime 113
 #define SYS_mmap 222
 #define AT_FDCWD (-100)
 void *memcpy(void *d, const void *s, unsigned long n) { u8 *a = d; const u8 *b = s; while (n--) { *a++ = *b++; __asm__ volatile(""); } return d; }
@@ -34,6 +36,19 @@ static int read_ori(void) {
     if (r <= 0) return 0;
     int v = 0; for (long i = 0; i < r && b[i] >= '0' && b[i] <= '9'; i++) v = v * 10 + (b[i] - '0');
     return (v == 90 || v == 180 || v == 270) ? v : 0;
+}
+/* 1 = status.json is fresh and says "screen":"off"; 0 = anything else (missing, stale, unparsable: keep copying) */
+static int read_screen_off(void) {
+    char b[2048]; u64 st[18];   /* aarch64 struct stat is 128 bytes; st_mtime.tv_sec is at byte 88 */
+    long fd = sc3(SYS_openat, AT_FDCWD, "/run/walpad/status.json", 0);
+    if (fd < 0) return 0;
+    long r = -1;
+    if (sc3(SYS_fstat, fd, st, 0) == 0) r = sc3(SYS_read, fd, b, sizeof b);
+    sc3(SYS_close, fd, 0, 0);
+    if (r <= 0) return 0;
+    long ts[2] = { 0, 0 };
+    if (sc3(SYS_clock_gettime, 0, ts, 0) != 0) return 0;
+    return fb_status_off(b, r, (long)st[11], ts[0]);
 }
 static int slen(const char *s) { int n = 0; while (s[n]) n++; return n; }
 static void write_file(const char *p, const char *s) { long fd = sc3(SYS_openat, AT_FDCWD, p, 1); if (fd < 0) return; sc3(SYS_write, fd, s, slen(s)); sc3(SYS_close, fd, 0, 0); }
@@ -64,7 +79,11 @@ int cmain(long *sp) {
     if (xm < 0 && xm > -4096) { say("fbmirror: cannot map XWD file\n"); return 5; }
     const u32 *src = (const u32 *)((u8 *)xm + off);
     int inited = 0, woke = 0, cur = 0, ori = -1, tick = 0;
+    fbgate gate = { 0, 0, 0 }; long slept = 0;
     for (;;) {
+        if (gate_poll_due(&gate, slept)) gate_update(&gate, read_screen_off());
+        if (gate.paused) { slept = gate_sleep_ms(&gate); msleep(slept); continue; }   /* screen off: no compare, no copy */
+        if (gate.refresh) { gate.refresh = 0; inited = 0; tick = 0; for (int i = 0; i < PAGE_PX; i++) shadow[i] = 0; }   /* resumed: one full refresh, re-read rotation */
         if ((tick++ & 3) == 0) { int o = read_ori(); if (o != ori) { int first = ori < 0; ori = o; for (int i = 0; i < PAGE_PX; i++) shadow[i] = 0; if (!first) msleep(300); /* let X relayout, then draw once; never blank on rotation */ } }
         int changed = 0; u32 *sh = shadow;
         if (ori == 0) {
@@ -85,7 +104,7 @@ int cmain(long *sp) {
             if (!woke) { write_file("/sys/class/graphics/fb0/blank", "1"); msleep(40); write_file("/sys/class/graphics/fb0/blank", "0"); woke = 1; }
             inited = 1;
         }
-        msleep(40);
+        slept = gate_sleep_ms(&gate); msleep(slept);
     }
     return 0;
 }
