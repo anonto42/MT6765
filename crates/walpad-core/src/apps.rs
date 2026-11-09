@@ -246,13 +246,24 @@ impl Apps {
                 return Err(LaunchError::Closing);
             }
         }
+        // The app's own error output goes to /var/log/walpad-app-<id>.log (ids are lower-case slugs),
+        // so a crash on the tablet can be diagnosed; it falls back to /dev/null.
+        let errlog = || {
+            let p = root.p(&format!("/var/log/walpad-app-{id}.log"));
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(p)
+                .map(Stdio::from)
+                .unwrap_or_else(|_| Stdio::null())
+        };
         let child = Command::new(&d.exec[0])
             .args(&d.exec[1..])
             .envs(CONTRACT_ENV.iter().copied())
             .envs(d.env.iter())
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(errlog())
+            .stderr(errlog())
             .spawn()
             .map_err(|e| LaunchError::Spawn(e.to_string()))?;
         let pid = child.id();

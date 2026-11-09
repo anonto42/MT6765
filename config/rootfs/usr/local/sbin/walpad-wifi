@@ -80,7 +80,8 @@ exit 0
 SCR
 chmod +x /run/walpad/udhcpc.script
 pkill wpa_supplicant 2>/dev/null; sleep 1
-wpa_supplicant -B -i $IFACE -c $CONF -Dnl80211 -P /run/wpa_supplicant.pid -f /var/log/wpa_supplicant.log
+# (no -f: Alpine's build has no debug-file support, so -f made it print its usage and exit)
+wpa_supplicant -B -i $IFACE -c $CONF -Dnl80211 -P /run/wpa_supplicant.pid >> /var/log/wpa_supplicant.log 2>&1
 echo started > /run/walpad/wifi-state
 while true; do
   state=$(wpa_cli -p /run/wpa_supplicant -i $IFACE status 2>/dev/null | sed -n 's/^wpa_state=//p')
