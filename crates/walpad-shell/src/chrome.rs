@@ -122,10 +122,14 @@ pub struct ChromeKey {
     pub active: Option<Target>,
 }
 
-/// Charcoal, the watermark in the content area, the sidebar edge and its buttons at rest.
-pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey) {
+/// The wallpaper (bottom-aligned: the shell shrinks above the dock strip), the sidebar edge and its
+/// buttons at rest.  Without a wallpaper (decode failed) plain charcoal with the line-art cup.
+pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Canvas>) {
     p.cv.fill(BG);
-    draw_coffee(p.cv, coffee_rect(frame.content), 3.0, WATERMARK);
+    match wall {
+        Some(w) => p.cv.blit(w, 0, frame.h - w.height()),
+        None => draw_coffee(p.cv, coffee_rect(frame.content), 3.0, WATERMARK),
+    }
     let sb = frame.sidebar;
     p.cv.rect(Rect::new(sb.right() - 1, sb.y, 1, sb.h), DIVIDER);
     p.divider(sb.x + (sb.w - 40) / 2, key.sidebar.divider_y, 40);
@@ -138,6 +142,8 @@ pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey) {
 #[derive(Default)]
 pub struct Chrome {
     cache: Option<(ChromeKey, Canvas)>,
+    /// Decoded wallpaper and whether it is the landscape one (decoded once per orientation).
+    wall: Option<(bool, Canvas)>,
     /// Times the layer was rebuilt (tests check it is not per frame).
     pub builds: u64,
 }
@@ -146,6 +152,11 @@ impl Chrome {
     /// Copy the background for `key` into `p.cv`, rebuilding the cache when the key changed.
     pub fn paint(&mut self, p: &mut Painter, frame: &Frame, key: ChromeKey) {
         let stale = self.cache.as_ref().is_none_or(|(k, _)| *k != key);
+        let landscape = frame.w > frame.h;
+        if self.wall.as_ref().is_none_or(|(l, _)| *l != landscape) {
+            self.wall = walpad_ui::art::wallpaper(frame.w, frame.h).map(|c| (landscape, c));
+        }
+        let wall = self.wall.as_ref().map(|(_, c)| c);
         if stale {
             match Canvas::new(frame.w as u32, frame.h as u32, BG) {
                 Some(mut cv) => {
@@ -156,6 +167,7 @@ impl Chrome {
                         },
                         frame,
                         &key,
+                        wall,
                     );
                     self.builds += 1;
                     self.cache = Some((key.clone(), cv));
@@ -166,7 +178,7 @@ impl Chrome {
         match &self.cache {
             Some((_, cv)) if p.cv.copy_from(cv) => {}
             // no cache (allocation failed) or a canvas of another size: draw it directly
-            _ => render_background(p, frame, &key),
+            _ => render_background(p, frame, &key, wall),
         }
     }
 

@@ -205,7 +205,8 @@ fn shell_runs_on_a_real_x_server() {
     let (home_p, settings_p) = side(&Frame::new(800, 1280));
     let img = probe.image(win, 800, 1280);
     assert_eq!(
-        px(&img, w, 700, 1200),
+        // (the wallpaper art sits along the bottom; the middle of the content area is plain BG)
+        px(&img, w, 700, 600),
         (BG.r, BG.g, BG.b),
         "content background"
     );
@@ -245,7 +246,8 @@ fn shell_runs_on_a_real_x_server() {
         }
         let img = probe.image(win, 1280, 800);
         px(&img, 1280, 95, 400) == (DIVIDER.r, DIVIDER.g, DIVIDER.b)
-            && px(&img, 1280, 1200, 760) == (BG.r, BG.g, BG.b)
+            // middle of the header: plain BG (the wallpaper art fills the bottom)
+            && px(&img, 1280, 700, 40) == (BG.r, BG.g, BG.b)
             && active_edge(&img, 1280, settings_l) > 10
     });
     // Settings is still active after the resize, and a tap lands on the new layout

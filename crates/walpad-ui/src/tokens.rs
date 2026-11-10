@@ -44,7 +44,8 @@ pub const fn white(pct: u32) -> Color {
     BG.mix(WHITE, pct)
 }
 
-pub const BG: Color = Color::hex(0x2B3035);
+/// Matches the owner's coffee wallpaper (assets/wallpaper), 2026-11-10.
+pub const BG: Color = Color::hex(0x393E46);
 pub const TEXT: Color = WHITE;
 /// App labels under icons (white 90 %).
 pub const TEXT_LABEL: Color = white(90);
@@ -128,16 +129,16 @@ mod tests {
     #[test]
     fn colour_tokens_match_the_spec() {
         for (c, hex) in [
-            (BG, "#2B3035"),
+            (BG, "#393E46"),
             (TEXT, "#FFFFFF"),
-            (TEXT_LABEL, "#EAEAEB"),
-            (TEXT_SECONDARY, "#A0A2A4"),
-            (TEXT_DISABLED, "#6F7276"),
-            (OUTLINE, "#AAACAE"),
-            (CARD_BORDER, "#95989A"),
-            (DIVIDER, "#6B6E72"),
-            (PRESSED_FILL, "#404549"),
-            (WATERMARK, "#4B4F53"),
+            (TEXT_LABEL, "#EBECED"),
+            (TEXT_SECONDARY, "#A6A8AC"),
+            (TEXT_DISABLED, "#787C81"),
+            (OUTLINE, "#B0B2B5"),
+            (CARD_BORDER, "#9C9FA3"),
+            (DIVIDER, "#74787E"),
+            (PRESSED_FILL, "#4D5159"),
+            (WATERMARK, "#575B62"),
             (ACCENT, "#FFFFFF"),
             (SUCCESS, "#6DBE82"),
             (WARNING, "#D9B25A"),

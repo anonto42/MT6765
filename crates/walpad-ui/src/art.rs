@@ -106,3 +106,32 @@ mod tests {
         assert!(lit.iter().all(|&(x, y)| r.inset(-3).contains(x, y)));
     }
 }
+
+/// The owner's coffee wallpaper ("Grey and White Coffee Desktop Wallpaper", 2026-11-10): charcoal
+/// (`BG`) with sketched iced coffees and beans along the bottom, prepared for the panel in both
+/// orientations (landscape 1280x800, portrait 800x1280).
+pub const WALLPAPER_LANDSCAPE: &[u8] = include_bytes!("../assets/wallpaper/landscape.png");
+pub const WALLPAPER_PORTRAIT: &[u8] = include_bytes!("../assets/wallpaper/portrait.png");
+
+/// Decoded wallpaper for a frame of `w` x `h` (landscape when wider than tall).
+pub fn wallpaper(w: i32, h: i32) -> Option<crate::canvas::Canvas> {
+    crate::canvas::Canvas::from_png(if w > h {
+        WALLPAPER_LANDSCAPE
+    } else {
+        WALLPAPER_PORTRAIT
+    })
+}
+
+#[cfg(test)]
+mod wallpaper_tests {
+    use super::*;
+    #[test]
+    fn both_wallpapers_decode_at_panel_size_with_the_background_colour_on_top() {
+        for (w, h) in [(1280, 800), (800, 1280)] {
+            let c = wallpaper(w, h).expect("decodes");
+            assert_eq!((c.width(), c.height()), (w, h));
+            // the top is plain background (the art sits along the bottom)
+            assert_eq!(c.pixel(w / 2, 10), Some(crate::tokens::BG));
+        }
+    }
+}

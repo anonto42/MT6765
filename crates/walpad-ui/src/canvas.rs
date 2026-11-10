@@ -86,6 +86,11 @@ impl Canvas {
         pm.fill(bg.sk());
         Some(Canvas { pm, origin: (0, 0) })
     }
+    /// Canvas from PNG bytes (opaque images; None if it cannot be decoded).
+    pub fn from_png(bytes: &[u8]) -> Option<Self> {
+        let pm = Pixmap::decode_png(bytes).ok()?;
+        Some(Canvas { pm, origin: (0, 0) })
+    }
     pub fn width(&self) -> i32 {
         self.pm.width() as i32
     }
