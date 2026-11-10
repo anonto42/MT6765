@@ -1,0 +1,86 @@
+#!/bin/sh
+# walpad-modem: boot the MediaTek modem (MD1, LTE/WCDMA/GSM) the way Android's vendor init does,
+# using the stock vendor daemons through Android's linker (same method as walpad-wifi).
+#   walpad-modem start   mount the modem's NV partitions, start ccci_fsd + ccci_mdinit, wait for MD
+#   walpad-modem status  print the modem state (no side effects)
+# The NV partitions hold the IMEI and RF calibration: backups are in firmware/MT6765/backups/modem-*
+# (host) and /mnt/sd/walpad-backup (tablet).  ccci_fsd writes to them like Android does.
+SYS=/system/system
+# the modem daemons are 32-bit ARM: 32-bit linker, libraries and property shim (tools/propshim32)
+LINKER=$SYS/bin/bootstrap/linker
+SHIM=/usr/local/lib/libwpdprops32.so
+PROPS=/tmp/wpd-props
+RUN=/run/walpad
+say() { echo "[modem] $*"; echo "WALPAD-MODEM: $*" > /dev/kmsg 2>/dev/null; }
+
+partdev() {  # GPT name -> mmcblk0pN
+  for f in /sys/class/block/mmcblk0p*/uevent; do
+    [ "$(sed -n 's/^PARTNAME=//p' "$f")" = "$1" ] && { sed -n 's/^DEVNAME=//p' "$f"; return 0; }
+  done; return 1
+}
+
+by_name() {  # Android paths /dev/block/platform/bootdevice/by-name/<part> (and /dev/block/by-name)
+  mkdir -p /dev/block/platform/bootdevice/by-name
+  ln -sfn platform/bootdevice/by-name /dev/block/by-name 2>/dev/null
+  for f in /sys/class/block/mmcblk0p*/uevent; do
+    n=$(sed -n 's/^PARTNAME=//p' "$f"); d=$(sed -n 's/^DEVNAME=//p' "$f")
+    [ -n "$n" ] && ln -sfn "/dev/$d" "/dev/block/platform/bootdevice/by-name/$n"
+  done
+}
+
+mount_nv() {  # part mountpoint
+  d=$(partdev "$1") || { say "no partition $1"; return 1; }
+  mkdir -p "$2"; mountpoint -q "$2" && return 0
+  mount -t ext4 -o noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc "/dev/$d" "$2" || { say "cannot mount $1"; return 1; }
+}
+
+# The ccci kernel driver only accepts some ioctls (MD start) from a process named ccci_mdinit, and
+# a process started as "linker /vendor/bin/x" is named "linker": run each daemon through a symlink
+# to the linker carrying the daemon's name, so the kernel sees the right process name.
+LDIR=$RUN/android-bin
+running() { pgrep -f "^$LDIR/$1 /vendor/bin/$1( |$)" >/dev/null 2>&1; }
+
+vendor_daemon() {  # name args...: run a vendor binary through the bionic linker with the property shim;
+  # publishes init.svc.vendor.<name>=running like Android's init (ccci_mdinit waits for it)
+  n=$1; shift
+  mkdir -p $LDIR; ln -sfn "$LINKER" "$LDIR/$n"
+  running "$n" || ( export LD_LIBRARY_PATH=$SYS/lib/bootstrap:/vendor/lib:$SYS/lib LD_PRELOAD=$SHIM
+    setsid "$LDIR/$n" "/vendor/bin/$n" "$@" >> "/var/log/walpad-$n.log" 2>&1 < /dev/null & )
+  echo "init.svc.vendor.$n=running" >> $PROPS; echo "init.svc.$n=running" >> $PROPS
+}
+
+md_state() { timeout 2 cat /sys/kernel/ccci/md_en 2>/dev/null; }
+
+case ${1:-status} in
+  start)
+    [ -x "$LINKER" ] || { say "bootstrap linker missing: /system not mounted"; exit 1; }
+    by_name
+    mount_nv nvdata /mnt/vendor/nvdata || exit 1
+    mount_nv nvcfg /mnt/vendor/nvcfg || exit 1
+    mount_nv protect1 /mnt/vendor/protect_f || exit 1
+    mount_nv protect2 /mnt/vendor/protect_s || exit 1
+    mkdir -p /mnt/vendor/nvdata/md /data/vendor/mdlpm /data/vendor/md3 /data/vendor_de/md $RUN
+    # Android log socket stand-in so the vendor daemons' messages land in a file (socat, optional)
+    mkdir -p /dev/socket
+    if command -v socat >/dev/null 2>&1 && [ ! -S /dev/socket/logdw ]; then
+      ( setsid socat -u UNIX-RECV:/dev/socket/logdw OPEN:/var/log/walpad-android.log,creat,append >/dev/null 2>&1 & )
+    fi
+    vendor_daemon nvram_daemon
+    i=0; while [ $i -lt 30 ] && ! grep -q "^vendor.service.nvram_init=Ready" $PROPS 2>/dev/null; do sleep 1; i=$((i+1)); done
+    say "nvram_init: $(grep "^vendor.service.nvram_init=" $PROPS 2>/dev/null | tail -1)"
+    vendor_daemon ccci_fsd 0
+    sleep 1
+    vendor_daemon ccci_mdinit 0
+    i=0; while [ $i -lt 60 ]; do
+      [ -c /dev/ttyC0 ] && grep -q "ready" /sys/kernel/ccci/md_en 2>/dev/null && break
+      sleep 1; i=$((i+1))
+    done
+    say "after ${i}s: md_en=$(md_state | tr '\n' ' ')"
+    ;;
+  status)
+    echo "md_en: $(md_state | tr '\n' ' ')"
+    for n in nvram_daemon ccci_fsd ccci_mdinit; do printf '%s: %s\n' "$n" "$(running "$n" && echo running || echo stopped)"; done
+    grep -E "^(vendor\.service\.nvram_init|vendor\.mtk\.md1\.status|mtk\.md1\.status)=" $PROPS 2>/dev/null | tail -3
+    ;;
+  *) echo "usage: $0 start|status" >&2; exit 2 ;;
+esac
