@@ -5,6 +5,7 @@ pub mod apps;
 pub mod brain;
 pub mod daemon;
 pub mod fake;
+pub mod hotspot;
 pub mod inputs;
 pub mod logic;
 pub mod shadow;

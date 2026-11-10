@@ -14,6 +14,9 @@ pub const COMMAND_NAMES: &[&str] = &[
     "wifi_connect",
     "wifi_disconnect",
     "wifi_forget",
+    "wifi_enable",
+    "hotspot",
+    "hotspot_config",
     "launch",
     "close_app",
     "home",
@@ -144,6 +147,23 @@ pub enum Command {
     WifiForget {
         saved_id: u32,
     },
+    /// Wi-Fi client on/off at the network level (owner request 2026-11-10). Off stops the
+    /// supplicant and takes wlan0 down; the chip stays powered (a power cycle latches it).
+    WifiEnable {
+        on: bool,
+    },
+    /// Hotspot on/off (owner request 2026-11-10): runs /usr/local/sbin/walpad-hotspot.
+    Hotspot {
+        on: bool,
+    },
+    /// Hotspot name (UTF-8, 1-32 bytes) and/or WPA2 passphrase (8-63 printable ASCII). Stored
+    /// mode 0600; the passphrase is never logged, never in argv, never reported back.
+    HotspotConfig {
+        #[serde(default)]
+        ssid: Option<String>,
+        #[serde(default)]
+        secret: Option<Secret>,
+    },
     Launch {
         app: String,
     },
@@ -252,6 +272,21 @@ impl Command {
                 }
                 Ok(())
             }
+            Command::HotspotConfig { ssid, secret } => {
+                if ssid.is_none() && secret.is_none() {
+                    return Err("give ssid and/or secret".into());
+                }
+                if ssid.as_deref().is_some_and(|n| !valid_hotspot_ssid(n)) {
+                    return Err("ssid must be 1-32 bytes without control characters".into());
+                }
+                if secret
+                    .as_ref()
+                    .is_some_and(|s| !valid_hotspot_secret(s.expose()))
+                {
+                    return Err("secret must be 8-63 printable ASCII characters".into());
+                }
+                Ok(())
+            }
             Command::Launch { app } | Command::CloseApp { app } => {
                 if valid_app_id(app) {
                     Ok(())
@@ -263,6 +298,16 @@ impl Command {
             _ => Ok(()),
         }
     }
+}
+
+/// Hotspot name: 1-32 bytes of UTF-8 without control characters.
+pub fn valid_hotspot_ssid(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 32 && !s.chars().any(char::is_control)
+}
+
+/// Hotspot WPA2 passphrase: 8-63 printable ASCII characters (what hostapd's wpa_passphrase takes).
+pub fn valid_hotspot_secret(s: &str) -> bool {
+    (8..=63).contains(&s.len()) && s.bytes().all(|b| (0x20..=0x7e).contains(&b))
 }
 
 /// App ids are short lower-case slugs ("browser", "system-monitor").

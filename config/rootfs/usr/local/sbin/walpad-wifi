@@ -79,11 +79,40 @@ esac
 exit 0
 SCR
 chmod +x /run/walpad/udhcpc.script
-pkill wpa_supplicant 2>/dev/null; sleep 1
-# (no -f: Alpine's build has no debug-file support, so -f made it print its usage and exit)
-wpa_supplicant -B -i $IFACE -c $CONF -Dnl80211 -P /run/wpa_supplicant.pid >> /var/log/wpa_supplicant.log 2>&1
-echo started > /run/walpad/wifi-state
+
+# The owner's Wi-Fi switch (walpad-core `wifi_enable`, owner request 2026-11-10): "0" in
+# $ENABLED_FILE = client off (missing = on, persists across reboots).  Off works at the network
+# level only: the supplicant stops and wlan0 goes down; the chip stays powered (see above).
+# walpad-hotspot creates $EXCL while an access point runs without STA+AP concurrency: the client is
+# held off (wlan0 stays up for the AP) and resumes when the flag goes away.
+ENABLED_FILE=/var/lib/walpad/wifi-enabled
+EXCL=/run/walpad/hotspot-exclusive
+want_client() { [ "$(cat $ENABLED_FILE 2>/dev/null)" != 0 ] && [ ! -e $EXCL ]; }
+sup_start() {
+  pkill wpa_supplicant 2>/dev/null; sleep 1
+  ip link set $IFACE up 2>/dev/null
+  # (no -f: Alpine's build has no debug-file support, so -f made it print its usage and exit)
+  wpa_supplicant -B -i $IFACE -c $CONF -Dnl80211 -P /run/wpa_supplicant.pid >> /var/log/wpa_supplicant.log 2>&1
+  echo started > /run/walpad/wifi-state
+  say "client on"
+}
+sup_stop() {
+  wpa_cli -p /run/wpa_supplicant -i $IFACE terminate > /dev/null 2>&1
+  sleep 1; pkill wpa_supplicant 2>/dev/null
+  pkill -f "udhcpc -i $IFACE" 2>/dev/null
+  ip addr flush dev $IFACE 2>/dev/null
+  if [ -e $EXCL ]; then say "client paused for the hotspot"
+  else ip link set $IFACE down 2>/dev/null; say "client off (Wi-Fi switch)"; fi
+}
+CLIENT=unknown
 while true; do
+  if ! want_client; then
+    [ "$CLIENT" = off ] || { sup_stop; CLIENT=off; }
+    if [ -e $EXCL ]; then echo hotspot > /run/walpad/wifi-state; else echo disabled > /run/walpad/wifi-state; fi
+    i=0; while [ $i -lt 4 ] && ! want_client; do sleep 1; i=$((i+1)); done
+    continue
+  fi
+  [ "$CLIENT" = on ] || { sup_start; CLIENT=on; }
   state=$(wpa_cli -p /run/wpa_supplicant -i $IFACE status 2>/dev/null | sed -n 's/^wpa_state=//p')
   ip=$(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
   if [ "$state" = "COMPLETED" ] && [ -z "$ip" ]; then
@@ -105,5 +134,6 @@ while true; do
       say "time sync failed (will retry)"
     fi
   fi
-  sleep 4
+  # the switch is checked every second, the rest every 4 s
+  i=0; while [ $i -lt 4 ] && want_client; do sleep 1; i=$((i+1)); done
 done

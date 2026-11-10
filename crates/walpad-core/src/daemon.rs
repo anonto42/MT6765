@@ -2,6 +2,7 @@
 //! runtime. The `Brain` decides; this module executes (sysfs writes, X requests, spawns).
 use crate::apps::{terminate_pid, Apps, Exit, LaunchError};
 use crate::brain::{Brain, Effect};
+use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
 use crate::wpa::manager::{Wifi, WifiError, WifiEvent};
@@ -101,6 +102,7 @@ pub struct Daemon {
     live: Option<LiveState>,
     apps: Apps,
     wifi: Wifi,
+    hotspot: Hotspot,
     xb: Option<XBridge>,
     x_retry: Instant,
     x_ping: Instant,
@@ -149,6 +151,17 @@ fn wifi_err(e: WifiError) -> (ErrorCode, String) {
         WifiError::Failed(m) => (ErrorCode::Internal, m),
     }
 }
+
+fn hotspot_err(e: HotspotError) -> (ErrorCode, String) {
+    match e {
+        HotspotError::Busy => (ErrorCode::Busy, "the hotspot is starting or stopping".into()),
+        HotspotError::Invalid(m) => (ErrorCode::InvalidArgs, m),
+        HotspotError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
+/// The owner's Wi-Fi switch (owner request 2026-11-10); read by walpad-wifi's loop.
+pub const WIFI_ENABLED_FILE: &str = "/var/lib/walpad/wifi-enabled";
 
 fn wifi_event_json(e: &WifiEvent) -> Value {
     match e {
@@ -204,6 +217,7 @@ impl Daemon {
             live: None,
             apps,
             wifi: Wifi::new(&root),
+            hotspot: Hotspot::new(&root),
             xb: None,
             x_retry: now,
             x_ping: now,
@@ -220,6 +234,8 @@ impl Daemon {
         let mut fx = Vec::new();
         Brain::rotation_effects(init, &mut fx);
         d.apply(fx, true);
+        // a hotspot can outlive a core restart: pick up its real state
+        d.hotspot.probe(now);
         Ok(d)
     }
 
@@ -421,6 +437,11 @@ impl Daemon {
                 c.queue(line.clone());
             }
         }
+    }
+
+    /// Test hook: shorter hotspot script timeouts.
+    pub fn hotspot_mut(&mut self) -> &mut Hotspot {
+        &mut self.hotspot
     }
 
     /// Test hook: how long a closing app gets before it is killed.
@@ -782,11 +803,17 @@ impl Daemon {
         let raw = read_battery(&self.root);
         let mut wifi =
             parse_wifi_state(sysfs::read_trim(&self.root, "/run/walpad/wifi-state").as_deref());
-        let live = self.wifi.live();
-        wifi.ssid = live.ssid.clone();
-        wifi.signal_dbm = live.signal_dbm;
-        if wifi.ip.is_none() {
-            wifi.ip = live.ip.clone();
+        wifi.enabled = self.wifi_enabled();
+        // a stale supplicant reading must not show a connection while the client is off
+        let client_off = !wifi.enabled
+            || matches!(wifi.state.as_deref(), Some("disabled" | "hotspot"));
+        if !client_off {
+            let live = self.wifi.live();
+            wifi.ssid = live.ssid.clone();
+            wifi.signal_dbm = live.signal_dbm;
+            if wifi.ip.is_none() {
+                wifi.ip = live.ip.clone();
+            }
         }
         let devs = input::discover(&self.root);
         let ok = |b: bool| if b { "ok" } else { "unavailable" }.to_string();
@@ -798,6 +825,7 @@ impl Daemon {
             rotation_locked: self.brain.rotation.locked(),
             lid_closed: self.brain.screen.lid_closed(),
             wifi,
+            hotspot: self.hotspot.status().clone(),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
                 touch: ok(input::find(&devs, input::is_touch).is_some()),
@@ -807,6 +835,42 @@ impl Daemon {
                 sd_card: "unavailable".into(),
             },
         }
+    }
+
+    /// The Wi-Fi switch: anything but "0" in the state file (or no file) is on.
+    fn wifi_enabled(&self) -> bool {
+        sysfs::read_trim(&self.root, WIFI_ENABLED_FILE).as_deref() != Some("0")
+    }
+
+    /// `wifi_enable`: persist the switch; walpad-wifi's loop stops or restarts the supplicant
+    /// within about a second. Off also drops the current association at once.
+    fn wifi_enable(&mut self, on: bool) -> CmdResult {
+        let p = self.root.p(WIFI_ENABLED_FILE);
+        if let Some(d) = p.parent() {
+            std::fs::create_dir_all(d).map_err(internal)?;
+        }
+        write_atomic(&p, if on { b"1\n" } else { b"0\n" }).map_err(internal)?;
+        if !on && self.wifi.connected() {
+            let _ = self.wifi.disconnect();
+        }
+        eprintln!("walpad-core: Wi-Fi switch {}", if on { "on" } else { "off" });
+        Ok(json!({
+            "enabled": on,
+            // the client stays paused while an exclusive hotspot runs
+            "held_by_hotspot": on && self.hotspot.status().exclusive,
+        }))
+    }
+
+    /// `wifi` event `hotspot` with the current hotspot status (state changes, failures).
+    fn publish_hotspot(&mut self) {
+        let data = match serde_json::to_value(self.hotspot.status()) {
+            Ok(Value::Object(mut m)) => {
+                m.insert("kind".into(), json!("hotspot"));
+                Value::Object(m)
+            }
+            _ => return,
+        };
+        self.publish(Topic::Wifi, "wifi", data);
     }
 
     fn write_status_json(&self, s: &Status) {
@@ -902,6 +966,24 @@ impl Daemon {
             }
             Command::WifiDisconnect => self.wifi.disconnect().map(|_| json!({})).map_err(wifi_err),
             Command::WifiForget { saved_id } => self.wifi.forget(saved_id).map(|_| json!({})).map_err(wifi_err),
+            Command::WifiEnable { on } => self.wifi_enable(on),
+            Command::Hotspot { on } => {
+                let st = self.hotspot.set_on(on, Instant::now()).map_err(hotspot_err)?;
+                self.publish_hotspot();
+                Ok(json!({"state": st}))
+            }
+            Command::HotspotConfig { ssid, secret } => {
+                let restarting = self
+                    .hotspot
+                    .configure(ssid.as_deref(), secret.as_ref(), Instant::now())
+                    .map_err(hotspot_err)?;
+                let h = self.hotspot.status();
+                let reply = json!({"ssid": h.ssid, "has_secret": h.has_secret, "restarting": restarting});
+                if restarting {
+                    self.publish_hotspot();
+                }
+                Ok(reply)
+            }
             Command::PowerMenu { open } => {
                 self.shell_menu_until = open.then(|| now + SHELL_MENU_MAX_MS);
                 Ok(json!({"open": open}))
@@ -1137,6 +1219,10 @@ impl Daemon {
             }
             did = true;
         }
+        if self.hotspot.tick(Instant::now()) {
+            self.publish_hotspot();
+            did = true;
+        }
         let now = Instant::now();
         // outside live device mode the battery guard only logs (the Python daemon owns shutdown)
         if self.live.as_ref().is_none_or(|l| !l.device) && now >= self.next_battery {
@@ -1209,11 +1295,17 @@ pub fn parse_wifi_state(raw: Option<&str>) -> WifiStatus {
         ssid: None,
         ip: None,
         signal_dbm: None,
+        enabled: true,
     };
     match raw.map(str::trim) {
         None | Some("") => none(WifiRadio::Down),
         Some("failed") => none(WifiRadio::Failed),
         Some("started") => none(WifiRadio::Starting),
+        // client off by the switch / paused for an exclusive hotspot (owner request 2026-11-10)
+        Some(s @ ("disabled" | "hotspot")) => WifiStatus {
+            state: Some(s.to_string()),
+            ..none(WifiRadio::Down)
+        },
         Some(s) => {
             let mut it = s.split_whitespace();
             WifiStatus {
@@ -1222,6 +1314,7 @@ pub fn parse_wifi_state(raw: Option<&str>) -> WifiStatus {
                 ssid: None,
                 ip: it.next().map(String::from),
                 signal_dbm: None,
+                enabled: true,
             }
         }
     }

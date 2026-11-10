@@ -11,13 +11,13 @@ mod status;
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
     BrightnessArgs, Command, KeyboardMode, PowerAction, RawRequest, RotateMode, ScreenMode,
-    ShellInput, Topic, ALLOWED_SETTINGS, COMMAND_NAMES,
+    valid_hotspot_secret, valid_hotspot_ssid, ShellInput, Topic, ALLOWED_SETTINGS, COMMAND_NAMES,
 };
 pub use devd::parse_devd_line;
 pub use secret::{redact_hex_ssid, Secret};
 pub use status::{
-    AppState, Battery, BatterySource, Hardware, LegacyStatus, ScreenState, Status, WifiRadio,
-    WifiStatus,
+    AppState, Battery, BatterySource, Hardware, HotspotInternet, HotspotState, HotspotStatus,
+    LegacyStatus, ScreenState, Status, WifiRadio, WifiStatus,
 };
 
 use serde::{Deserialize, Serialize};

@@ -28,7 +28,9 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
             ssid: Some("Home".into()),
             ip: Some("192.168.0.100".into()),
             signal_dbm: Some(-58),
+            enabled: true,
         },
+        hotspot: Default::default(),
         apps: apps
             .iter()
             .map(|(a, r)| AppState {

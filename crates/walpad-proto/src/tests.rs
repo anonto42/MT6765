@@ -167,6 +167,82 @@ fn secret_is_redacted_everywhere() {
 }
 
 #[test]
+fn wifi_enable_and_hotspot_commands() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"wifi_enable","args":{"on":false}}"#)
+            .unwrap()
+            .1,
+        Command::WifiEnable { on: false }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"hotspot","args":{"on":true}}"#)
+            .unwrap()
+            .1,
+        Command::Hotspot { on: true }
+    );
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"wifi_enable"}"#,
+        r#"{"v":1,"id":1,"cmd":"wifi_enable","args":{"on":"yes"}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot","args":{}}"#,
+    ] {
+        assert_eq!(code(req(bad)), ErrorCode::InvalidArgs, "{bad}");
+    }
+}
+
+#[test]
+fn hotspot_config_is_validated_and_redacted() {
+    let (_, c) = req(
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"WalPad Café","secret":"hunter2hunter2"}}"#,
+    )
+    .unwrap();
+    assert!(!format!("{c:?}").contains("hunter2"));
+    assert!(req(r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"Tab"}}"#).is_ok());
+    assert!(
+        req(r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"secret":"12345678"}}"#).is_ok()
+    );
+    let long = "x".repeat(63);
+    assert!(req(&format!(
+        r#"{{"v":1,"id":1,"cmd":"hotspot_config","args":{{"secret":"{long}"}}}}"#
+    ))
+    .is_ok());
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":""}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"0123456789012345678901234567890123"}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"a\nb"}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"secret":"short"}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"secret":"line\nbreak!"}}"#,
+        r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"secret":"ünicode-pass"}}"#,
+    ] {
+        let r = req(bad);
+        assert_eq!(code(r.clone()), ErrorCode::InvalidArgs, "{bad}");
+        // the refusal never echoes the secret
+        let msg = r.err().and_then(|e| e.error).map(|e| e.msg).unwrap_or_default();
+        assert!(!msg.contains("short") && !msg.contains("break"), "{msg}");
+    }
+    let long = "x".repeat(64);
+    assert_eq!(
+        code(req(&format!(
+            r#"{{"v":1,"id":1,"cmd":"hotspot_config","args":{{"secret":"{long}"}}}}"#
+        ))),
+        ErrorCode::InvalidArgs
+    );
+}
+
+#[test]
+fn status_without_new_fields_still_parses() {
+    let mut v = serde_json::to_value(sample_status()).unwrap();
+    v.as_object_mut().unwrap().remove("hotspot");
+    v["wifi"].as_object_mut().unwrap().remove("enabled");
+    let s: Status = serde_json::from_value(v).unwrap();
+    assert!(s.wifi.enabled);
+    assert_eq!(s.hotspot.state, HotspotState::Off);
+    let v = serde_json::to_value(sample_status()).unwrap();
+    assert_eq!(v["hotspot"]["state"], "off");
+    assert_eq!(v["wifi"]["enabled"], true);
+}
+
+#[test]
 fn wire_roundtrip_of_secret() {
     let c = Command::WifiConnect {
         ssid: Some("486f6d65".into()),
@@ -230,7 +306,9 @@ fn sample_status() -> Status {
             ssid: Some("Home".into()),
             ip: Some("192.168.0.100".into()),
             signal_dbm: Some(-58),
+            enabled: true,
         },
+        hotspot: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,

@@ -1,0 +1,226 @@
+#!/bin/sh
+# walpad-hotspot start|stop|status   Wi-Fi hotspot (owner request 2026-11-10).
+# hostapd (WPA2-PSK) on the MediaTek gen4m AP interface (ap0), busybox udhcpd for the clients and
+# iptables NAT to the uplink when there is one.  Called by walpad-core with a timeout; prints
+# key=value lines (state, reason, iface, channel, internet, exclusive, clients) and exits 0 when the
+# requested state was reached, 1 otherwise.
+# The passphrase lives only in /etc/walpad/hotspot.conf (0600, written by walpad-core) and in
+# /run/walpad/hostapd.conf (0600, built here with grep, file to file): never in argv, a variable or
+# a log.  Never touches the chip's power (no rmmod, no /dev/wmtWifi): a power cycle latches it.
+# Without STA+AP concurrency the Wi-Fi client is paused while the hotspot runs
+# (/run/walpad/hotspot-exclusive, honoured by walpad-wifi's loop) and resumes on stop.
+# Test hooks: WALPAD_HS_ROOT prefixes every file path, WALPAD_HS_CONCURRENT=auto|yes|no.
+R=${WALPAD_HS_ROOT:-}
+CONF=$R/etc/walpad/hotspot.conf
+RUN=$R/run/walpad
+STATE=$RUN/hotspot-state
+EXCL=$RUN/hotspot-exclusive
+HCONF=$RUN/hostapd.conf
+HPID=$RUN/hostapd.pid
+DCONF=$RUN/udhcpd.conf
+DPID=$RUN/udhcpd.pid
+LEASES=$RUN/udhcpd.leases
+LOG=$R/var/log/walpad-hotspot.log
+ENABLED_FILE=$R/var/lib/walpad/wifi-enabled
+FWD=$R/proc/sys/net/ipv4/ip_forward
+STA=wlan0
+AP=ap0
+NET=192.168.50
+CHAIN=WALPAD_HS
+umask 077
+mkdir -p "$RUN" "${LOG%/*}" 2>/dev/null
+
+log() { echo "$(date '+%F %T' 2>/dev/null) $*" >> "$LOG" 2>/dev/null; }
+
+# state file: the last result, read by `status`
+put_state() { # state reason channel internet exclusive
+  printf 'state=%s\nreason=%s\niface=%s\nchannel=%s\ninternet=%s\nexclusive=%s\n' \
+    "$1" "$2" "$AP" "$3" "$4" "$5" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+}
+get() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -n 1; }
+
+alive() { # pidfile name
+  p=$(cat "$1" 2>/dev/null) || return 1
+  [ -n "$p" ] && kill -0 "$p" 2>/dev/null || return 1
+  case $(cat "/proc/$p/comm" 2>/dev/null) in "$2"*|busybox*|"") return 0;; *) return 1;; esac
+}
+stop_pid() { # pidfile name
+  if alive "$1" "$2"; then
+    p=$(cat "$1"); kill "$p" 2>/dev/null
+    i=0; while kill -0 "$p" 2>/dev/null && [ $i -lt 20 ]; do sleep 0.1 2>/dev/null || sleep 1; i=$((i+1)); done
+    kill -9 "$p" 2>/dev/null
+  fi
+  rm -f "$1"
+}
+
+ipt() { # the kernel has legacy iptables (CONFIG_IP_NF_NAT, no NF_TABLES)
+  if command -v iptables-legacy >/dev/null 2>&1; then iptables-legacy "$@"; else iptables "$@"; fi
+}
+have_ipt() { command -v iptables-legacy >/dev/null 2>&1 || command -v iptables >/dev/null 2>&1; }
+
+nat_down() {
+  have_ipt || return 0
+  ipt -t nat -D POSTROUTING -j $CHAIN 2>/dev/null
+  ipt -t nat -F $CHAIN 2>/dev/null; ipt -t nat -X $CHAIN 2>/dev/null
+  ipt -D FORWARD -j $CHAIN 2>/dev/null
+  ipt -F $CHAIN 2>/dev/null; ipt -X $CHAIN 2>/dev/null
+  [ -w "$FWD" ] && echo 0 > "$FWD" 2>/dev/null
+  return 0
+}
+
+nat_up() { # uplink -> 0 when sharing works
+  have_ipt || return 1
+  nat_down
+  ipt -t nat -N $CHAIN && ipt -t nat -A $CHAIN -s $NET.0/24 -o "$1" -j MASQUERADE &&
+    ipt -t nat -A POSTROUTING -j $CHAIN &&
+    ipt -N $CHAIN && ipt -A $CHAIN -i $AP -o "$1" -j ACCEPT &&
+    ipt -A $CHAIN -i "$1" -o $AP -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT &&
+    ipt -I FORWARD 1 -j $CHAIN && echo 1 > "$FWD" || { nat_down; return 1; }
+}
+
+uplink() { # default-route interface that is not the AP
+  ip route show default 2>/dev/null | awk -v ap=$AP '{for (i = 1; i < NF; i++) if ($i == "dev" && $(i+1) != ap) {print $(i+1); exit}}'
+}
+
+# 0 when `iw list` has an interface combination with a managed and an AP interface at once
+concurrent() {
+  case ${WALPAD_HS_CONCURRENT:-auto} in yes) return 0;; no) return 1;; esac
+  iw list 2>/dev/null | awk '
+    /valid interface combinations/ {c = 1; next}
+    c && /^\t[^\t ]/ {c = 0}
+    c && /\*/ {if (e != "") print e; e = $0; next}
+    c && /[^ \t]/ {e = e " " $0}
+    END {if (e != "") print e}' | awk '
+    { sta = -1; ap = -1; same = 0; total = 0; line = $0
+      if (match(line, /total <= [0-9]+/)) total = substr(line, RSTART + 9, RLENGTH - 9) + 0
+      n = split(line, g, "#[{]")
+      for (i = 2; i <= n; i++) {
+        split(g[i], part, "[}]"); types = "," part[1] ","; gsub(/[ \t]/, "", types)
+        lim = 0; if (match(part[2], /<= [0-9]+/)) lim = substr(part[2], RSTART + 3, RLENGTH - 3) + 0
+        hs = index(types, ",managed,") > 0; ha = index(types, ",AP,") > 0
+        if (hs) sta = lim; if (ha) ap = lim; if (hs && ha) same = 1
+      }
+      if (total >= 2 && sta >= 1 && ap >= 1 && (!same || sta >= 2)) ok = 1 }
+    END {exit ok ? 0 : 1}'
+}
+
+sta_freq() { iw dev $STA link 2>/dev/null | sed -n 's/^[ \t]*freq: *\([0-9]*\).*/\1/p' | head -n 1; }
+client_on() { [ "$(cat "$ENABLED_FILE" 2>/dev/null)" != 0 ]; }
+
+pause_client() { # the supplicant and DHCP of wlan0 stop until `stop` removes the flag
+  : > "$EXCL"
+  wpa_cli -p "$R/run/wpa_supplicant" -i $STA terminate >/dev/null 2>&1
+  sleep 1
+  pkill -x wpa_supplicant 2>/dev/null
+  pkill -f "udhcpc -i $STA" 2>/dev/null
+  ip addr flush dev $STA 2>/dev/null
+  log "Wi-Fi client paused (no STA+AP concurrency)"
+}
+
+clients() { iw dev $AP station dump 2>/dev/null | grep -c '^Station'; }
+
+report() { cat "$STATE" 2>/dev/null; echo "clients=$(clients)"; }
+
+fail() { # reason: clean up whatever started, record and print
+  log "start failed: $1"
+  stop_pid "$DPID" udhcpd; stop_pid "$HPID" hostapd; nat_down
+  ip addr flush dev $AP 2>/dev/null
+  rm -f "$HCONF" "$EXCL"
+  put_state failed "$1" "" "" 0
+  report; exit 1
+}
+
+do_start() {
+  if alive "$HPID" hostapd && [ "$(get state)" = on ]; then report; exit 0; fi
+  log "start"
+  command -v hostapd >/dev/null 2>&1 || fail "hostapd is not installed"
+  DHCPD=""   # Alpine ships udhcpd in busybox-extras (no applet link: apk ran with --no-scripts)
+  if command -v udhcpd >/dev/null 2>&1; then DHCPD=udhcpd
+  elif command -v busybox-extras >/dev/null 2>&1; then DHCPD="busybox-extras udhcpd"; fi
+  [ -n "$DHCPD" ] || fail "udhcpd is not installed"
+  grep -q '^wpa_passphrase=' "$CONF" 2>/dev/null || fail "no hotspot password set"
+  grep -q '^ssid2=' "$CONF" 2>/dev/null || fail "no hotspot name set"
+  if [ ! -d "$R/sys/class/net/$AP" ]; then
+    iw dev $STA interface add $AP type __ap >> "$LOG" 2>&1 || fail "the driver has no AP interface"
+  fi
+  excl=0 chan=6 mode=g
+  f=$(sta_freq)
+  if client_on || [ -n "$f" ]; then
+    if [ -n "$f" ] && concurrent; then
+      # same channel as the client (#channels <= 1 on this chip class)
+      if [ "$f" -lt 3000 ]; then chan=$(( (f - 2407) / 5 )); [ "$f" = 2484 ] && chan=14
+      else chan=$(( (f - 5000) / 5 )); mode=a; fi
+    elif ! concurrent; then
+      excl=1; pause_client
+    fi
+  fi
+  put_state starting "" "$chan" "" $excl
+  { printf 'interface=%s\ndriver=nl80211\nctrl_interface=%s/run/hostapd\nhw_mode=%s\nchannel=%s\n' \
+      $AP "$R" $mode "$chan"
+    printf 'ieee80211n=1\nwmm_enabled=1\nauth_algs=1\nignore_broadcast_ssid=0\nmax_num_sta=8\n'
+    printf 'wpa=2\nwpa_key_mgmt=WPA-PSK\nrsn_pairwise=CCMP\n'
+    grep -E '^(ssid2|wpa_passphrase)=' "$CONF"
+  } > "$HCONF" || fail "cannot write the hostapd configuration"
+  chmod 600 "$HCONF"
+  rm -f "$HPID"
+  hostapd -B -P "$HPID" "$HCONF" >> "$LOG" 2>&1 || fail "hostapd could not start the access point"
+  i=0; while ! alive "$HPID" hostapd && [ $i -lt 30 ]; do sleep 0.2 2>/dev/null || sleep 1; i=$((i+1)); done
+  alive "$HPID" hostapd || fail "hostapd exited (see /var/log/walpad-hotspot.log)"
+  ip link set $AP up 2>/dev/null
+  ip addr flush dev $AP 2>/dev/null
+  ip addr add $NET.1/24 dev $AP >> "$LOG" 2>&1 || fail "cannot set the hotspot address"
+
+  up=$(uplink) internet=no_uplink
+  if [ -n "$up" ]; then
+    if nat_up "$up"; then internet=shared; log "sharing $up"
+    else internet=unavailable; log "NAT unavailable: local network only"; fi
+  fi
+  dns=""
+  if [ $internet = shared ]; then
+    dns=$(sed -n 's/^nameserver[ \t]*\([0-9.]*\).*/\1/p' "$R/etc/resolv.conf" 2>/dev/null | grep -v '^127\.' | tr '\n' ' ')
+    [ -n "$dns" ] || dns="1.1.1.1 8.8.8.8"
+  fi
+  { printf 'start %s.10\nend %s.60\ninterface %s\nmax_leases 50\n' $NET $NET $AP
+    printf 'lease_file %s\npidfile %s\n' "$LEASES" "$DPID"
+    printf 'opt subnet 255.255.255.0\nopt router %s.1\nopt lease 3600\n' $NET
+    [ -n "$dns" ] && printf 'opt dns %s\n' "$dns"
+  } > "$DCONF"
+  touch "$LEASES"
+  stop_pid "$DPID" udhcpd
+  $DHCPD "$DCONF" >> "$LOG" 2>&1 || fail "the DHCP server did not start"
+  i=0; while ! alive "$DPID" udhcpd && [ $i -lt 15 ]; do sleep 0.2 2>/dev/null || sleep 1; i=$((i+1)); done
+  alive "$DPID" udhcpd || fail "the DHCP server exited"
+  put_state on "" "$chan" $internet $excl
+  log "on: channel $chan, internet $internet, exclusive $excl"
+  report; exit 0
+}
+
+do_stop() {
+  log "stop"
+  stop_pid "$DPID" udhcpd
+  stop_pid "$HPID" hostapd
+  nat_down
+  ip addr flush dev $AP 2>/dev/null
+  ip link set $AP down 2>/dev/null
+  rm -f "$HCONF" "$LEASES"
+  rm -f "$EXCL"   # walpad-wifi resumes the client (if the owner's switch is on)
+  put_state off "" "" "" 0
+  report; exit 0
+}
+
+do_status() {
+  if [ "$(get state)" = on ] && ! alive "$HPID" hostapd; then
+    log "hostapd is gone"
+    stop_pid "$DPID" udhcpd; nat_down; rm -f "$HCONF" "$EXCL"
+    put_state failed "the access point stopped" "" "" 0
+  fi
+  [ -f "$STATE" ] || put_state off "" "" "" 0
+  report; exit 0
+}
+
+case ${1:-} in
+  start) do_start ;;
+  stop) do_stop ;;
+  status) do_status ;;
+  *) echo "usage: walpad-hotspot start|stop|status" >&2; exit 2 ;;
+esac

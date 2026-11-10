@@ -19,6 +19,9 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   wifi-scan                       scan and print the networks (waits for the result)
   wifi-connect <ssid> [--open]    join a network; the passphrase is read from stdin (never argv)
   wifi-saved | wifi-disconnect | wifi-forget <id>
+  wifi on|off                     the Wi-Fi switch (network level; the chip stays powered)
+  hotspot on|off                  start/stop the hotspot (needs a password: hotspot-config)
+  hotspot-config [--name N] [--password]   set name and/or password (password read from stdin)
   power poweroff|reboot --yes     refuses without --yes
   key-held <name|code>            volumedown|volumeup|power or 114|115|116; exit 0 held, 1 not held,
                                   2 error/unknown device (never blocks, needs no core)";
@@ -61,6 +64,15 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
                 .parse()
                 .map_err(|_| "saved id must be a number".to_string())?;
             ("wifi_forget".into(), json!({"saved_id": id}))
+        }
+        Some(w @ ("wifi" | "hotspot")) => {
+            let on = match need(1)? {
+                "on" => true,
+                "off" => false,
+                _ => return Err(USAGE.to_string()),
+            };
+            let cmd = if w == "wifi" { "wifi_enable" } else { "hotspot" };
+            (cmd.into(), json!({"on": on}))
         }
         Some("power") => (
             "power".into(),
@@ -238,6 +250,37 @@ pub fn run_with_stdin(
                 ))
             };
         }
+        Some("hotspot-config") => {
+            let mut req = serde_json::Map::new();
+            let mut it = args.iter().skip(1);
+            let mut password = false;
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--name" => {
+                        let n = it.next().ok_or_else(|| USAGE.to_string())?;
+                        req.insert("ssid".into(), Value::String(n.clone()));
+                    }
+                    "--password" => password = true,
+                    _ => return Err(USAGE.to_string()),
+                }
+            }
+            if password {
+                let mut line = String::new();
+                stdin
+                    .read_line(&mut line)
+                    .map_err(|e| format!("reading the password: {e}"))?;
+                let secret = line.trim_end_matches(['\n', '\r']).to_string();
+                if secret.is_empty() {
+                    return Err("no password on stdin".into());
+                }
+                req.insert("secret".into(), Value::String(secret));
+            }
+            if req.is_empty() {
+                return Err(USAGE.to_string());
+            }
+            let d = rpc(&sock, "hotspot_config", Value::Object(req))?;
+            return Ok(serde_json::to_string_pretty(&d).unwrap_or_default());
+        }
         _ => {}
     }
     run_simple(args, root)
@@ -336,6 +379,15 @@ mod tests {
         assert!(build_request(&s(&["brightness", "x"])).is_err());
         assert!(build_request(&s(&["screen"])).is_err());
         assert!(build_request(&s(&["nonsense"])).is_err());
+        assert_eq!(
+            build_request(&s(&["wifi", "off"])).unwrap(),
+            ("wifi_enable".into(), json!({"on": false}))
+        );
+        assert_eq!(
+            build_request(&s(&["hotspot", "on"])).unwrap(),
+            ("hotspot".into(), json!({"on": true}))
+        );
+        assert!(build_request(&s(&["hotspot", "maybe"])).is_err());
     }
 
     #[test]

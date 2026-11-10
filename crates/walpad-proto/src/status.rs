@@ -40,6 +40,52 @@ pub struct WifiStatus {
     pub ssid: Option<String>,
     pub ip: Option<String>,
     pub signal_dbm: Option<i32>,
+    /// The owner's Wi-Fi switch (/var/lib/walpad/wifi-enabled; missing = on).
+    #[serde(default = "yes")]
+    pub enabled: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HotspotState {
+    #[default]
+    Off,
+    Starting,
+    On,
+    Stopping,
+    Failed,
+}
+
+/// Internet sharing of a running hotspot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HotspotInternet {
+    /// NAT to the uplink is set up.
+    Shared,
+    /// No uplink (the Wi-Fi client is off or not connected): local network only.
+    NoUplink,
+    /// iptables/NAT is not available: local network only.
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotspotStatus {
+    pub state: HotspotState,
+    /// Why it failed; never contains the passphrase.
+    pub reason: Option<String>,
+    /// Configured name (None = never configured).
+    pub ssid: Option<String>,
+    /// A passphrase is stored (it is never reported).
+    pub has_secret: bool,
+    pub clients: Option<u32>,
+    pub internet: Option<HotspotInternet>,
+    /// The Wi-Fi client is held off while the hotspot runs (no concurrent STA+AP).
+    pub exclusive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +106,8 @@ pub struct Status {
     pub rotation_locked: bool,
     pub lid_closed: bool,
     pub wifi: WifiStatus,
+    #[serde(default)]
+    pub hotspot: HotspotStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
 }

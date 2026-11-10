@@ -282,5 +282,130 @@ grep -q " /mnt/usb/sda exfat-not ro " "$SR/proc/mounts"; eq "unknown fs is read-
 rm -rf "$SR/sys/class/block/mmcblk1" "$SR/sys/class/block/mmcblk1p1"
 eq "sd removed" "$(st)" "walpad-storage: removed mmcblk1p1 (/mnt/sd)"
 grep -c " /mnt/sd " "$SR/proc/mounts" | grep -q '^0$'; eq "sd gone from mounts" "$?" 0
+# ===== walpad-hotspot / walpad-wifi switch (owner request 2026-11-10): fake root, fake tools =====
+HSS=$S/walpad-hotspot
+sh -n "$HSS" && ok "syntax walpad-hotspot" || bad "syntax walpad-hotspot" error ok
+sh -n "$S/walpad-wifi" && ok "syntax walpad-wifi" || bad "syntax walpad-wifi" error ok
+grep -q 'ENABLED_FILE=/var/lib/walpad/wifi-enabled' "$S/walpad-wifi" && ok "walpad-wifi reads the Wi-Fi switch" || bad "walpad-wifi reads the Wi-Fi switch" missing present
+for p in hostapd iptables; do case " $(WALPAD_PRINT_PKGS=1 bash scripts/build_rootfs.sh) " in *" $p "*) ok "image has $p";; *) bad "image has $p" missing present;; esac; done
+HS=$T/hs; export HS
+HR=$HS/root
+mkdir -p "$HS/bin" "$HS/daemons" "$HR/etc/walpad" "$HR/run/walpad" "$HR/sys/class/net/ap0" "$HR/proc/sys/net/ipv4" "$HR/var/lib/walpad"
+echo 0 > "$HR/proc/sys/net/ipv4/ip_forward"
+printf 'nameserver 192.168.0.1\n' > "$HR/etc/resolv.conf"
+SLEEP=$(command -v sleep)
+cp "$SLEEP" "$HS/daemons/hostapd"; cp "$SLEEP" "$HS/daemons/udhcpd"
+cat > "$HS/bin/hostapd" <<'EOF'
+#!/bin/sh
+echo "hostapd $*" >> "$HS/calls"
+[ -f "$HS/hostapd-fail" ] && exit 1
+pf=""; conf=""
+while [ $# -gt 0 ]; do case $1 in -P) pf=$2; shift;; -B) ;; *) conf=$1;; esac; shift; done
+cp -p "$conf" "$HS/hostapd-seen.conf"
+"$HS/daemons/hostapd" 300 > /dev/null 2>&1 &
+echo $! > "$pf"
+EOF
+cat > "$HS/bin/udhcpd" <<'EOF'
+#!/bin/sh
+echo "udhcpd $*" >> "$HS/calls"
+cp "$1" "$HS/udhcpd-seen.conf"
+"$HS/daemons/udhcpd" 300 > /dev/null 2>&1 &
+echo $! > "$(sed -n 's/^pidfile //p' "$1")"
+EOF
+cat > "$HS/bin/iw" <<'EOF'
+#!/bin/sh
+echo "iw $*" >> "$HS/calls"
+case "$*" in
+  list) cat "$HS/iwlist" 2>/dev/null ;;
+  "dev wlan0 link") if [ -f "$HS/linked" ]; then printf 'Connected to 02:00:00:00:00:01 (on wlan0)\n\tSSID: Home\n\tfreq: %s\n' "$(cat "$HS/linked")"; else echo "Not connected."; fi ;;
+  "dev ap0 station dump") printf 'Station 02:00:00:00:00:0a (on ap0)\n\tinactive time:\t10 ms\nStation 02:00:00:00:00:0b (on ap0)\n' ;;
+esac
+exit 0
+EOF
+cat > "$HS/bin/ip" <<'EOF'
+#!/bin/sh
+echo "ip $*" >> "$HS/calls"
+case "$*" in
+  "route show default") [ -f "$HS/uplink" ] && echo "default via 192.168.0.1 dev $(cat "$HS/uplink") metric 10" ;;
+  "addr flush dev wlan0") rm -f "$HS/uplink" ;;
+esac
+exit 0
+EOF
+cat > "$HS/bin/iptables" <<'EOF'
+#!/bin/sh
+echo "$(basename "$0") $*" >> "$HS/calls"
+[ -f "$HS/ipt-fail" ] && exit 1
+exit 0
+EOF
+cp "$HS/bin/iptables" "$HS/bin/iptables-legacy"
+printf '#!/bin/sh\necho "$(basename "$0") $*" >> "$HS/calls"\nexit 0\n' > "$HS/bin/wpa_cli"
+cp "$HS/bin/wpa_cli" "$HS/bin/pkill"
+chmod +x "$HS/bin/"*
+TAB=$(printf '\t')
+excl_combo() { printf 'Wiphy phy1\n%svalid interface combinations:\n%s%s * #{ managed, AP, P2P-client, P2P-GO } <= 1,\n%s%s   total <= 1, #channels <= 1\n%sHT Capabilities\n' "$TAB" "$TAB" "$TAB" "$TAB" "$TAB" "$TAB"; }
+conc_combo() { printf 'Wiphy phy1\n%svalid interface combinations:\n%s%s * #{ managed } <= 1, #{ AP, P2P-client, P2P-GO } <= 1,\n%s%s   total <= 2, #channels <= 1\n%sHT Capabilities\n' "$TAB" "$TAB" "$TAB" "$TAB" "$TAB" "$TAB"; }
+hs() { WALPAD_HS_ROOT=$HR PATH=$HS/bin:$PATH sh "$HSS" "$1" 2>&1; }
+kv() { printf '%s\n' "$1" | sed -n "s/^$2=//p" | head -n 1; }
+HSECRET='hs-Secret pass 42'
+
+OUT=$(hs start); eq "hotspot start without a password fails" "$?" 1
+eq "  reason" "$(kv "$OUT" reason)" "no hotspot password set"
+eq "  state failed" "$(kv "$OUT" state)" failed
+( umask 077; printf '# x\nssid2=57616c506164\nwpa_passphrase=%s\n' "$HSECRET" > "$HR/etc/walpad/hotspot.conf" )
+
+# no STA+AP concurrency, client connected with an uplink: the client is paused, local network only
+excl_combo > "$HS/iwlist"; echo 2437 > "$HS/linked"; echo wlan0 > "$HS/uplink"; : > "$HS/calls"
+OUT=$(hs start); eq "exclusive start succeeds" "$?" 0
+eq "  state on" "$(kv "$OUT" state)" on
+eq "  exclusive" "$(kv "$OUT" exclusive)" 1
+eq "  channel 6" "$(kv "$OUT" channel)" 6
+eq "  no uplink once the client is paused" "$(kv "$OUT" internet)" no_uplink
+eq "  clients from the station dump" "$(kv "$OUT" clients)" 2
+[ -e "$HR/run/walpad/hotspot-exclusive" ] && ok "  exclusive flag for walpad-wifi" || bad "  exclusive flag for walpad-wifi" missing present
+grep -q 'wpa_cli.*terminate' "$HS/calls" && ok "  supplicant terminated" || bad "  supplicant terminated" "$(cat "$HS/calls")" terminate
+case $(stat -c %a "$HS/hostapd-seen.conf") in 600) ok "  hostapd.conf mode 600";; *) bad "  hostapd.conf mode 600" "$(stat -c %a "$HS/hostapd-seen.conf")" 600;; esac
+grep -qx "wpa_passphrase=$HSECRET" "$HS/hostapd-seen.conf" && ok "  passphrase copied file to file" || bad "  passphrase copied file to file" missing present
+grep -qx 'ssid2=57616c506164' "$HS/hostapd-seen.conf" && grep -qx 'interface=ap0' "$HS/hostapd-seen.conf" && grep -qx 'wpa=2' "$HS/hostapd-seen.conf" && ok "  hostapd.conf: ap0, WPA2, name" || bad "  hostapd.conf: ap0, WPA2, name" "$(grep -v pass "$HS/hostapd-seen.conf")" ok
+grep -qx 'opt router 192.168.50.1' "$HS/udhcpd-seen.conf" && grep -qx 'interface ap0' "$HS/udhcpd-seen.conf" && ok "  udhcpd serves 192.168.50.0/24 on ap0" || bad "  udhcpd serves 192.168.50.0/24 on ap0" "$(cat "$HS/udhcpd-seen.conf")" ok
+grep -q 'ip addr add 192.168.50.1/24 dev ap0' "$HS/calls" && ok "  static address" || bad "  static address" missing present
+case "$(cat "$HS/calls") $(cat "$HR/var/log/walpad-hotspot.log" 2>/dev/null)" in *"$HSECRET"*|*"pass 42"*) bad "  passphrase never in argv or the log" found absent;; *) ok "  passphrase never in argv or the log";; esac
+OUT=$(hs status); eq "  status on" "$(kv "$OUT" state)/$(kv "$OUT" clients)" on/2
+OUT=$(hs start); eq "  second start is a no-op" "$?/$(grep -c '^hostapd' "$HS/calls")" 0/1
+OUT=$(hs stop); eq "stop succeeds" "$?/$(kv "$OUT" state)" 0/off
+[ -e "$HR/run/walpad/hotspot-exclusive" ] && bad "  client resumes" "flag still there" removed || ok "  client resumes"
+[ -e "$HR/run/walpad/hostapd.conf" ] && bad "  hostapd.conf removed" present removed || ok "  hostapd.conf removed"
+[ -e "$HR/run/walpad/hostapd.pid" ] && bad "  hostapd stopped" running stopped || ok "  hostapd stopped"
+eq "  no fake daemons left" "$(ps -eo comm | grep -cx 'hostapd\|udhcpd')" 0
+
+# STA+AP concurrency on the client's channel, NAT to the uplink
+conc_combo > "$HS/iwlist"; echo 2462 > "$HS/linked"; echo wlan0 > "$HS/uplink"; : > "$HS/calls"
+OUT=$(hs start); eq "concurrent start succeeds" "$?" 0
+eq "  same channel as the client (11)" "$(kv "$OUT" channel)" 11
+eq "  exclusive 0" "$(kv "$OUT" exclusive)" 0
+eq "  internet shared" "$(kv "$OUT" internet)" shared
+grep -q 'iptables-legacy -t nat -A WALPAD_HS -s 192.168.50.0/24 -o wlan0 -j MASQUERADE' "$HS/calls" && ok "  MASQUERADE to wlan0 (legacy iptables)" || bad "  MASQUERADE to wlan0 (legacy iptables)" "$(grep iptables "$HS/calls")" MASQUERADE
+eq "  forwarding on" "$(cat "$HR/proc/sys/net/ipv4/ip_forward")" 1
+grep -qx 'opt dns 192.168.0.1 ' "$HS/udhcpd-seen.conf" && ok "  clients get the uplink DNS" || bad "  clients get the uplink DNS" "$(grep dns "$HS/udhcpd-seen.conf")" "opt dns 192.168.0.1"
+grep -q 'terminate' "$HS/calls" && bad "  client left alone" terminated untouched || ok "  client left alone"
+hs stop >/dev/null
+eq "  forwarding off after stop" "$(cat "$HR/proc/sys/net/ipv4/ip_forward")" 0
+grep -q 'iptables-legacy -t nat -D POSTROUTING -j WALPAD_HS' "$HS/calls" && ok "  NAT rules removed" || bad "  NAT rules removed" missing present
+
+# NAT unavailable: hotspot without internet sharing
+: > "$HS/ipt-fail"; echo wlan0 > "$HS/uplink"
+OUT=$(hs start); eq "start without NAT still succeeds" "$?/$(kv "$OUT" internet)" 0/unavailable
+rm -f "$HS/ipt-fail"
+# the access point dies: status reports it and resumes the client
+kill "$(cat "$HR/run/walpad/hostapd.pid")" 2>/dev/null; sleep 0.3
+OUT=$(hs status); eq "dead hostapd is reported" "$(kv "$OUT" state)/$(kv "$OUT" reason)" "failed/the access point stopped"
+hs stop >/dev/null
+# hostapd refuses: failure is reported and everything is cleaned up
+: > "$HS/hostapd-fail"; rm -f "$HS/linked"
+OUT=$(hs start); eq "hostapd failure exits 1" "$?" 1
+eq "  reason" "$(kv "$OUT" reason)" "hostapd could not start the access point"
+[ -e "$HR/run/walpad/hostapd.conf" ] && bad "  no hostapd.conf left" present removed || ok "  no hostapd.conf left"
+rm -f "$HS/hostapd-fail"
+OUT=$(hs bogus); eq "unknown verb" "$?" 2
+eq "no fake daemons left at the end" "$(ps -eo comm | grep -cx 'hostapd\|udhcpd')" 0
 
 exit $FAIL
