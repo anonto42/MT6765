@@ -6,6 +6,7 @@ use crate::core_client::{CoreEvent, ReplyError};
 use crate::device_screen;
 use crate::gesture::Gesture;
 use crate::home;
+use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
@@ -165,6 +166,13 @@ pub enum Target {
     HotspotCard,
     HotspotName,
     HotspotPassword,
+    // Mobile network (owner request 2026-11-10): the Quick Settings row, the screen's controls
+    MobileCard,
+    MobileRadio,
+    MobileDataSwitch,
+    MobileApn,
+    SimPinEntry,
+    ImeiShow,
     // Network
     Scan,
     Disconnect,
@@ -233,6 +241,12 @@ pub enum Cmd {
         ssid: Option<String>,
         secret: Option<Secret>,
     },
+    MobileRadio(bool),
+    MobileData(bool),
+    MobileApn(String),
+    /// `pin` is never printed: `Secret`'s Debug is `***`.
+    SimPin(Secret),
+    MobileInfo,
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `set_setting` with an allowlisted key.
@@ -256,6 +270,9 @@ pub enum Purpose {
     Close,
     Setting,
     HotspotConfig,
+    MobileApn,
+    SimPin,
+    MobileInfo,
     Other,
 }
 
@@ -316,6 +333,15 @@ impl Cmd {
                 }
                 ("hotspot_config", Value::Object(a))
             }
+            Cmd::MobileRadio(on) => ("mobile_radio", json!({"on": on})),
+            Cmd::MobileData(on) => ("mobile_data", json!({"on": on})),
+            Cmd::MobileApn(a) => ("mobile_apn", json!({"apn": a})),
+            // serialized onto the control socket only, never a log
+            Cmd::SimPin(pin) => (
+                "sim_pin",
+                json!({"pin": serde_json::to_value(pin).unwrap_or(Value::Null)}),
+            ),
+            Cmd::MobileInfo => ("mobile_info", Value::Null),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
@@ -334,6 +360,9 @@ impl Cmd {
             Cmd::WifiConnect { .. } => Purpose::Connect,
             Cmd::WifiForget(_) => Purpose::Forget,
             Cmd::HotspotConfig { .. } => Purpose::HotspotConfig,
+            Cmd::MobileApn(_) => Purpose::MobileApn,
+            Cmd::SimPin(_) => Purpose::SimPin,
+            Cmd::MobileInfo => Purpose::MobileInfo,
             Cmd::CloseApp(_) => Purpose::Close,
             Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
@@ -370,6 +399,9 @@ pub struct Model {
     pub sys: SysInfo,
     /// Open Settings subpage (None = the category list).
     pub settings_page: Option<Page>,
+    /// IMEI / ICCID from `mobile_info` (asked for when "Show" is tapped; never logged).
+    pub mobile_info: Option<MobileInfo>,
+    pub imei_shown: bool,
 }
 
 impl Model {
@@ -392,6 +424,8 @@ impl Model {
             clock_24h: true,
             sys: SysInfo::default(),
             settings_page: None,
+            mobile_info: None,
+            imei_shown: false,
         }
     }
 
@@ -587,6 +621,7 @@ impl App {
             self.scroll = 0;
             self.content_hits.clear();
             self.model.settings_page = None;
+            self.model.imei_shown = false;
         }
         if matches!(tab, Tab::Device | Tab::Settings) {
             out.refresh = true;
@@ -631,6 +666,11 @@ impl App {
                 out.dirty = true;
             }
             CoreEvent::Wifi(v) => self.on_wifi_event(v, &mut out),
+            CoreEvent::Notice(v)
+                if v["kind"].as_str().is_some_and(|k| k.starts_with("mobile_")) =>
+            {
+                self.on_mobile_notice(v, &mut out)
+            }
             CoreEvent::Notice(v) => {
                 if v["kind"] == "app_crashed" {
                     let name = v["name"].as_str().or(v["app"].as_str()).unwrap_or("An app");
@@ -725,6 +765,43 @@ impl App {
         }
     }
 
+    /// Results of radio / PIN / data requests (owner request 2026-11-10).
+    fn on_mobile_notice(&mut self, v: &Value, out: &mut Outcome) {
+        out.dirty = true;
+        let err = v["error"].as_str().unwrap_or("unknown error").to_string();
+        match v["kind"].as_str() {
+            Some("mobile_pin") => {
+                let sheet = matches!(&self.model.overlay,
+                    Some(Overlay::Password(s)) if s.purpose == SheetPurpose::SimPin);
+                if v["ok"] == true {
+                    if sheet {
+                        self.close_overlay();
+                    }
+                    self.toast("SIM unlocked", Tone::Info);
+                } else if let (true, Some(Overlay::Password(s))) = (sheet, &mut self.model.overlay)
+                {
+                    s.connecting = false;
+                    s.secret.clear();
+                    s.error = Some(err);
+                } else {
+                    self.toast(format!("SIM PIN: {err}"), Tone::Danger);
+                }
+            }
+            Some("mobile_radio") if v["ok"] != true => {
+                self.toast(format!("Mobile radio: {err}"), Tone::Danger)
+            }
+            Some("mobile_data") => match v["state"].as_str() {
+                Some("on") => self.toast("Mobile data on", Tone::Info),
+                Some("failed") => {
+                    let why = v["reason"].as_str().unwrap_or("unknown error");
+                    self.toast(format!("Mobile data failed: {why}"), Tone::Danger)
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
     fn on_reply(
         &mut self,
         id: u64,
@@ -791,6 +868,41 @@ impl App {
                         Tone::Info,
                     );
                 } else {
+                    let msg = error
+                        .map(friendly)
+                        .unwrap_or_else(|| "Could not save".into());
+                    match &mut self.model.overlay {
+                        Some(Overlay::Password(s)) if sheet => {
+                            s.connecting = false;
+                            s.error = Some(msg);
+                        }
+                        _ => self.toast(msg, Tone::Danger),
+                    }
+                }
+            }
+            (Purpose::MobileInfo, true) => {
+                self.model.mobile_info = Some(MobileInfo {
+                    imei: data["imei"].as_str().map(String::from),
+                    iccid: data["iccid"].as_str().map(String::from),
+                });
+            }
+            (Purpose::MobileApn | Purpose::SimPin, ok) => {
+                let sheet =
+                    matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_mobile());
+                if ok && purpose == Purpose::MobileApn {
+                    if sheet {
+                        self.close_overlay();
+                    }
+                    self.toast(
+                        if data["reconnect"] == true {
+                            "APN saved: turn mobile data off and on to use it"
+                        } else {
+                            "APN saved"
+                        },
+                        Tone::Info,
+                    );
+                } else if !ok {
+                    // PIN accepted for checking: the sheet waits for the `mobile_pin` notice
                     let msg = error
                         .map(friendly)
                         .unwrap_or_else(|| "Could not save".into());
@@ -901,7 +1013,10 @@ impl App {
     }
 
     fn scrolls(&self) -> bool {
-        matches!(self.active, Tab::Network | Tab::Device | Tab::Settings)
+        matches!(
+            self.active,
+            Tab::Network | Tab::Device | Tab::Settings | Tab::Mobile
+        )
     }
 
     // ------------------------------------------------------------------ hit testing
@@ -1091,6 +1206,39 @@ impl App {
                 }
             }
             Target::WifiCard | Target::HotspotCard => self.go(Tab::Network, out),
+            Target::MobileCard | Target::Page(Page::Mobile) => self.go(Tab::Mobile, out),
+            Target::MobileRadio if interactive && mobile::radio_switchable(&self.model.status) => {
+                out.cmd(Cmd::MobileRadio(!mobile::radio_on(&self.model.status)))
+            }
+            Target::MobileDataSwitch
+                if interactive && mobile::data_switchable(&self.model.status) =>
+            {
+                out.cmd(Cmd::MobileData(!mobile::data_on(&self.model.status)))
+            }
+            Target::MobileApn if interactive => {
+                let apn = self
+                    .model
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.mobile.apn.clone())
+                    .unwrap_or_default();
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::mobile(
+                    SheetPurpose::MobileApn,
+                    &apn,
+                )));
+            }
+            Target::SimPinEntry if interactive && mobile::pin_needed(&self.model.status) => {
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::mobile(
+                    SheetPurpose::SimPin,
+                    "",
+                )));
+            }
+            Target::ImeiShow if interactive => {
+                self.model.imei_shown = !self.model.imei_shown;
+                if self.model.imei_shown && self.model.mobile_info.is_none() {
+                    out.cmd(Cmd::MobileInfo);
+                }
+            }
             Target::WifiSwitch if interactive && self.model.status.is_some() => {
                 out.cmd(Cmd::WifiEnable(!network::wifi_enabled(&self.model.status)))
             }
@@ -1431,6 +1579,27 @@ impl App {
 
     fn try_connect(&mut self, out: &mut Outcome) {
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
+            if s.is_mobile() {
+                if s.valid() && !s.connecting {
+                    s.connecting = true;
+                    s.error = None;
+                    out.cmd(if s.purpose == SheetPurpose::SimPin {
+                        Cmd::SimPin(Secret::new(s.secret.clone()))
+                    } else {
+                        Cmd::MobileApn(s.secret.clone())
+                    });
+                } else if !s.valid() {
+                    s.error = Some(
+                        if s.purpose == SheetPurpose::SimPin {
+                            "The PIN has 4-8 digits"
+                        } else {
+                            "Use letters, digits, . - _ (up to 62)"
+                        }
+                        .into(),
+                    );
+                }
+                return;
+            }
             if s.purpose != SheetPurpose::WifiJoin {
                 if s.valid() && !s.connecting {
                     s.connecting = true;
@@ -1601,6 +1770,7 @@ impl App {
                 settings_screen::layout(&frame, self.model.settings_page, &self.settings_rows())
                     .total
             }
+            Tab::Mobile => mobile::layout(&frame, &self.model.status).total,
             _ => 0,
         }
         .max(self.view.h);
@@ -1632,6 +1802,17 @@ impl App {
                 let rows = self.settings_rows();
                 settings_screen::render(p, &frame, m.settings_page, &rows, m.connected, m.pressed)
             }
+            Tab::Mobile => mobile::render(
+                p,
+                &frame,
+                &mobile::View {
+                    st: &m.status,
+                    info: &m.mobile_info,
+                    imei_shown: m.imei_shown,
+                    online: m.connected,
+                    pressed: m.pressed,
+                },
+            ),
             Tab::Home | Tab::Apps => Vec::new(),
         };
         p.cv.set_origin(0, 0);

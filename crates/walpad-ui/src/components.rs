@@ -75,14 +75,17 @@ pub enum Tab {
     Network,
     Device,
     Settings,
+    /// Mobile network / SIM (owner request 2026-11-10; reached from Quick Settings and Settings).
+    Mobile,
 }
 impl Tab {
-    pub const ALL: [Tab; 5] = [
+    pub const ALL: [Tab; 6] = [
         Tab::Home,
         Tab::Apps,
         Tab::Network,
         Tab::Device,
         Tab::Settings,
+        Tab::Mobile,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -91,6 +94,7 @@ impl Tab {
             Tab::Network => "Network",
             Tab::Device => "Device",
             Tab::Settings => "Settings",
+            Tab::Mobile => "Mobile network",
         }
     }
     pub fn icon(self) -> Icon {
@@ -100,6 +104,7 @@ impl Tab {
             Tab::Network => Icon::Wifi,
             Tab::Device => Icon::Device,
             Tab::Settings => Icon::Settings,
+            Tab::Mobile => Icon::Sim,
         }
     }
 }
@@ -1081,11 +1086,30 @@ impl Painter<'_> {
 
     /// Width of the quick-settings pill for this battery label.
     pub fn quick_pill_w(&mut self, battery: &str) -> i32 {
+        self.quick_pill_w_cell(battery, false)
+    }
+
+    /// Width with the mobile signal bars (owner request 2026-11-10) when `cell`.
+    pub fn quick_pill_w_cell(&mut self, battery: &str, cell: bool) -> i32 {
         let bw = self
             .fonts
             .measure(battery, Face::Regular, SIZE_SECONDARY)
             .ceil() as i32;
-        14 + 20 + SP_3 + bw + SP_1 + 22 + SP_2 + 16 + 14
+        let cell_w = if cell { CELL_BARS_W + SP_2 } else { 0 };
+        14 + cell_w + 20 + SP_3 + bw + SP_1 + 22 + SP_2 + 16 + 14
+    }
+
+    /// Small mobile signal bars for the header pill: four bars 3 px wide, 16 px high.
+    pub fn cell_bars(&mut self, x: i32, y: i32, bars: u8, color: Color) {
+        for i in 0..4 {
+            let h = 4 + i * 4;
+            let lit = (i as u8) < bars;
+            self.cv.rrect(
+                Rect::new(x + i * 5, y + 16 - h, 3, h),
+                1,
+                if lit { color } else { DIVIDER },
+            );
+        }
     }
 
     /// The pill at the right of the header: Wi-Fi mark, battery percent + icon, chevron. `right`
@@ -1101,10 +1125,30 @@ impl Painter<'_> {
         pressed: bool,
         open: bool,
     ) -> Rect {
-        let w = self.quick_pill_w(battery);
+        self.quick_pill_cell(right, cy, wifi, battery, low, pressed, open, None)
+    }
+
+    /// The pill with the mobile signal bars in front (`cell` = (bars 0-4, colour); None = no SIM).
+    #[allow(clippy::too_many_arguments)]
+    pub fn quick_pill_cell(
+        &mut self,
+        right: i32,
+        cy: i32,
+        wifi: WifiMark,
+        battery: &str,
+        low: bool,
+        pressed: bool,
+        open: bool,
+        cell: Option<(u8, Color)>,
+    ) -> Rect {
+        let w = self.quick_pill_w_cell(battery, cell.is_some());
         let r = Rect::new(right - w, cy - 20, w, 40);
         self.outline_box(r, 20, pressed, open, false);
         let mut x = r.x + 14;
+        if let Some((bars, c)) = cell {
+            self.cell_bars(x, cy - 8, bars, c);
+            x += CELL_BARS_W + SP_2;
+        }
         let wifi_c = match wifi {
             WifiMark::Connected => TEXT,
             WifiMark::Failed => DANGER,
@@ -1131,6 +1175,9 @@ impl Painter<'_> {
         r
     }
 }
+
+/// Width of `Painter::cell_bars`.
+pub const CELL_BARS_W: i32 = 18;
 
 /// The end of `s` that fits `max_w` (long field contents stay visible at the cursor).
 fn tail_fit(fonts: &mut Fonts, s: &str, max_w: f32) -> String {
@@ -1584,6 +1631,16 @@ mod tests {
     #[test]
     fn tabs_are_in_spec_order() {
         let l: Vec<&str> = Tab::ALL.iter().map(|t| t.label()).collect();
-        assert_eq!(l, ["Home", "Apps", "Network", "Device", "Settings"]);
+        assert_eq!(
+            l,
+            [
+                "Home",
+                "Apps",
+                "Network",
+                "Device",
+                "Settings",
+                "Mobile network"
+            ]
+        );
     }
 }

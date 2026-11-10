@@ -12,6 +12,7 @@ pub mod gesture;
 pub mod home;
 pub mod ime;
 pub mod keyboard;
+pub mod mobile;
 pub mod mousepad;
 pub mod network;
 pub mod overlay;

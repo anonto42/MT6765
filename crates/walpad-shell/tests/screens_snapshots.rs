@@ -59,6 +59,7 @@ fn status() -> Status {
             enabled: true,
         },
         hotspot: Default::default(),
+        mobile: Default::default(),
         apps: vec![
             AppState {
                 app: "browser".into(),
@@ -575,4 +576,90 @@ fn sidebar_toggle_pressed_golden() {
     let mut a = app(800, 1280, Tab::Home, true);
     a.model.pressed = Some(Target::Nav(NAV_APPS));
     shot("sidebar_toggle_pressed", 800, 1280, &mut a);
+}
+
+// ------------------------------------------------- mobile network (owner request 2026-11-10)
+fn with_mobile(a: &mut App, f: impl FnOnce(&mut walpad_proto::MobileStatus)) {
+    let mut s = status();
+    f(&mut s.mobile);
+    a.on_core(&CoreEvent::Status(Box::new(s)), 0);
+}
+fn gp(m: &mut walpad_proto::MobileStatus) {
+    use walpad_proto::{MobileReg, ModemState, SimState};
+    m.modem = ModemState::Ready;
+    m.radio_on = Some(true);
+    m.sim = SimState::Ready;
+    m.registration = MobileReg::Home;
+    m.operator = Some("Grameenphone".into());
+    m.tech = Some("4G".into());
+    m.signal_bars = Some(3);
+    m.signal_dbm = Some(-71);
+    m.firmware = Some("MOLY.LR12A.R3.MP.V98.P10".into());
+}
+
+#[test]
+fn mobile_network_screen_states() {
+    use walpad_proto::{MobileData, ModemState, SimState};
+    let mut a = app(800, 1280, Tab::Mobile, true);
+    with_mobile(&mut a, |m| {
+        gp(m);
+        m.data = MobileData::On;
+        m.ip = Some("10.120.4.17".into());
+        m.apn = Some("gpinternet".into());
+        m.apn_in_use = Some("gpinternet".into());
+    });
+    shot("mobile_registered_data_on", 800, 1280, &mut a);
+
+    let mut a = app(800, 1280, Tab::Mobile, true);
+    with_mobile(&mut a, |m| {
+        gp(m);
+        m.data = MobileData::Failed;
+        m.data_reason = Some("data link not supported yet".into());
+        m.apn_in_use = Some("gpinternet".into());
+    });
+    a.model.imei_shown = true;
+    a.model.mobile_info = Some(walpad_shell::mobile::MobileInfo {
+        imei: Some("351234567890123".into()),
+        iccid: None,
+    });
+    shot("mobile_data_failed_imei_shown", 800, 1280, &mut a);
+
+    let mut a = app(1280, 800, Tab::Mobile, true);
+    with_mobile(&mut a, |m| {
+        m.modem = ModemState::Ready;
+        m.radio_on = Some(true);
+        m.sim = SimState::PinRequired;
+        m.firmware = Some("MOLY.LR12A.R3.MP.V98.P10".into());
+    });
+    shot("mobile_pin_required_landscape", 1280, 800, &mut a);
+    a.model.overlay = Some(Overlay::Password(PasswordSheet::mobile(
+        SheetPurpose::SimPin,
+        "12",
+    )));
+    shot("mobile_pin_sheet_landscape", 1280, 800, &mut a);
+
+    let mut a = app(800, 1280, Tab::Mobile, true);
+    with_mobile(&mut a, |m| {
+        m.modem = ModemState::Ready;
+        m.radio_on = Some(false);
+        m.sim = SimState::Absent;
+    });
+    shot("mobile_no_sim_radio_off", 800, 1280, &mut a);
+    let mut a = app(800, 1280, Tab::Mobile, true);
+    with_mobile(&mut a, |m| {
+        m.modem = ModemState::Failed;
+        m.reason = Some("the modem did not start: after 60s: md_en=0".into());
+    });
+    shot("mobile_modem_failed", 800, 1280, &mut a);
+}
+
+#[test]
+fn quick_settings_mobile_row_and_pill_bars() {
+    let mut a = app(800, 1280, Tab::Home, true);
+    with_mobile(&mut a, gp);
+    a.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_mobile_registered", 800, 1280, &mut a);
+    let mut l = app(1280, 800, Tab::Home, true);
+    with_mobile(&mut l, gp);
+    shot("home_landscape_mobile_bars", 1280, 800, &mut l);
 }

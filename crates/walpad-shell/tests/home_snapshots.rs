@@ -56,6 +56,7 @@ fn status() -> Status {
             enabled: true,
         },
         hotspot: Default::default(),
+        mobile: Default::default(),
         apps: vec![
             AppState {
                 app: "browser".into(),

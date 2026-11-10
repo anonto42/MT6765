@@ -19,6 +19,8 @@ pub struct QsGeom {
     pub panel: Rect,
     pub wifi: Rect,
     pub hotspot: Rect,
+    /// Mobile data (owner request 2026-11-10).
+    pub mobile: Rect,
     pub bluetooth: Rect,
     pub battery: Rect,
     pub divider1: i32,
@@ -39,7 +41,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         y += QS_ROW;
         r
     };
-    let (wifi, hotspot, bluetooth, battery) = (row(), row(), row(), row());
+    let (wifi, hotspot, mobile, bluetooth, battery) = (row(), row(), row(), row(), row());
     let divider1 = battery.bottom() + 4;
     let brightness_label = Rect::new(ix + SP_3, divider1 + 9, iw - 2 * SP_3, 24);
     let slider = Rect::new(ix, brightness_label.bottom(), iw, 56);
@@ -56,6 +58,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         panel: Rect::new(x, top, QS_W, screen_off.bottom() + QS_PAD - top),
         wifi,
         hotspot,
+        mobile,
         bluetooth,
         battery,
         divider1,
@@ -275,6 +278,30 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
         Target::HotspotSwitch,
         sw_off || hs_busy,
     );
+    // Mobile data: the row opens the Mobile network screen, signal bars beside the switch
+    let (msub, mcol) = crate::mobile::qs_line(&m.status);
+    qs_switch_row(
+        p,
+        &mut hits,
+        m,
+        g.mobile,
+        Icon::Sim,
+        "Mobile data",
+        (&msub, mcol),
+        crate::mobile::data_on(&m.status),
+        Target::MobileCard,
+        Target::MobileDataSwitch,
+        sw_off || !crate::mobile::data_switchable(&m.status),
+    );
+    if let Some((bars, c)) = crate::mobile::pill_cell(&m.status) {
+        let sw_x = g.mobile.right() - SP_3 - 56;
+        p.cell_bars(
+            sw_x - SP_3 - walpad_ui::components::CELL_BARS_W,
+            g.mobile.y + 9,
+            bars,
+            c,
+        );
+    }
     qs_row(
         p,
         g.bluetooth,
@@ -565,6 +592,7 @@ mod tests {
             let rows = [
                 g.wifi,
                 g.hotspot,
+                g.mobile,
                 g.bluetooth,
                 g.battery,
                 g.slider,

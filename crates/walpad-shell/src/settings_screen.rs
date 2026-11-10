@@ -16,6 +16,8 @@ pub enum Page {
     Input,
     Power,
     Network,
+    /// Opens the Mobile network screen (owner request 2026-11-10).
+    Mobile,
     Security,
     System,
     Clock,
@@ -24,11 +26,12 @@ pub enum Page {
     Logs,
 }
 
-pub const CATEGORIES: [(Page, &str, Icon); 9] = [
+pub const CATEGORIES: [(Page, &str, Icon); 10] = [
     (Page::Display, "Display", Icon::Sun),
     (Page::Input, "Input", Icon::Keyboard),
     (Page::Power, "Power", Icon::Power),
     (Page::Network, "Network", Icon::Wifi),
+    (Page::Mobile, "Mobile network", Icon::Sim),
     (Page::Security, "Security", Icon::Lock),
     (Page::System, "System", Icon::Device),
     (Page::Clock, "Clock", Icon::Settings),
@@ -154,7 +157,7 @@ fn secs(s: u32) -> String {
 pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
     let info = |l: &str, (v, t): (String, Tone)| Row::Info(l.into(), v, t);
     match page {
-        Page::Display => Vec::new(),
+        Page::Display | Page::Mobile => Vec::new(),
         Page::Input => {
             let mut r: Vec<Row> = c
                 .sys
@@ -681,7 +684,7 @@ mod tests {
     fn layout_top_level_and_subpage() {
         let f = Frame::new(800, 1280);
         let top = layout(&f, None, &[]);
-        assert_eq!(top.rows.len(), 9);
+        assert_eq!(top.rows.len(), 10);
         assert!(top.rows.iter().all(|(r, _)| r.h >= TOUCH_MIN) && top.back.is_none());
         let rows = vec![
             Row::Info("a".into(), "b".into(), Tone::Info),

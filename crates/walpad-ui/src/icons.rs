@@ -35,10 +35,12 @@ pub enum Icon {
     Spinner,
     /// The mouse pad tool (Apps panel > Tools).
     Mouse,
+    /// SIM card (mobile network, owner request 2026-11-10).
+    Sim,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 29] = [
+    pub const ALL: [Icon; 30] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -68,6 +70,7 @@ impl Icon {
         Icon::EyeOff,
         Icon::Spinner,
         Icon::Mouse,
+        Icon::Sim,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -84,6 +87,7 @@ impl Icon {
             "keyboard" => Icon::Keyboard,
             "bluetooth" => Icon::Bluetooth,
             "mouse" => Icon::Mouse,
+            "sim" => Icon::Sim,
             _ => return None,
         })
     }
@@ -321,6 +325,23 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((12.0, 2.5), (12.0, 9.5));
             p.line((6.0, 9.5), (18.0, 9.5));
         }
+        Icon::Sim => {
+            // card with a clipped top-right corner and the contact chip
+            p.poly(
+                &[
+                    (6.0, 2.5),
+                    (14.5, 2.5),
+                    (19.0, 7.0),
+                    (19.0, 21.5),
+                    (5.0, 21.5),
+                    (5.0, 3.5),
+                    (6.0, 2.5),
+                ],
+                true,
+            );
+            p.rrect(8.5, 11.0, 7.0, 7.0, 1.0);
+            p.line((12.0, 11.0), (12.0, 18.0));
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -415,7 +436,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 29);
+        assert_eq!(Icon::ALL.len(), 30);
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }

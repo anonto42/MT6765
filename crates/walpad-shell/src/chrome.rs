@@ -101,7 +101,7 @@ pub fn active_target(active: Tab, panel_open: bool) -> Option<Target> {
     match active {
         Tab::Home | Tab::Apps => Some(Target::Nav(NAV_HOME)),
         Tab::Settings => Some(Target::Nav(NAV_SETTINGS)),
-        Tab::Network | Tab::Device => None,
+        Tab::Network | Tab::Device | Tab::Mobile => None,
     }
 }
 
@@ -240,9 +240,11 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         format!("{:02}:{:02}", w.hour, w.minute)
     };
     let battery = battery_label(m);
-    let pill_w = p.quick_pill_w(&battery);
+    // mobile signal bars while a SIM is present (owner request 2026-11-10)
+    let cell = crate::mobile::pill_cell(&m.status);
+    let pill_w = p.quick_pill_w_cell(&battery, cell.is_some());
     let low = m.status.as_ref().is_some_and(|s| s.battery.low);
-    let pill = p.quick_pill(
+    let pill = p.quick_pill_cell(
         h.right() - SP_4,
         h.y + h.h / 2,
         wifi_mark(m),
@@ -250,6 +252,7 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         low,
         m.pressed == Some(Target::QuickSettings),
         qs_open,
+        cell,
     );
     p.clock(
         Rect::new(h.x + SP_5, h.y, h.w - pill_w - SP_4 - 2 * SP_5, h.h),

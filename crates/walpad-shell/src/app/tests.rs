@@ -8,6 +8,7 @@ use walpad_ui::components::keyboard_layout;
 use walpad_ui::{Canvas, Fonts};
 
 mod hotspot;
+mod mobile;
 
 pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
     Status {
@@ -33,6 +34,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
             enabled: true,
         },
         hotspot: Default::default(),
+        mobile: Default::default(),
         apps: apps
             .iter()
             .map(|(a, r)| AppState {
@@ -311,6 +313,8 @@ fn home_taps_launch_apps_or_navigate() {
             Target::WifiSwitch,
             Target::HotspotCard,
             Target::HotspotSwitch,
+            Target::MobileCard,
+            Target::MobileDataSwitch,
             Target::BatteryCard,
             Target::Slider,
             Target::Rotation,

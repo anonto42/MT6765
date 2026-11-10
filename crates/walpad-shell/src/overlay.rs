@@ -16,6 +16,10 @@ pub enum SheetPurpose {
     HotspotName,
     /// The hotspot WPA2 password (8-63 printable ASCII).
     HotspotPassword,
+    /// The mobile data APN (shown in clear, 1-62 of A-Z a-z 0-9 . - _; owner request 2026-11-10).
+    MobileApn,
+    /// The SIM PIN (4-8 digits, hidden; sent to the core as a secret).
+    SimPin,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,6 +68,24 @@ impl PasswordSheet {
             ..PasswordSheet::new(String::new(), title.into())
         }
     }
+    /// The APN or SIM PIN sheet. The PIN sheet opens on the digits layer.
+    pub fn mobile(purpose: SheetPurpose, initial: &str) -> Self {
+        let (title, layer) = match purpose {
+            SheetPurpose::SimPin => ("SIM PIN", KeyboardLayer::Symbols),
+            _ => ("Access point (APN)", KeyboardLayer::Lower),
+        };
+        PasswordSheet {
+            secret: initial.to_string(),
+            shown: purpose == SheetPurpose::MobileApn,
+            layer,
+            purpose,
+            ..PasswordSheet::new(String::new(), title.into())
+        }
+    }
+    /// The sheet sets something on the mobile modem.
+    pub fn is_mobile(&self) -> bool {
+        matches!(self.purpose, SheetPurpose::MobileApn | SheetPurpose::SimPin)
+    }
     /// WPA2: 8-63 characters, or a 64-digit hex key; the hotspot takes 8-63 printable ASCII and a
     /// name of 1-32 bytes.
     pub fn valid(&self) -> bool {
@@ -75,6 +97,8 @@ impl PasswordSheet {
             }
             SheetPurpose::HotspotName => walpad_proto::valid_hotspot_ssid(&self.secret),
             SheetPurpose::HotspotPassword => walpad_proto::valid_hotspot_secret(&self.secret),
+            SheetPurpose::MobileApn => walpad_proto::valid_apn(&self.secret),
+            SheetPurpose::SimPin => walpad_proto::valid_sim_pin(&self.secret),
         }
     }
     /// Longest text the field takes (bytes).
@@ -83,6 +107,8 @@ impl PasswordSheet {
             SheetPurpose::WifiJoin => 64,
             SheetPurpose::HotspotName => 32,
             SheetPurpose::HotspotPassword => 63,
+            SheetPurpose::MobileApn => 62,
+            SheetPurpose::SimPin => 8,
         }
     }
 }
@@ -192,6 +218,8 @@ pub fn render_password(
         SheetPurpose::WifiJoin => ("Password", true, "Connect"),
         SheetPurpose::HotspotName => ("Name", false, "Save"),
         SheetPurpose::HotspotPassword => ("8-63 characters", true, "Save"),
+        SheetPurpose::MobileApn => ("e.g. gpinternet", false, "Save"),
+        SheetPurpose::SimPin => ("4-8 digits", true, "Unlock"),
     };
     if let Some(eye) = p.text_field(
         g.field,
