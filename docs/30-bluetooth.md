@@ -1,6 +1,6 @@
 # Bluetooth with BlueZ (2026-11-10)
 
-Status: built and host-tested; **not yet run on the tablet** (device test plan below).
+Status: HCI level verified on the tablet (hci0 UP RUNNING, `bluetoothctl power on` / `scan on` start). Boot start, core module and UI built and host-tested (2026-11-10); no remote device was found in a scan yet (phone discoverable? RF init?).
 
 ## How it fits together
 
@@ -12,8 +12,10 @@ hci0  <- hci_vhci.ko (/dev/vhci, one packet per read/write; our build for 4.19.1
       <- wmt_drv.ko / STP / CONNSYS firmware (already up for Wi-Fi via walpad-wifi)
 ```
 
-`walpad-bluetooth start|stop|restart|status` (config/rootfs/usr/local/sbin) runs the chain.  It is
-not started at boot yet; add it to `walpad-init` after the device test passes.
+`walpad-bluetooth start|stop|restart|status` (config/rootfs/usr/local/sbin) runs the chain.  `walpad-init`
+starts it at boot after `walpad-wifi` (background subshell, log `/var/log/walpad-bluetooth.log`) unless
+`/var/lib/walpad/bluetooth-enabled` is `0`.  `start` is idempotent.  walpad-core drives BlueZ through
+`bluetoothctl` and exposes it in the UI: see `docs/rust/CONTRACTS.md` (Bluetooth) and `docs/rust/UI.md`.
 
 ## /dev/stpbt protocol (from `drivers/misc/mediatek/connectivity/bt/mt66xx/wmt/stp_chrdev_bt.c`, matching the strings of the shipped `/vendor/lib/modules/bt_drv.ko`)
 

@@ -60,6 +60,7 @@ fn status() -> Status {
         },
         hotspot: Default::default(),
         mobile: Default::default(),
+        bluetooth: Default::default(),
         apps: vec![
             AppState {
                 app: "browser".into(),
@@ -662,4 +663,153 @@ fn quick_settings_mobile_row_and_pill_bars() {
     let mut l = app(1280, 800, Tab::Home, true);
     with_mobile(&mut l, gp);
     shot("home_landscape_mobile_bars", 1280, 800, &mut l);
+}
+
+// ------------------------------------------------- Bluetooth (owner request 2026-11-10)
+fn with_bt(a: &mut App, f: impl FnOnce(&mut walpad_proto::BluetoothStatus)) {
+    let mut s = status();
+    f(&mut s.bluetooth);
+    a.on_core(&CoreEvent::Status(Box::new(s)), 0);
+}
+fn bt_dev(
+    a: &str,
+    name: &str,
+    paired: bool,
+    connected: bool,
+    rssi: Option<i32>,
+    icon: &str,
+) -> walpad_proto::BluetoothDevice {
+    walpad_proto::BluetoothDevice {
+        address: a.into(),
+        name: name.into(),
+        paired,
+        connected,
+        rssi,
+        icon: Some(icon.into()),
+        class: None,
+    }
+}
+fn bt_on(b: &mut walpad_proto::BluetoothStatus) {
+    use walpad_proto::BluetoothController;
+    b.controller = BluetoothController::Present;
+    b.powered = true;
+    b.devices = vec![
+        bt_dev(
+            "AA:BB:CC:00:11:22",
+            "Logitech K380",
+            true,
+            true,
+            None,
+            "input-keyboard",
+        ),
+        bt_dev(
+            "AA:BB:CC:00:11:33",
+            "WH-1000XM4",
+            true,
+            false,
+            None,
+            "audio-headset",
+        ),
+        bt_dev(
+            "66:55:44:33:22:11",
+            "Pixel 7",
+            false,
+            false,
+            Some(-52),
+            "phone",
+        ),
+        bt_dev(
+            "66:55:44:33:22:12",
+            "Living Room TV",
+            false,
+            false,
+            Some(-71),
+            "video-display",
+        ),
+        bt_dev(
+            "5C:AA:BB:CC:DD:EE",
+            "5C:AA:BB:CC:DD:EE",
+            false,
+            false,
+            Some(-88),
+            "input-mouse",
+        ),
+    ];
+}
+
+#[test]
+fn bluetooth_screen_states() {
+    use walpad_proto::BluetoothController;
+    let mut a = app(800, 1280, Tab::Bluetooth, true);
+    with_bt(&mut a, bt_on);
+    shot("bluetooth_devices_portrait", 800, 1280, &mut a);
+
+    let mut a = app(1280, 800, Tab::Bluetooth, true);
+    with_bt(&mut a, |b| {
+        bt_on(b);
+        b.discovering = true;
+    });
+    a.model.spinner_deg = 60;
+    shot("bluetooth_scanning_landscape", 1280, 800, &mut a);
+
+    let mut a = app(800, 1280, Tab::Bluetooth, true);
+    with_bt(&mut a, |b| {
+        b.controller = BluetoothController::Present;
+        b.powered = false;
+    });
+    shot("bluetooth_off", 800, 1280, &mut a);
+
+    let mut a = app(800, 1280, Tab::Bluetooth, true);
+    with_bt(&mut a, |b| b.controller = BluetoothController::Starting);
+    shot("bluetooth_starting", 800, 1280, &mut a);
+
+    let mut a = app(800, 1280, Tab::Bluetooth, true);
+    with_bt(&mut a, |b| {
+        b.reason = Some("bridge did not create an HCI device".into())
+    });
+    shot("bluetooth_failed", 800, 1280, &mut a);
+}
+
+#[test]
+fn bluetooth_busy_row_and_dialogs() {
+    use walpad_shell::bluetooth::PairState;
+    let mut a = app(800, 1280, Tab::Bluetooth, true);
+    with_bt(&mut a, bt_on);
+    a.model.bt_busy = Some("AA:BB:CC:00:11:33".into());
+    a.model.spinner_deg = 90;
+    shot("bluetooth_connecting_row", 800, 1280, &mut a);
+    for (tag, state) in [
+        ("waiting", PairState::Waiting),
+        ("confirm", PairState::Confirm("123456".into())),
+        ("passkey", PairState::Display("482913".into())),
+        ("failed", PairState::Failed("Authentication failed".into())),
+    ] {
+        let mut a = app(800, 1280, Tab::Bluetooth, true);
+        with_bt(&mut a, bt_on);
+        a.model.spinner_deg = 90;
+        a.model.overlay = Some(Overlay::BtPair {
+            address: "66:55:44:33:22:11".into(),
+            name: "Pixel 7".into(),
+            state,
+        });
+        shot(&format!("bluetooth_pair_{tag}"), 800, 1280, &mut a);
+    }
+    let mut a = app(800, 1280, Tab::Bluetooth, true);
+    with_bt(&mut a, bt_on);
+    a.model.overlay = Some(Overlay::BtForget {
+        address: "AA:BB:CC:00:11:33".into(),
+        name: "WH-1000XM4".into(),
+    });
+    shot("bluetooth_forget_dialog", 800, 1280, &mut a);
+}
+
+#[test]
+fn quick_settings_bluetooth_row_and_header_mark() {
+    let mut a = app(800, 1280, Tab::Home, true);
+    with_bt(&mut a, bt_on);
+    a.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_bluetooth_on", 800, 1280, &mut a);
+    let mut l = app(1280, 800, Tab::Home, true);
+    with_bt(&mut l, bt_on);
+    shot("home_landscape_bluetooth_mark", 1280, 800, &mut l);
 }

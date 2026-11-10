@@ -1,5 +1,6 @@
 //! Application state: what the shell shows and how taps, core events and replies change it.
 //! Pure of I/O: the shell loop feeds it gestures and core events and sends the commands it returns.
+use crate::bluetooth::{self, PairState};
 use crate::chrome::{self, Chrome, ChromeKey, NAV_APPS};
 use crate::config::DevdSettings;
 use crate::core_client::{CoreEvent, ReplyError};
@@ -173,6 +174,16 @@ pub enum Target {
     MobileApn,
     SimPinEntry,
     ImeiShow,
+    // Bluetooth (owner request 2026-11-10): the Quick Settings row, the screen's controls and the
+    // pairing dialog; indices are into `bluetooth::my_devices` / `available_devices`
+    BtCard,
+    BtSwitch,
+    BtScan,
+    BtAction(usize),
+    BtForget(usize),
+    BtAvail(usize),
+    BtPairAccept,
+    BtPairReject,
     // Network
     Scan,
     Disconnect,
@@ -247,6 +258,16 @@ pub enum Cmd {
     /// `pin` is never printed: `Secret`'s Debug is `***`.
     SimPin(Secret),
     MobileInfo,
+    BtEnable(bool),
+    BtScan(bool),
+    BtPair(String),
+    BtConnect(String),
+    BtDisconnect(String),
+    BtForget(String),
+    BtConfirm {
+        address: String,
+        accept: bool,
+    },
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `set_setting` with an allowlisted key.
@@ -273,6 +294,8 @@ pub enum Purpose {
     MobileApn,
     SimPin,
     MobileInfo,
+    BtPair,
+    BtOp,
     Other,
 }
 
@@ -342,6 +365,16 @@ impl Cmd {
                 json!({"pin": serde_json::to_value(pin).unwrap_or(Value::Null)}),
             ),
             Cmd::MobileInfo => ("mobile_info", Value::Null),
+            Cmd::BtEnable(on) => ("bluetooth_enable", json!({"on": on})),
+            Cmd::BtScan(on) => ("bluetooth_scan", json!({"on": on})),
+            Cmd::BtPair(a) => ("bluetooth_pair", json!({"address": a})),
+            Cmd::BtConnect(a) => ("bluetooth_connect", json!({"address": a})),
+            Cmd::BtDisconnect(a) => ("bluetooth_disconnect", json!({"address": a})),
+            Cmd::BtForget(a) => ("bluetooth_forget", json!({"address": a})),
+            Cmd::BtConfirm { address, accept } => (
+                "bluetooth_confirm",
+                json!({"address": address, "accept": accept}),
+            ),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
@@ -363,6 +396,8 @@ impl Cmd {
             Cmd::MobileApn(_) => Purpose::MobileApn,
             Cmd::SimPin(_) => Purpose::SimPin,
             Cmd::MobileInfo => Purpose::MobileInfo,
+            Cmd::BtPair(_) => Purpose::BtPair,
+            Cmd::BtConnect(_) | Cmd::BtDisconnect(_) | Cmd::BtForget(_) => Purpose::BtOp,
             Cmd::CloseApp(_) => Purpose::Close,
             Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
@@ -402,6 +437,8 @@ pub struct Model {
     /// IMEI / ICCID from `mobile_info` (asked for when "Show" is tapped; never logged).
     pub mobile_info: Option<MobileInfo>,
     pub imei_shown: bool,
+    /// Address of the Bluetooth connect / pair request in progress.
+    pub bt_busy: Option<String>,
 }
 
 impl Model {
@@ -426,6 +463,7 @@ impl Model {
             settings_page: None,
             mobile_info: None,
             imei_shown: false,
+            bt_busy: None,
         }
     }
 
@@ -451,6 +489,8 @@ impl Model {
     fn spinning(&self) -> bool {
         self.net.scanning
             || self.net.connecting.is_some()
+            || self.bt_busy.is_some()
+            || bluetooth::scanning(&self.status)
             || matches!(&self.overlay, Some(Overlay::Password(s)) if s.connecting)
     }
 }
@@ -649,8 +689,12 @@ impl App {
                 self.model.status = None;
                 self.model.net.scanning = false;
                 self.model.net.connecting = None;
+                self.model.bt_busy = None;
                 if let Some(Overlay::Password(s)) = &mut self.model.overlay {
                     s.connecting = false;
+                }
+                if matches!(self.model.overlay, Some(Overlay::BtPair { .. })) {
+                    self.model.overlay = None;
                 }
                 self.pending.clear();
                 if matches!(self.model.overlay, Some(Overlay::PowerMenu { .. })) {
@@ -670,6 +714,13 @@ impl App {
                 if v["kind"].as_str().is_some_and(|k| k.starts_with("mobile_")) =>
             {
                 self.on_mobile_notice(v, &mut out)
+            }
+            CoreEvent::Notice(v)
+                if v["kind"]
+                    .as_str()
+                    .is_some_and(|k| k.starts_with("bluetooth")) =>
+            {
+                self.on_bt_notice(v, &mut out)
             }
             CoreEvent::Notice(v) => {
                 if v["kind"] == "app_crashed" {
@@ -802,6 +853,82 @@ impl App {
         }
     }
 
+    fn bt_name(&self, address: &str) -> String {
+        self.model
+            .status
+            .as_ref()
+            .and_then(|s| s.bluetooth.devices.iter().find(|d| d.address == address))
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| address.to_string())
+    }
+
+    /// Pairing and connect results (owner request 2026-11-10).
+    fn on_bt_notice(&mut self, v: &Value, out: &mut Outcome) {
+        out.dirty = true;
+        let addr = v["address"].as_str().unwrap_or("").to_string();
+        let name = self.bt_name(&addr);
+        let err = v["error"].as_str().unwrap_or("unknown error").to_string();
+        match v["kind"].as_str() {
+            Some("bluetooth_pair") => {
+                let mine = matches!(&self.model.overlay,
+                    Some(Overlay::BtPair { address, .. }) if *address == addr);
+                let set = |s: &mut Self, state: PairState| {
+                    s.model.overlay = Some(Overlay::BtPair {
+                        address: addr.clone(),
+                        name: name.clone(),
+                        state,
+                    })
+                };
+                let code = v["passkey"].as_str().unwrap_or("").to_string();
+                match v["state"].as_str() {
+                    Some("confirm") => set(self, PairState::Confirm(code)),
+                    Some("passkey") => set(self, PairState::Display(code)),
+                    Some("ok") => {
+                        self.model.bt_busy = None;
+                        if mine {
+                            self.model.overlay = None;
+                        }
+                        self.toast(format!("Paired with {name}"), Tone::Info);
+                    }
+                    Some("failed") => {
+                        self.model.bt_busy = None;
+                        if mine {
+                            set(self, PairState::Failed(err));
+                        } else {
+                            self.toast(format!("Pairing failed: {err}"), Tone::Danger);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Some("bluetooth") => {
+                if self
+                    .model
+                    .bt_busy
+                    .as_deref()
+                    .is_none_or(|b| b == addr || addr.is_empty())
+                {
+                    self.model.bt_busy = None;
+                }
+                let op = v["op"].as_str().unwrap_or("");
+                if v["ok"] == true {
+                    if op == "connect" {
+                        self.toast(format!("Connected to {name}"), Tone::Info);
+                    }
+                } else {
+                    let what = match op {
+                        "connect" => format!("Could not connect to {name}"),
+                        "disconnect" => format!("Could not disconnect {name}"),
+                        "forget" => format!("Could not forget {name}"),
+                        _ => "Bluetooth".to_string(),
+                    };
+                    self.toast(format!("{what}: {err}"), Tone::Danger);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn on_reply(
         &mut self,
         id: u64,
@@ -852,6 +979,17 @@ impl App {
                 }
             }
             (Purpose::Forget, true) => out.cmd(Cmd::WifiListSaved),
+            (Purpose::BtPair | Purpose::BtOp, false) => {
+                self.model.bt_busy = None;
+                if purpose == Purpose::BtPair
+                    && matches!(self.model.overlay, Some(Overlay::BtPair { .. }))
+                {
+                    self.model.overlay = None;
+                }
+                if let Some(e) = error {
+                    self.toast(friendly(e), Tone::Danger);
+                }
+            }
             (Purpose::HotspotConfig, ok) => {
                 let sheet = matches!(&self.model.overlay,
                     Some(Overlay::Password(s)) if s.purpose != SheetPurpose::WifiJoin);
@@ -1015,7 +1153,7 @@ impl App {
     fn scrolls(&self) -> bool {
         matches!(
             self.active,
-            Tab::Network | Tab::Device | Tab::Settings | Tab::Mobile
+            Tab::Network | Tab::Device | Tab::Settings | Tab::Mobile | Tab::Bluetooth
         )
     }
 
@@ -1207,6 +1345,66 @@ impl App {
             }
             Target::WifiCard | Target::HotspotCard => self.go(Tab::Network, out),
             Target::MobileCard | Target::Page(Page::Mobile) => self.go(Tab::Mobile, out),
+            Target::BtCard | Target::Page(Page::Bluetooth) => self.go(Tab::Bluetooth, out),
+            Target::BtSwitch if interactive && bluetooth::switchable(&self.model.status) => {
+                out.cmd(Cmd::BtEnable(!bluetooth::switch_on(&self.model.status)))
+            }
+            Target::BtScan if interactive && bluetooth::powered(&self.model.status) => {
+                out.cmd(Cmd::BtScan(!bluetooth::scanning(&self.model.status)))
+            }
+            Target::BtAction(i) if interactive && self.model.bt_busy.is_none() => {
+                let d = bluetooth::my_devices(&self.model.status)
+                    .get(i)
+                    .map(|d| (d.address.clone(), d.connected));
+                if let Some((address, connected)) = d {
+                    self.model.bt_busy = Some(address.clone());
+                    out.cmd(if connected {
+                        Cmd::BtDisconnect(address)
+                    } else {
+                        Cmd::BtConnect(address)
+                    });
+                }
+            }
+            Target::BtForget(i) if interactive => {
+                let d = bluetooth::my_devices(&self.model.status)
+                    .get(i)
+                    .map(|d| (d.address.clone(), d.name.clone()));
+                if let Some((address, name)) = d {
+                    self.model.overlay = Some(Overlay::BtForget { address, name });
+                }
+            }
+            Target::BtAvail(i) if interactive && self.model.bt_busy.is_none() => {
+                let d = bluetooth::available_devices(&self.model.status)
+                    .get(i)
+                    .map(|d| (d.address.clone(), d.name.clone()));
+                if let Some((address, name)) = d {
+                    self.model.bt_busy = Some(address.clone());
+                    self.model.overlay = Some(Overlay::BtPair {
+                        address: address.clone(),
+                        name,
+                        state: PairState::Waiting,
+                    });
+                    out.cmd(Cmd::BtPair(address));
+                }
+            }
+            Target::BtPairAccept | Target::BtPairReject => {
+                let accept = t == Target::BtPairAccept;
+                if let Some(Overlay::BtPair { address, name, .. }) = self.model.overlay.take() {
+                    out.cmd(Cmd::BtConfirm {
+                        address: address.clone(),
+                        accept,
+                    });
+                    if accept {
+                        self.model.overlay = Some(Overlay::BtPair {
+                            address,
+                            name,
+                            state: PairState::Waiting,
+                        });
+                    } else {
+                        self.model.bt_busy = None;
+                    }
+                }
+            }
             Target::MobileRadio if interactive && mobile::radio_switchable(&self.model.status) => {
                 out.cmd(Cmd::MobileRadio(!mobile::radio_on(&self.model.status)))
             }
@@ -1377,6 +1575,7 @@ impl App {
             Target::DialogCancel => self.close_overlay(),
             Target::DialogConfirm => match self.model.overlay.take() {
                 Some(Overlay::Forget { id, .. }) => out.cmd(Cmd::WifiForget(id)),
+                Some(Overlay::BtForget { address, .. }) => out.cmd(Cmd::BtForget(address)),
                 // two taps: the first arms the button for 3 s ("Tap again to shut down")
                 Some(Overlay::PowerConfirm {
                     poweroff,
@@ -1743,6 +1942,10 @@ impl App {
             Some(Overlay::Password(s)) => overlay::render_password(p, &frame, s, deg),
             Some(Overlay::App(s)) => overlay::render_app_sheet(p, &frame, s),
             Some(Overlay::Forget { ssid, .. }) => overlay::render_forget(p, &frame, ssid),
+            Some(Overlay::BtPair { name, state, .. }) => {
+                bluetooth::render_pair(p, &frame, name, state, deg)
+            }
+            Some(Overlay::BtForget { name, .. }) => bluetooth::render_forget(p, &frame, name),
             Some(Overlay::PowerConfirm {
                 poweroff,
                 armed_until,
@@ -1771,6 +1974,7 @@ impl App {
                     .total
             }
             Tab::Mobile => mobile::layout(&frame, &self.model.status).total,
+            Tab::Bluetooth => bluetooth::layout(&frame, &self.model.status).total,
             _ => 0,
         }
         .max(self.view.h);
@@ -1811,6 +2015,17 @@ impl App {
                     imei_shown: m.imei_shown,
                     online: m.connected,
                     pressed: m.pressed,
+                },
+            ),
+            Tab::Bluetooth => bluetooth::render(
+                p,
+                &frame,
+                &bluetooth::View {
+                    st: &m.status,
+                    online: m.connected,
+                    pressed: m.pressed,
+                    spinner_deg: m.spinner_deg,
+                    busy: m.bt_busy.as_deref(),
                 },
             ),
             Tab::Home | Tab::Apps => Vec::new(),

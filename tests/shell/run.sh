@@ -523,6 +523,27 @@ rm -f "$BT/fail-hci_vhci"
 grep -q '^rmmod wmt_drv\|^rmmod bt_drv' "$BT/calls" && bad "bt: never rmmod wmt_drv/bt_drv" present absent || ok "bt: never rmmod wmt_drv/bt_drv"
 bt stop > /dev/null
 OUT=$(bt bogus); eq "bt: unknown verb" "$?" 2
+# --- init starts walpad-bluetooth after walpad-wifi, in its own subshell, unless the switch says off
+for f in config/rootfs/sbin/walpad-init config/rootfs-nopython/files/sbin/walpad-init; do
+  w=$(grep -n 'walpad-wifi >>' "$f" | head -n 1 | cut -d: -f1); b=$(grep -n 'walpad-bluetooth start' "$f" | head -n 1 | cut -d: -f1)
+  g=$(grep -n 'if \[ -z "\$SAFE" \]' "$f" | head -n 1 | cut -d: -f1)
+  [ -n "$w" ] && [ -n "$b" ] && [ "$w" -lt "$b" ] && ok "init starts walpad-bluetooth after walpad-wifi ($f)" || bad "init bluetooth order ($f)" "$w $b" "wifi < bluetooth"
+  [ -n "$g" ] && [ "$b" -lt "$g" ] && ok "bluetooth start is before the safe-mode gate ($f)" || bad "bluetooth before the gate ($f)" "$b $g" "bt < gate"
+  grep -q 'bluetooth-enabled' "$f" && grep -q '/var/log/walpad-bluetooth.log' "$f" && grep -q -- '-lt 120' "$f" && ok "init honours the switch, logs, waits 120 s for wmt_drv ($f)" || bad "init bluetooth switch/log/wait ($f)" missing present
+  # run the block with fake commands: switch on -> start once after wmt_drv; switch off -> never
+  blk=$(sed -n '/^# Bluetooth (owner request/,/^fi$/p' "$f")
+  for sw in on off; do
+    BI=$T/btinit-$sw; mkdir -p "$BI/bin" "$BI/var/lib/walpad" "$BI/var/log"; : > "$BI/calls"
+    printf '#!/bin/sh\necho "$*" >> %s/calls\n' "$BI" > "$BI/bin/walpad-bluetooth"; chmod +x "$BI/bin/walpad-bluetooth"
+    echo "wmt_drv 1 0 - Live 0x0" > "$BI/modules"
+    [ "$sw" = off ] && echo 0 > "$BI/var/lib/walpad/bluetooth-enabled"
+    # the block hard-codes absolute paths: rewrite them into the fake root
+    echo "$blk" | sed "s|/usr/local/sbin/walpad-bluetooth|$BI/bin/walpad-bluetooth|; s|/var/lib/walpad|$BI/var/lib/walpad|; s|/proc/modules|$BI/modules|g; s|/var/log/walpad-bluetooth.log|$BI/var/log/bt.log|; s|^\( *\)walpad-bluetooth start|\1$BI/bin/walpad-bluetooth start|; s|; walpad-bluetooth start|; $BI/bin/walpad-bluetooth start|" > "$BI/blk.sh"
+    ( PATH=$BI/bin:$PATH sh "$BI/blk.sh"; sleep 1.5 )
+    if [ "$sw" = on ]; then eq "init block (switch on) starts bluetooth once ($f)" "$(cat "$BI/calls")" "start"
+    else eq "init block (switch off) starts nothing ($f)" "$(cat "$BI/calls")" ""; fi
+  done
+done
 for p in bluez bluez-deprecated dbus; do case " $(WALPAD_PRINT_PKGS=1 bash scripts/build_rootfs.sh) " in *" $p "*) ok "image has $p";; *) bad "image has $p" missing present;; esac; done
 
 exit $FAIL

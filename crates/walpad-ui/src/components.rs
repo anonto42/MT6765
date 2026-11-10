@@ -77,15 +77,18 @@ pub enum Tab {
     Settings,
     /// Mobile network / SIM (owner request 2026-11-10; reached from Quick Settings and Settings).
     Mobile,
+    /// Bluetooth devices (owner request 2026-11-10; reached from Quick Settings and Settings).
+    Bluetooth,
 }
 impl Tab {
-    pub const ALL: [Tab; 6] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Home,
         Tab::Apps,
         Tab::Network,
         Tab::Device,
         Tab::Settings,
         Tab::Mobile,
+        Tab::Bluetooth,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -95,6 +98,7 @@ impl Tab {
             Tab::Device => "Device",
             Tab::Settings => "Settings",
             Tab::Mobile => "Mobile network",
+            Tab::Bluetooth => "Bluetooth",
         }
     }
     pub fn icon(self) -> Icon {
@@ -105,6 +109,7 @@ impl Tab {
             Tab::Device => Icon::Device,
             Tab::Settings => Icon::Settings,
             Tab::Mobile => Icon::Sim,
+            Tab::Bluetooth => Icon::Bluetooth,
         }
     }
 }
@@ -1091,11 +1096,17 @@ impl Painter<'_> {
 
     /// Width with the mobile signal bars (owner request 2026-11-10) when `cell`.
     pub fn quick_pill_w_cell(&mut self, battery: &str, cell: bool) -> i32 {
+        self.quick_pill_w_ex(battery, cell, false)
+    }
+
+    /// Width with the mobile bars and the Bluetooth mark (shown while Bluetooth is powered).
+    pub fn quick_pill_w_ex(&mut self, battery: &str, cell: bool, bt: bool) -> i32 {
         let bw = self
             .fonts
             .measure(battery, Face::Regular, SIZE_SECONDARY)
             .ceil() as i32;
         let cell_w = if cell { CELL_BARS_W + SP_2 } else { 0 };
+        let cell_w = cell_w + if bt { BT_MARK_W + SP_2 } else { 0 };
         14 + cell_w + 20 + SP_3 + bw + SP_1 + 22 + SP_2 + 16 + 14
     }
 
@@ -1141,13 +1152,34 @@ impl Painter<'_> {
         open: bool,
         cell: Option<(u8, Color)>,
     ) -> Rect {
-        let w = self.quick_pill_w_cell(battery, cell.is_some());
+        self.quick_pill_ex(right, cy, wifi, battery, low, pressed, open, cell, false)
+    }
+
+    /// The pill with an optional Bluetooth mark after the mobile bars (`bt` = Bluetooth powered).
+    #[allow(clippy::too_many_arguments)]
+    pub fn quick_pill_ex(
+        &mut self,
+        right: i32,
+        cy: i32,
+        wifi: WifiMark,
+        battery: &str,
+        low: bool,
+        pressed: bool,
+        open: bool,
+        cell: Option<(u8, Color)>,
+        bt: bool,
+    ) -> Rect {
+        let w = self.quick_pill_w_ex(battery, cell.is_some(), bt);
         let r = Rect::new(right - w, cy - 20, w, 40);
         self.outline_box(r, 20, pressed, open, false);
         let mut x = r.x + 14;
         if let Some((bars, c)) = cell {
             self.cell_bars(x, cy - 8, bars, c);
             x += CELL_BARS_W + SP_2;
+        }
+        if bt {
+            self.cv.icon(Icon::Bluetooth, x, cy - 9, BT_MARK_W, TEXT);
+            x += BT_MARK_W + SP_2;
         }
         let wifi_c = match wifi {
             WifiMark::Connected => TEXT,
@@ -1175,6 +1207,9 @@ impl Painter<'_> {
         r
     }
 }
+
+/// Width of the Bluetooth mark in the header pill.
+pub const BT_MARK_W: i32 = 18;
 
 /// Width of `Painter::cell_bars`.
 pub const CELL_BARS_W: i32 = 18;
@@ -1639,7 +1674,8 @@ mod tests {
                 "Network",
                 "Device",
                 "Settings",
-                "Mobile network"
+                "Mobile network",
+                "Bluetooth"
             ]
         );
     }

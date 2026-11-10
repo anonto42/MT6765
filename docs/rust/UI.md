@@ -67,7 +67,7 @@ buttons 56 high. Icons: 24 px grid, round 2 px strokes (28 px in 64 boxes).
   Touch areas span the full 96 px width. Pinned apps that would not fit are dropped, never Settings.
 - **Header**: clock at the left (24 h or "2:22 PM" per Settings > Clock) with the date in secondary;
   at the right a 40 px pill: mobile signal bars (only while a SIM is present; white registered, dim
-  otherwise), Wi-Fi mark (white connected, 32 % not connected/unknown, danger failed),
+  otherwise), a Bluetooth mark (only while the controller is powered), Wi-Fi mark (white connected, 32 % not connected/unknown, danger failed),
   battery percent + battery icon (warning colour when low; "~62%" for a voltage estimate, "--" when
   unavailable), chevron-down. Tapping it opens Quick Settings.
 - **Banners** (system service not responding, battery low): 48 px rounded strip at the top of the
@@ -81,6 +81,7 @@ buttons 56 high. Icons: 24 px grid, round 2 px strokes (28 px in 64 boxes).
 | Apps panel | sidebar chevron (popover over any screen) |
 | Network (Wi-Fi) | header pill > Quick Settings > Wi-Fi Network |
 | Mobile network (SIM) | header pill > Quick Settings > Mobile data, or Settings > Mobile network |
+| Bluetooth | header pill > Quick Settings > Bluetooth, or Settings > Bluetooth |
 | Device | header pill > Quick Settings > Battery, or Settings > Display |
 | Settings (+ subpages) | sidebar Settings, or the Settings icon on Home / in the Apps panel |
 | Power menu | long power press, or Settings > Maintenance > Power menu |
@@ -106,7 +107,7 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   row opens Network, the switch toggles the hotspot); Mobile data (SIM icon, subtitle operator · tech /
   No SIM / SIM PIN required / Airplane mode / Modem starting... / Not available / Data failed, small
   signal bars left of the switch while a SIM is present; the row opens Mobile network, the switch toggles
-  data); Bluetooth (disabled, "Not supported on this tablet"); Battery (NN %) (opens Device;
+  data); Bluetooth (owner request 2026-11-10; subtitle Off / Starting... / On / Connected: <name> / N devices connected / Scanning... / Failed to start / Not available; the row opens Bluetooth, the switch toggles it); Battery (NN %) (opens Device;
   "Battery (~62%)" + "Estimated from voltage" in warning for an estimate, "Battery (unavailable)"
   when there is no reading, the charge state for a gauge); divider; Brightness label + percent and
   the slider; divider; Rotation: Auto/Locked, Screen off (disabled while the core is away). No
@@ -133,6 +134,7 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   (value or "Automatic"; opens the text sheet). Under it the data line: off / Connecting... / Connected,
   <ip> (success) / Failed: <reason> (danger). MODEM group: Firmware, IMEI "Hidden" with Show/Hide (asks
   `mobile_info` once; hidden again when the screen is left).
+- **Bluetooth** (owner request 2026-11-10; `bluetooth.rs`): title + chip (On / Off / Starting / Stopped / Failed / None) and the switch at the right (like Wi-Fi). Off, not started or starting: one state card instead of the lists (a failure reason in danger above it). On: "MY DEVICES" (paired; 72 px rows with a device icon, name, "Connected" in success / "Paired"; the row is the Connect / Disconnect action, "Forget" in danger at the right asks first; a spinner and "Working..." while a request runs), "AVAILABLE DEVICES" with the Scan button (outlined, spinner while scanning, tap again to stop; discovery ends by itself after 30 s) and unpaired devices (name, signal bars from RSSI, "Tap to pair"). Both lists are sorted by name, never by signal (rows must not move under a finger). Pairing dialog (centred, 560 wide): Waiting (spinner, Close), numeric comparison (big mono passkey, "Don't pair" / "Pair"), keyboard passkey ("Type this on <name>", Cancel), failure (reason in danger, OK). Results of connect and pairing arrive as toasts. Goldens: `bluetooth_*`, `quick_settings_bluetooth_on`, `home_landscape_bluetooth_mark`.
 - **Network**: title "Wi-Fi" + outlined radio chip (Up/Starting/Failed/Down, Off when switched off,
   Paused while an exclusive hotspot runs; Failed shows "Restart the tablet to retry Wi-Fi") and the
   Wi-Fi switch at the right (owner request 2026-11-10; off = "Wi-Fi is off" empty state, Scan

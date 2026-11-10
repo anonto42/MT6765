@@ -1,6 +1,7 @@
 //! The core poll loop: IPC socket, devd.cmd FIFO, input devices and timers in one thread, no async
 //! runtime. The `Brain` decides; this module executes (sysfs writes, X requests, spawns).
 use crate::apps::{terminate_pid, Apps, Exit, LaunchError};
+use crate::bluetooth::{Bluetooth, BluetoothError};
 use crate::brain::{Brain, Effect};
 use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
@@ -104,6 +105,7 @@ pub struct Daemon {
     apps: Apps,
     wifi: Wifi,
     hotspot: Hotspot,
+    bluetooth: Bluetooth,
     modem: Modem,
     xb: Option<XBridge>,
     x_retry: Instant,
@@ -151,6 +153,14 @@ fn wifi_err(e: WifiError) -> (ErrorCode, String) {
         ),
         WifiError::Invalid(m) => (ErrorCode::InvalidArgs, m),
         WifiError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
+fn bluetooth_err(e: BluetoothError) -> (ErrorCode, String) {
+    match e {
+        BluetoothError::Busy(m) => (ErrorCode::Busy, m),
+        BluetoothError::Refused(m) => (ErrorCode::Refused, m),
+        BluetoothError::Failed(m) => (ErrorCode::Internal, m),
     }
 }
 
@@ -232,6 +242,7 @@ impl Daemon {
             apps,
             wifi: Wifi::new(&root),
             hotspot: Hotspot::new(&root),
+            bluetooth: Bluetooth::new(&root),
             modem: Modem::new(&root),
             xb: None,
             x_retry: now,
@@ -459,6 +470,10 @@ impl Daemon {
     /// Test hook: shorter hotspot script timeouts.
     pub fn hotspot_mut(&mut self) -> &mut Hotspot {
         &mut self.hotspot
+    }
+    /// Test hook: shorter Bluetooth limits.
+    pub fn bluetooth_mut(&mut self) -> &mut Bluetooth {
+        &mut self.bluetooth
     }
 
     /// Test hook: modem timeouts and poll periods.
@@ -838,6 +853,7 @@ impl Daemon {
             }
         }
         let devs = input::discover(&self.root);
+        let bt = self.bluetooth.status();
         let ok = |b: bool| if b { "ok" } else { "unavailable" }.to_string();
         Status {
             battery: battery::model(&raw, self.brain.guard.low()),
@@ -849,12 +865,18 @@ impl Daemon {
             wifi,
             hotspot: self.hotspot.status().clone(),
             mobile: self.modem.status().clone(),
+            bluetooth: bt.clone(),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
                 touch: ok(input::find(&devs, input::is_touch).is_some()),
                 gsensor: ok(read_gsensor(&self.root).is_some()),
                 audio: "unverified".into(),
-                bluetooth: "unavailable".into(),
+                bluetooth: if bt.controller == walpad_proto::BluetoothController::Present {
+                    "ok"
+                } else {
+                    "unavailable"
+                }
+                .into(),
                 sd_card: "unavailable".into(),
             },
         }
@@ -1015,6 +1037,17 @@ impl Daemon {
             Command::MobileApn { apn } => self.modem.set_apn(&apn).map_err(mobile_err),
             Command::SimPin { pin } => self.modem.sim_pin(&pin, Instant::now()).map_err(mobile_err),
             Command::MobileInfo => Ok(self.modem.info()),
+            Command::BluetoothEnable { on } => self.bluetooth.set_enabled(on).map_err(bluetooth_err),
+            Command::BluetoothScan { on } => self.bluetooth.set_scan(on).map_err(bluetooth_err),
+            Command::BluetoothPair { address } => self.bluetooth.pair(&address).map_err(bluetooth_err),
+            Command::BluetoothConnect { address } => self.bluetooth.connect(&address).map_err(bluetooth_err),
+            Command::BluetoothDisconnect { address } => {
+                self.bluetooth.disconnect(&address).map_err(bluetooth_err)
+            }
+            Command::BluetoothForget { address } => self.bluetooth.forget(&address).map_err(bluetooth_err),
+            Command::BluetoothConfirm { address, accept } => {
+                self.bluetooth.confirm(&address, accept).map_err(bluetooth_err)
+            }
             Command::PowerMenu { open } => {
                 self.shell_menu_until = open.then(|| now + SHELL_MENU_MAX_MS);
                 Ok(json!({"open": open}))
@@ -1269,6 +1302,11 @@ impl Daemon {
         }
         if self.hotspot.tick(Instant::now()) {
             self.publish_hotspot();
+            did = true;
+        }
+        did |= self.bluetooth.tick(Instant::now());
+        for n in self.bluetooth.take_notices() {
+            self.publish(Topic::Notice, "notice", n);
             did = true;
         }
         did |= self.modem.tick(Instant::now());

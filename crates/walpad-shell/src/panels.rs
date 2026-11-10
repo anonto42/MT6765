@@ -302,15 +302,19 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
             c,
         );
     }
-    qs_row(
+    let (bsub_t, bcol) = crate::bluetooth::qs_line(&m.status);
+    qs_switch_row(
         p,
+        &mut hits,
+        m,
         g.bluetooth,
         Icon::Bluetooth,
         "Bluetooth",
-        Some(("Not supported on this tablet", TEXT_DISABLED)),
-        false,
-        false,
-        true,
+        (&bsub_t, bcol),
+        crate::bluetooth::switch_on(&m.status),
+        Target::BtCard,
+        Target::BtSwitch,
+        sw_off || !crate::bluetooth::switchable(&m.status),
     );
     let (btitle, bsub) = battery_row(m);
     qs_row(

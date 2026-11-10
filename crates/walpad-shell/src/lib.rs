@@ -3,6 +3,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod app;
+pub mod bluetooth;
 pub mod chrome;
 pub mod config;
 pub mod core_client;

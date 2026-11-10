@@ -129,6 +129,17 @@ pub enum Overlay {
         id: u32,
         ssid: String,
     },
+    /// Pairing in progress (owner request 2026-11-10): waiting, passkey confirmation, failure.
+    BtPair {
+        address: String,
+        name: String,
+        state: crate::bluetooth::PairState,
+    },
+    /// Confirm forgetting a paired Bluetooth device.
+    BtForget {
+        address: String,
+        name: String,
+    },
     /// Restart / shut down: the first confirm tap arms the button for 3 s.
     PowerConfirm {
         poweroff: bool,

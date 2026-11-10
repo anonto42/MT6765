@@ -312,6 +312,7 @@ fn sample_status() -> Status {
         },
         hotspot: Default::default(),
         mobile: Default::default(),
+        bluetooth: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,
@@ -463,4 +464,71 @@ fn mobile_status_defaults_and_names() {
             &json!("connecting")
         )
     );
+}
+
+#[test]
+fn bluetooth_commands_are_validated() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"bluetooth_enable","args":{"on":true}}"#)
+            .unwrap()
+            .1,
+        Command::BluetoothEnable { on: true }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"bluetooth_scan","args":{"on":false}}"#)
+            .unwrap()
+            .1,
+        Command::BluetoothScan { on: false }
+    );
+    for c in [
+        "bluetooth_pair",
+        "bluetooth_connect",
+        "bluetooth_disconnect",
+        "bluetooth_forget",
+    ] {
+        let ok = json!({"v":1,"id":1,"cmd":c,"args":{"address":"aa:BB:0c:DD:ee:F1"}}).to_string();
+        assert!(req(&ok).is_ok(), "{c}");
+        for bad in [
+            "",
+            "AA:BB:CC:DD:EE",
+            "AA:BB:CC:DD:EE:FF:00",
+            "AA-BB-CC-DD-EE-FF",
+            "AA:BB:CC:DD:EE:GG",
+            "AA:BB:CC:DD:EE:F;",
+            "AA:BB:CC:DD:EE:FF\nquit",
+            "-h",
+            "AA:BB:CC:DD:EE:F\u{e9}",
+        ] {
+            let l = json!({"v":1,"id":1,"cmd":c,"args":{"address":bad}}).to_string();
+            assert_eq!(code(req(&l)), ErrorCode::InvalidArgs, "{c} {bad:?}");
+        }
+        let missing = json!({"v":1,"id":1,"cmd":c,"args":{}}).to_string();
+        assert_eq!(code(req(&missing)), ErrorCode::InvalidArgs);
+    }
+    assert_eq!(
+        req(
+            r#"{"v":1,"id":1,"cmd":"bluetooth_confirm","args":{"address":"AA:BB:CC:DD:EE:FF","accept":true}}"#
+        )
+        .unwrap()
+        .1,
+        Command::BluetoothConfirm {
+            address: "AA:BB:CC:DD:EE:FF".into(),
+            accept: true
+        }
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"bluetooth_confirm","args":{"address":"AA:BB:CC:DD:EE:FF"}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+}
+
+#[test]
+fn old_status_without_bluetooth_parses() {
+    let mut v = serde_json::to_value(sample_status()).unwrap();
+    v.as_object_mut().unwrap().remove("bluetooth");
+    let s: Status = serde_json::from_value(v).unwrap();
+    assert_eq!(s.bluetooth.controller, BluetoothController::Absent);
+    assert!(s.bluetooth.enabled);
 }

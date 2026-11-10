@@ -7,6 +7,7 @@ use walpad_proto::{
 use walpad_ui::components::keyboard_layout;
 use walpad_ui::{Canvas, Fonts};
 
+mod bluetooth;
 mod hotspot;
 mod mobile;
 
@@ -35,6 +36,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         },
         hotspot: Default::default(),
         mobile: Default::default(),
+        bluetooth: Default::default(),
         apps: apps
             .iter()
             .map(|(a, r)| AppState {
@@ -315,6 +317,8 @@ fn home_taps_launch_apps_or_navigate() {
             Target::HotspotSwitch,
             Target::MobileCard,
             Target::MobileDataSwitch,
+            Target::BtCard,
+            Target::BtSwitch,
             Target::BatteryCard,
             Target::Slider,
             Target::Rotation,

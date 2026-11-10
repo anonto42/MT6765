@@ -2,6 +2,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod apps;
+pub mod bluetooth;
 pub mod brain;
 pub mod daemon;
 pub mod fake;

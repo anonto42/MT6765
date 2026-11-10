@@ -88,6 +88,64 @@ pub struct HotspotStatus {
     pub exclusive: bool,
 }
 
+/// Bluetooth controller state (owner request 2026-11-10).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BluetoothController {
+    /// No controller: not supported, switched off or not started (see `reason`).
+    #[default]
+    Absent,
+    /// `walpad-bluetooth start` is running.
+    Starting,
+    /// bluetoothd answers with a controller.
+    Present,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BluetoothDevice {
+    /// Upper-case `AA:BB:CC:DD:EE:FF`.
+    pub address: String,
+    /// Alias or name; the address when the device has none.
+    pub name: String,
+    pub paired: bool,
+    pub connected: bool,
+    pub rssi: Option<i32>,
+    /// BlueZ icon name (`input-keyboard`, `audio-headset`, `phone`, ...).
+    pub icon: Option<String>,
+    /// Class of device.
+    pub class: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BluetoothStatus {
+    pub controller: BluetoothController,
+    /// Why there is no controller; never contains secrets.
+    pub reason: Option<String>,
+    /// The owner's switch (/var/lib/walpad/bluetooth-enabled; missing = on).
+    pub enabled: bool,
+    pub powered: bool,
+    pub discovering: bool,
+    /// A pairing is in progress for this address.
+    pub pairing: Option<String>,
+    pub devices: Vec<BluetoothDevice>,
+}
+
+impl Default for BluetoothStatus {
+    fn default() -> Self {
+        BluetoothStatus {
+            controller: BluetoothController::Absent,
+            reason: None,
+            enabled: true,
+            powered: false,
+            discovering: false,
+            pairing: None,
+            devices: Vec::new(),
+        }
+    }
+}
+
 /// The cellular modem (owner request 2026-11-10).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -189,6 +247,8 @@ pub struct Status {
     pub hotspot: HotspotStatus,
     #[serde(default)]
     pub mobile: MobileStatus,
+    #[serde(default)]
+    pub bluetooth: BluetoothStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
 }

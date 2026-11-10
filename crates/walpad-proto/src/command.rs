@@ -22,6 +22,13 @@ pub const COMMAND_NAMES: &[&str] = &[
     "mobile_apn",
     "sim_pin",
     "mobile_info",
+    "bluetooth_enable",
+    "bluetooth_scan",
+    "bluetooth_pair",
+    "bluetooth_connect",
+    "bluetooth_disconnect",
+    "bluetooth_forget",
+    "bluetooth_confirm",
     "launch",
     "close_app",
     "home",
@@ -190,6 +197,34 @@ pub enum Command {
     },
     /// Modem identity on request (IMEI, ICCID, firmware): never in the status topic.
     MobileInfo,
+    /// Bluetooth switch (owner request 2026-11-10): persists /var/lib/walpad/bluetooth-enabled and
+    /// runs `walpad-bluetooth start|stop`; on also powers the controller.
+    BluetoothEnable {
+        on: bool,
+    },
+    /// Discovery on/off; bounded: stops by itself after 30 s.
+    BluetoothScan {
+        on: bool,
+    },
+    /// Pair (then trust and connect) a device; `address` is `AA:BB:CC:DD:EE:FF`.
+    BluetoothPair {
+        address: String,
+    },
+    BluetoothConnect {
+        address: String,
+    },
+    BluetoothDisconnect {
+        address: String,
+    },
+    /// Unpair and remove the device.
+    BluetoothForget {
+        address: String,
+    },
+    /// Answer a pairing passkey confirmation (`notice` kind `bluetooth_pair`, state `confirm`).
+    BluetoothConfirm {
+        address: String,
+        accept: bool,
+    },
     Launch {
         app: String,
     },
@@ -313,6 +348,15 @@ impl Command {
                 }
                 Ok(())
             }
+            Command::BluetoothPair { address }
+            | Command::BluetoothConnect { address }
+            | Command::BluetoothDisconnect { address }
+            | Command::BluetoothForget { address }
+            | Command::BluetoothConfirm { address, .. }
+                if !valid_bt_address(address) =>
+            {
+                Err("address must be like AA:BB:CC:DD:EE:FF".into())
+            }
             Command::MobileApn { apn } if !valid_apn(apn) => {
                 Err("apn must be 1-62 characters of A-Z a-z 0-9 . - _".into())
             }
@@ -330,6 +374,18 @@ impl Command {
             _ => Ok(()),
         }
     }
+}
+
+/// Bluetooth device address: six hex pairs separated by colons (nothing else reaches bluetoothctl).
+pub fn valid_bt_address(s: &str) -> bool {
+    s.len() == 17
+        && s.bytes().enumerate().all(|(i, b)| {
+            if i % 3 == 2 {
+                b == b':'
+            } else {
+                b.is_ascii_hexdigit()
+            }
+        })
 }
 
 /// Hotspot name: 1-32 bytes of UTF-8 without control characters.

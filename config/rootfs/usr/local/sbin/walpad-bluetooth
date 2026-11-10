@@ -59,9 +59,15 @@ bluetoothd_bin() {
 
 start() {
   mkdir -p "$RUN" "$LOG"
-  if alive "$BRIDGE_PID"; then say "already running ($(cat "$BRIDGE_READY" 2>/dev/null))"; return 0; fi
   echo starting > "$RUN/bt-state"
+  if alive "$BRIDGE_PID"; then
+    HCI=$(cat "$BRIDGE_READY" 2>/dev/null); say "bridge already running ($HCI)"
+  else bring_up_bridge; fi
+  bring_up_bluez
+}
 
+# steps 1-4: kernel modules, device nodes and the packet bridge (sets HCI)
+bring_up_bridge() {
   # 1. the CONNSYS stack belongs to walpad-wifi: wait for it, never load or unload it here
   i=0; while ! loaded wmt_drv && [ $i -lt "$WMT_WAIT" ]; do sleep 1; i=$((i+1)); done
   loaded wmt_drv || fail "wmt_drv not loaded after ${WMT_WAIT}s (walpad-wifi brings the CONNSYS stack up)"
@@ -106,7 +112,10 @@ start() {
   fi
   HCI=$(cat "$BRIDGE_READY")
   say "bridge pid $(cat "$BRIDGE_PID") -> $HCI"
+}
 
+# step 5: system D-Bus, hciconfig up, bluetoothd (each part is idempotent)
+bring_up_bluez() {
   # 5. system D-Bus (BlueZ needs it) and bluetoothd
   if [ ! -S "$DBUS_SOCK" ] || ! pgrep -x dbus-daemon > /dev/null 2>&1; then
     mkdir -p "$R/run/dbus" "$R/var/lib/dbus"; rm -f "$DBUS_SOCK" "$R/run/dbus/dbus.pid"
@@ -116,6 +125,9 @@ start() {
   fi
   if command -v hciconfig > /dev/null 2>&1; then
     timeout 10 hciconfig "$HCI" up && say "hciconfig $HCI up" || say "warning: hciconfig $HCI up failed (bluetoothd will retry via mgmt)"
+  fi
+  if ! alive "$BTD_PID" && p=$(pgrep -x bluetoothd 2>/dev/null | head -n 1) && [ -n "$p" ]; then
+    echo "$p" > "$BTD_PID"; say "bluetoothd already running (pid $p), adopted"   # started by an earlier run
   fi
   if ! alive "$BTD_PID"; then
     BTD=$(bluetoothd_bin); [ -n "$BTD" ] || fail "bluetoothd not installed (apk add bluez)"
