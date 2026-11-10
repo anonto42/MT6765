@@ -1703,44 +1703,6 @@ fn edge_swipe_goes_home_or_opens_recents_and_cards_focus_and_close() {
     use walpad_core::{daemon::Daemon, fake};
     use walpad_shell::edge::{zone_rect, EDGE_ZONE_PX};
     use walpad_shell::recents::{geometry, GAP, PAD};
-// ---------------------------------------------------------------------------- lock screen
-
-fn override_redirect(c: &XConn, w: Window) -> bool {
-    c.conn
-        .get_window_attributes(w)
-        .unwrap()
-        .reply()
-        .unwrap()
-        .override_redirect
-}
-
-/// Can another client take the pointer right now? (false while the lock window holds the grab)
-fn can_grab_pointer(c: &XConn) -> bool {
-    let r = c
-        .conn
-        .grab_pointer(
-            true,
-            c.root,
-            xproto::EventMask::BUTTON_PRESS,
-            xproto::GrabMode::ASYNC,
-            xproto::GrabMode::ASYNC,
-            0u32,
-            0u32,
-            x11rb::CURRENT_TIME,
-        )
-        .unwrap()
-        .reply()
-        .unwrap();
-    let ok = r.status == xproto::GrabStatus::SUCCESS;
-    if ok {
-        c.conn.ungrab_pointer(x11rb::CURRENT_TIME).unwrap();
-    }
-    c.conn.flush().unwrap();
-    ok
-}
-
-#[test]
-fn a_shell_started_locked_covers_everything_grabs_and_takes_input() {
     let n = display_num();
     let Some(x) = xvfb(n) else {
         eprintln!("Xvfb not available: skipping");
@@ -1896,6 +1858,51 @@ fn a_shell_started_locked_covers_everything_grabs_and_takes_input() {
 
     stop.store(true, Ordering::Relaxed);
     core_thread.join().unwrap();
+}
+
+// ---------------------------------------------------------------------------- lock screen
+
+fn override_redirect(c: &XConn, w: Window) -> bool {
+    c.conn
+        .get_window_attributes(w)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .override_redirect
+}
+
+/// Can another client take the pointer right now? (false while the lock window holds the grab)
+fn can_grab_pointer(c: &XConn) -> bool {
+    let r = c
+        .conn
+        .grab_pointer(
+            true,
+            c.root,
+            xproto::EventMask::BUTTON_PRESS,
+            xproto::GrabMode::ASYNC,
+            xproto::GrabMode::ASYNC,
+            0u32,
+            0u32,
+            x11rb::CURRENT_TIME,
+        )
+        .unwrap()
+        .reply()
+        .unwrap();
+    let ok = r.status == xproto::GrabStatus::SUCCESS;
+    if ok {
+        c.conn.ungrab_pointer(x11rb::CURRENT_TIME).unwrap();
+    }
+    c.conn.flush().unwrap();
+    ok
+}
+
+#[test]
+fn a_shell_started_locked_covers_everything_grabs_and_takes_input() {
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
     let root = std::env::temp_dir().join(format!("walpad-shell-lock-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("run/walpad")).unwrap();
