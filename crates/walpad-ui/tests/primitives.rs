@@ -14,22 +14,22 @@ fn tokens_and_shapes() {
     let mut c = Canvas::new(800, 400, BG).unwrap();
     let tokens = [
         ("bg", BG),
-        ("surface", SURFACE),
-        ("raised", SURFACE_RAISED),
-        ("border", BORDER),
         ("text", TEXT),
+        ("label", TEXT_LABEL),
         ("text2", TEXT_SECONDARY),
         ("disabled", TEXT_DISABLED),
-        ("accent", ACCENT),
-        ("pressed", ACCENT_PRESSED),
-        ("on_accent", ON_ACCENT),
+        ("outline", OUTLINE),
+        ("card", CARD_BORDER),
+        ("divider", DIVIDER),
+        ("pressed", PRESSED_FILL),
+        ("watermark", WATERMARK),
         ("success", SUCCESS),
         ("warning", WARNING),
         ("danger", DANGER),
     ];
     for (i, (name, col)) in tokens.iter().enumerate() {
         let (x, y) = (24 + (i as i32 % 7) * 108, 24 + (i as i32 / 7) * 96);
-        c.rrect_border(Rect::new(x, y, 96, 64), RADIUS, *col, BORDER);
+        c.rrect_border(Rect::new(x, y, 96, 64), RADIUS, *col, DIVIDER);
         f.draw_in(
             &mut c,
             name,
@@ -38,33 +38,36 @@ fn tokens_and_shapes() {
             Align::Center,
         );
     }
-    // card, button states, field, toggle-like pill, circle
-    c.rrect_border(Rect::new(24, 230, 360, 140), RADIUS_CARD, SURFACE, BORDER);
-    c.rrect(Rect::new(48, 254, 150, BUTTON_H), RADIUS, ACCENT);
+    // card outline, outlined button, pressed button, icon boxes, slider, toggle
+    c.rrect_stroke(Rect::new(24, 230, 360, 140), RADIUS_CARD, 1.0, CARD_BORDER);
+    c.rrect_stroke(Rect::new(48, 254, 150, BUTTON_H), RADIUS, 2.0, TEXT);
     f.draw_in(
         &mut c,
         "Primary",
-        Style::new(Face::Bold, SIZE_BODY, ON_ACCENT),
+        Style::new(Face::Regular, SIZE_BODY, TEXT),
         Rect::new(48, 254, 150, BUTTON_H),
         Align::Center,
     );
-    c.rrect(Rect::new(214, 254, 150, BUTTON_H), RADIUS, ACCENT_PRESSED);
+    c.rrect(Rect::new(214, 254, 150, BUTTON_H), RADIUS, PRESSED_FILL);
+    c.rrect_stroke(Rect::new(214, 254, 150, BUTTON_H), RADIUS, OUTLINE_W, TEXT);
     f.draw_in(
         &mut c,
         "Pressed",
-        Style::new(Face::Bold, SIZE_BODY, ON_ACCENT),
+        Style::new(Face::Regular, SIZE_BODY, TEXT),
         Rect::new(214, 254, 150, BUTTON_H),
         Align::Center,
     );
-    c.rrect_border(Rect::new(48, 322, 150, 32), RADIUS, SURFACE_RAISED, BORDER);
-    c.rrect(Rect::new(214, 322, 150, 32), RADIUS, DANGER);
-    c.rrect_border(Rect::new(420, 230, 356, 140), RADIUS_CARD, SURFACE, BORDER);
-    c.rrect(Rect::new(444, 300, 220, 8), 4, SURFACE_RAISED);
-    c.rrect(Rect::new(444, 300, 140, 8), 4, ACCENT);
-    c.circle(584.0, 304.0, 14.0, ACCENT);
-    c.circle(584.0, 304.0, 6.0, ON_ACCENT);
-    c.rrect(Rect::new(700, 290, 64, 32), 16, SURFACE_RAISED);
-    c.circle(716.0, 306.0, 11.0, TEXT_SECONDARY);
+    c.rrect_stroke(Rect::new(48, 322, 64, 40), RADIUS_ICON, OUTLINE_W, OUTLINE);
+    c.rrect_stroke(Rect::new(130, 322, 64, 40), 20, OUTLINE_W, OUTLINE);
+    c.rrect_stroke(Rect::new(214, 322, 150, 32), RADIUS, OUTLINE_W, DANGER);
+    c.rrect_stroke(Rect::new(420, 230, 356, 140), RADIUS_CARD, 1.0, CARD_BORDER);
+    c.rrect(Rect::new(444, 302, 220, 4), 2, DIVIDER);
+    c.rrect(Rect::new(444, 302, 140, 4), 2, TEXT);
+    c.circle(584.0, 304.0, 12.0, TEXT);
+    c.circle(584.0, 304.0, 4.0, BG);
+    c.rrect_stroke(Rect::new(700, 290, 56, 32), 16, OUTLINE_W, OUTLINE);
+    c.circle(716.0, 306.0, 8.0, OUTLINE);
+    c.line((444.0, 340.0), (760.0, 340.0), 1.0, DIVIDER);
     assert_snapshot("primitives_tokens_shapes", &c);
 }
 
@@ -149,10 +152,11 @@ fn type_roles() {
 fn icon_sheet() {
     let mut f = fonts();
     let cols = 9;
-    let mut c = Canvas::new(800, 3 * 120 + 96, BG).unwrap();
+    let rows = Icon::ALL.len().div_ceil(cols) as i32;
+    let mut c = Canvas::new(800, (rows * 120 + 96) as u32, BG).unwrap();
     for (i, icon) in Icon::ALL.iter().enumerate() {
         let (cx, cy) = ((i % cols) as i32 * 88 + 8, (i / cols) as i32 * 120 + 8);
-        c.rrect_border(Rect::new(cx, cy, 80, 80), RADIUS, SURFACE, BORDER);
+        c.rrect_stroke(Rect::new(cx, cy, 80, 80), RADIUS_ICON, OUTLINE_W, OUTLINE);
         c.icon(*icon, cx + 28, cy + 28, ICON, TEXT);
         f.draw_in(
             &mut c,
@@ -162,11 +166,12 @@ fn icon_sheet() {
             Align::Center,
         );
     }
-    // accent, scaled 2x, small
-    c.icon(Icon::Wifi, 24, 376, 48, ACCENT);
-    c.icon(Icon::Settings, 90, 376, 48, ACCENT);
-    c.icon(Icon::Battery, 156, 376, 48, WARNING);
-    c.icon(Icon::Warning, 222, 376, 48, DANGER);
-    c.icon(Icon::Check, 288, 376, 48, SUCCESS);
+    // scaled 2x, tones
+    let y = rows * 120 + 16;
+    c.icon(Icon::Wifi, 24, y, 48, TEXT);
+    c.icon(Icon::Settings, 90, y, 48, OUTLINE);
+    c.icon(Icon::Battery, 156, y, 48, WARNING);
+    c.icon(Icon::Warning, 222, y, 48, DANGER);
+    c.icon(Icon::Check, 288, y, 48, SUCCESS);
     assert_snapshot("primitives_icons", &c);
 }

@@ -121,19 +121,36 @@ fn shot(name: &str, w: i32, h: i32, a: &mut App) {
 }
 
 #[test]
-fn apps_portrait_and_landscape() {
-    shot(
-        "apps_portrait",
-        800,
-        1280,
-        &mut app(800, 1280, Tab::Apps, true),
-    );
-    shot(
-        "apps_landscape",
-        1280,
-        800,
-        &mut app(1280, 800, Tab::Apps, true),
-    );
+fn apps_panel_portrait_and_landscape() {
+    for (w, h, tag) in [(800, 1280, "portrait"), (1280, 800, "landscape")] {
+        let mut a = app(w, h, Tab::Home, true);
+        a.model.overlay = Some(Overlay::AppsPanel);
+        shot(&format!("apps_panel_{tag}"), w, h, &mut a);
+    }
+    let mut none = app(800, 1280, Tab::Home, false);
+    none.model.overlay = Some(Overlay::AppsPanel);
+    shot("apps_panel_offline", 800, 1280, &mut none);
+}
+#[test]
+fn quick_settings_portrait_landscape_and_states() {
+    for (w, h, tag) in [(800, 1280, "portrait"), (1280, 800, "landscape")] {
+        let mut a = app(w, h, Tab::Home, true);
+        a.model.overlay = Some(Overlay::QuickSettings);
+        shot(&format!("quick_settings_{tag}"), w, h, &mut a);
+    }
+    // gauge reading + locked rotation over the Network tab
+    let mut s = status();
+    s.battery.source = BatterySource::Gauge;
+    s.battery.state = Some("Charging".into());
+    s.rotation_locked = true;
+    let mut b = app(800, 1280, Tab::Network, false);
+    b.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    b.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_gauge_locked", 800, 1280, &mut b);
+    // core offline: everything unknown, the toggles disabled
+    let mut c = app(800, 1280, Tab::Home, false);
+    c.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_offline", 800, 1280, &mut c);
 }
 #[test]
 fn apps_options_sheet() {

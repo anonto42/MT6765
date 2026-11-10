@@ -1,6 +1,6 @@
 //! Application state: what the shell shows and how taps, core events and replies change it.
 //! Pure of I/O: the shell loop feeds it gestures and core events and sends the commands it returns.
-use crate::apps_screen;
+use crate::chrome::{self, Chrome, ChromeKey, NAV_APPS};
 use crate::config::DevdSettings;
 use crate::core_client::{CoreEvent, ReplyError};
 use crate::device_screen;
@@ -8,6 +8,7 @@ use crate::gesture::Gesture;
 use crate::home;
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet};
+use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -16,7 +17,7 @@ use walpad_proto::{Secret, ShellInput, Status};
 use walpad_ui::components::{Key, KeyboardLayer, Painter, Tab, Tone};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
-use walpad_ui::{Canvas, Icon, Rect};
+use walpad_ui::{Icon, Rect};
 
 pub type Ms = u64;
 
@@ -136,17 +137,26 @@ pub struct Tile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
-    // navigation + Home
+    // sidebar: Nav(i) = Tab::ALL[i] (Home, the Apps panel toggle, Settings); Tile(i) = pinned app
     Nav(usize),
+    Tile(usize),
+    // header pill and the Quick Settings dropdown
+    QuickSettings,
     WifiCard,
     BatteryCard,
-    Tile(usize),
     Slider,
     Rotation,
     Keyboard,
     ScreenOff,
-    // Apps
+    // Home grid (index into `Model::apps`)
     AppTile(usize),
+    // Apps panel: installed / running (index into `Model::apps`)
+    PanelApp(usize),
+    PanelActive(usize),
+    /// Tap outside a popover: closes it.
+    Dismiss,
+    /// Inside a popover but not on a control: nothing happens.
+    PanelBody,
     // Network
     Scan,
     Disconnect,
@@ -295,9 +305,9 @@ pub struct Toast {
 pub struct Model {
     pub status: Option<Status>,
     pub connected: bool,
-    /// Home tiles (pinned, installed; at most four).
+    /// Pinned apps (installed; at most four): the sidebar shows them.
     pub tiles: Vec<Tile>,
-    /// Apps screen: every installed app plus the Settings shortcut.
+    /// Every installed app plus the Settings shortcut: the Home grid and the Apps panel.
     pub apps: Vec<Tile>,
     pub pinned: Vec<String>,
     pub wall: WallTime,
@@ -382,10 +392,12 @@ const SLIDER_SEND_EVERY_MS: Ms = 80;
 
 pub struct App {
     pub frame: Frame,
+    /// Cached background layer (charcoal, watermark, sidebar at rest).
+    pub chrome: Chrome,
     pub active: Tab,
     pub model: Model,
     catalog: Vec<AppEntry>,
-    /// Hit areas in screen coordinates (nav bar, Home, status).
+    /// Hit areas in screen coordinates (sidebar, header pill, Home grid).
     hits: Vec<(Rect, Target)>,
     /// Hit areas of scrollable screens, in content coordinates.
     content_hits: Vec<(Rect, Target)>,
@@ -417,6 +429,7 @@ impl App {
         let frame = Frame::new(w, h);
         let mut a = App {
             frame,
+            chrome: Chrome::default(),
             active: Tab::Home,
             model: Model::blank(wall),
             catalog,
@@ -517,6 +530,11 @@ impl App {
     }
 
     fn go(&mut self, tab: Tab, out: &mut Outcome) {
+        if self.model.overlay.as_ref().is_some_and(Overlay::is_popover) {
+            self.model.overlay = None;
+        }
+        // the Apps destination is the Home grid (the panel is a popover over any screen)
+        let tab = if tab == Tab::Apps { Tab::Home } else { tab };
         if tab != self.active {
             self.active = tab;
             self.scroll = 0;
@@ -792,10 +810,7 @@ impl App {
     }
 
     fn scrolls(&self) -> bool {
-        matches!(
-            self.active,
-            Tab::Apps | Tab::Network | Tab::Device | Tab::Settings
-        )
+        matches!(self.active, Tab::Network | Tab::Device | Tab::Settings)
     }
 
     // ------------------------------------------------------------------ hit testing
@@ -826,10 +841,12 @@ impl App {
             .map(|(_, t)| *t)
     }
 
-    /// The brightness slider's rectangle (Home: screen hits; Device: content hits). x is never scrolled.
+    /// The brightness slider's rectangle (Quick Settings: overlay hits; Device: content hits). x is
+    /// never scrolled.
     fn slider_rect(&self) -> Option<Rect> {
-        self.hits
+        self.overlay_hits
             .iter()
+            .chain(self.hits.iter())
             .chain(self.content_hits.iter())
             .find(|(_, t)| *t == Target::Slider)
             .map(|(r, _)| *r)
@@ -884,10 +901,13 @@ impl App {
             Gesture::LongPress { x, y } => {
                 self.model.slider_active = false;
                 out.dirty = self.model.pressed.take().is_some();
-                if self.model.overlay.is_none() {
+                let panel = matches!(self.model.overlay, Some(Overlay::AppsPanel));
+                if self.model.overlay.is_none() || panel {
                     let id = match self.hit(x, y) {
                         Some(Target::Tile(i)) => self.model.tiles.get(i).map(|t| t.id.clone()),
-                        Some(Target::AppTile(i)) => self.model.apps.get(i).map(|t| t.id.clone()),
+                        Some(Target::AppTile(i) | Target::PanelApp(i) | Target::PanelActive(i)) => {
+                            self.model.apps.get(i).map(|t| t.id.clone())
+                        }
                         _ => None,
                     };
                     if let Some(id) = id {
@@ -949,7 +969,21 @@ impl App {
     fn on_tap(&mut self, t: Target, x: i32, was_slider: bool, out: &mut Outcome) {
         let interactive = self.model.connected;
         match t {
+            Target::Nav(NAV_APPS) => self.model.overlay = Some(Overlay::AppsPanel),
             Target::Nav(i) => self.go(Tab::ALL[i], out),
+            Target::QuickSettings => self.model.overlay = Some(Overlay::QuickSettings),
+            Target::Dismiss => {
+                if self.model.overlay.as_ref().is_some_and(Overlay::is_popover) {
+                    self.model.overlay = None;
+                }
+            }
+            Target::PanelBody => {}
+            Target::PanelApp(i) | Target::PanelActive(i) => {
+                self.model.overlay = None;
+                if let Some(id) = self.model.apps.get(i).map(|t| t.id.clone()) {
+                    self.activate(&id, out);
+                }
+            }
             Target::WifiCard => self.go(Tab::Network, out),
             Target::BatteryCard => self.go(Tab::Device, out),
             Target::Tile(i) => {
@@ -1305,72 +1339,88 @@ impl App {
     }
 
     // ------------------------------------------------------------------ rendering
+    /// One frame: cached background (memcpy), pressed sidebar button, the screen, header, banner,
+    /// overlays, toast. Scrolled screens draw straight into the frame through the canvas origin.
     pub fn render(&mut self, p: &mut Painter) {
-        p.cv.fill(BG);
-        let (ssid, pct, est, low) = match &self.model.status {
-            Some(s) => (
-                home::wifi_name(s),
-                s.battery.percent,
-                s.battery.source == walpad_proto::BatterySource::VoltageEstimate,
-                s.battery.low,
-            ),
-            None => (None, None, false, false),
+        let frame = self.frame;
+        let panel_open = matches!(self.model.overlay, Some(Overlay::AppsPanel));
+        let sidebar =
+            chrome::sidebar_layout(&frame, &chrome::pinned_items(&self.model), panel_open);
+        let key = ChromeKey {
+            w: frame.w,
+            h: frame.h,
+            sidebar: sidebar.clone(),
+            active: chrome::active_target(self.active, panel_open),
         };
-        p.status_bar(self.frame.status, ssid.as_deref(), pct, est, low);
-        let banner = self.banner();
-        let banner_h = self.banner_h();
+        self.chrome.paint(p, &frame, key);
+        chrome::render_pressed(p, &sidebar, self.model.pressed);
         self.hits.clear();
         self.content_hits.clear();
-        self.view = Rect::new(
-            0,
-            self.frame.content.y + banner_h,
-            self.frame.w,
-            self.frame.content.h - banner_h,
-        );
-        if self.active == Tab::Home {
-            self.hits = home::render(p, &self.frame, &self.model, banner_h);
-        } else {
-            self.render_scrolled(p);
+        for it in &sidebar.items {
+            self.hits.push((it.hit, it.target));
         }
+
+        let banner = self.banner();
+        let banner_h = self.banner_h();
+        self.view = Rect::new(
+            frame.content.x,
+            frame.content.y + banner_h,
+            frame.content.w,
+            frame.content.h - banner_h,
+        );
+        if self.scrolls() {
+            self.render_scrolled(p);
+            // scrolled rows may have run up under the header and banner: restore that strip
+            self.chrome.restore(
+                p.cv,
+                Rect::new(frame.header.x, 0, frame.header.w, frame.header.h + banner_h),
+            );
+        } else {
+            let home = home::render(p, &frame, &self.model, banner_h);
+            self.hits.extend(home);
+        }
+        let qs_open = matches!(self.model.overlay, Some(Overlay::QuickSettings));
+        let pill = chrome::render_header(p, &frame, &self.model, qs_open);
+        self.hits.push((pill, Target::QuickSettings));
         if let Some((text, tone)) = banner {
             p.banner(
-                Rect::new(0, self.frame.status.bottom(), self.frame.w, 48),
+                Rect::new(
+                    frame.content.x + SP_4,
+                    frame.content.y + SP_1,
+                    frame.content.w - 2 * SP_4,
+                    48,
+                ),
                 text,
                 tone,
             );
         }
-        for (i, r) in p
-            .bottom_nav(self.frame.nav, self.active)
-            .into_iter()
-            .enumerate()
-        {
-            self.hits.push((r, Target::Nav(i)));
-        }
-        self.overlay_hits.clear();
+
         let deg = self.model.spinner_deg;
         self.overlay_hits = match &self.model.overlay {
-            Some(Overlay::Password(s)) => overlay::render_password(p, &self.frame, s, deg),
-            Some(Overlay::App(s)) => overlay::render_app_sheet(p, &self.frame, s),
-            Some(Overlay::Forget { ssid, .. }) => overlay::render_forget(p, &self.frame, ssid),
+            Some(Overlay::Password(s)) => overlay::render_password(p, &frame, s, deg),
+            Some(Overlay::App(s)) => overlay::render_app_sheet(p, &frame, s),
+            Some(Overlay::Forget { ssid, .. }) => overlay::render_forget(p, &frame, ssid),
             Some(Overlay::PowerConfirm {
                 poweroff,
                 armed_until,
-            }) => overlay::render_power_confirm(p, &self.frame, *poweroff, armed_until.is_some()),
+            }) => overlay::render_power_confirm(p, &frame, *poweroff, armed_until.is_some()),
             Some(Overlay::PowerMenu { focus, armed, .. }) => {
-                overlay::render_power_menu(p, &self.frame, *focus, armed.map(|(i, _)| i))
+                overlay::render_power_menu(p, &frame, *focus, armed.map(|(i, _)| i))
             }
+            Some(Overlay::QuickSettings) => panels::render_quick_settings(p, &frame, &self.model),
+            Some(Overlay::AppsPanel) => panels::render_apps_panel(p, &frame, &self.model),
             None => Vec::new(),
         };
         if let Some(t) = &self.model.toast {
-            p.toast(Rect::new(0, 0, self.frame.w, self.frame.h), &t.text, t.tone);
+            p.toast(frame.content, &t.text, t.tone);
         }
     }
 
-    /// Screens taller than the view are drawn off-screen at full height and the visible slice is copied.
+    /// Scrolled screens: the whole layout is walked in content coordinates with the canvas origin
+    /// at (0, view.y - scroll); primitives skip what falls outside the frame. No off-screen copy.
     fn render_scrolled(&mut self, p: &mut Painter) {
         let frame = self.frame;
         let total = match self.active {
-            Tab::Apps => apps_screen::layout(&frame, self.model.apps.len()).total,
             Tab::Network => network::layout(&frame, &self.model.status, &self.model.net).total,
             Tab::Device => device_screen::layout(&frame, &self.model.status, &self.model.devd).1,
             Tab::Settings => {
@@ -1382,53 +1432,35 @@ impl App {
         .max(self.view.h);
         self.content_h = total;
         self.scroll = self.scroll.clamp(0, (total - self.view.h).max(0));
-        let Some(mut off) = Canvas::new(frame.w as u32, total as u32, BG) else {
-            return;
+        p.cv.set_origin(0, self.view.y - self.scroll);
+        let m = &self.model;
+        self.content_hits = match self.active {
+            Tab::Network => network::render(
+                p,
+                &frame,
+                &m.status,
+                &m.net,
+                m.connected,
+                m.pressed,
+                m.spinner_deg,
+            ),
+            Tab::Device => device_screen::render(
+                p,
+                &frame,
+                &m.status,
+                &m.devd,
+                m.connected,
+                m.brightness_value(),
+                m.slider_active,
+                m.pressed,
+            ),
+            Tab::Settings => {
+                let rows = self.settings_rows();
+                settings_screen::render(p, &frame, m.settings_page, &rows, m.connected, m.pressed)
+            }
+            Tab::Home | Tab::Apps => Vec::new(),
         };
-        {
-            let mut op = Painter {
-                cv: &mut off,
-                fonts: &mut *p.fonts,
-            };
-            let m = &self.model;
-            self.content_hits = match self.active {
-                Tab::Apps => apps_screen::render(&mut op, &frame, &m.apps, m.pressed),
-                Tab::Network => network::render(
-                    &mut op,
-                    &frame,
-                    &m.status,
-                    &m.net,
-                    m.connected,
-                    m.pressed,
-                    m.spinner_deg,
-                ),
-                Tab::Device => device_screen::render(
-                    &mut op,
-                    &frame,
-                    &m.status,
-                    &m.devd,
-                    m.connected,
-                    m.brightness_value(),
-                    m.slider_active,
-                    m.pressed,
-                ),
-                Tab::Settings => {
-                    let rows = self.settings_rows();
-                    settings_screen::render(
-                        &mut op,
-                        &frame,
-                        m.settings_page,
-                        &rows,
-                        m.connected,
-                        m.pressed,
-                    )
-                }
-                Tab::Home => Vec::new(),
-            };
-        }
-        if let Some(slice) = off.crop(Rect::new(0, self.scroll, frame.w, self.view.h)) {
-            p.cv.blit(&slice, 0, self.view.y);
-        }
+        p.cv.set_origin(0, 0);
     }
 }
 

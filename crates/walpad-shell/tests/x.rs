@@ -6,7 +6,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use walpad_hw::Root;
+use walpad_shell::app::Target;
+use walpad_shell::chrome::{sidebar_layout, NAV_HOME, NAV_SETTINGS};
 use walpad_shell::shell::{Options, Shell};
+use walpad_ui::components::{banner_fill, Tone};
+use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
 use walpad_x::XConn;
 use x11rb::connection::Connection;
@@ -135,6 +139,24 @@ fn px(img: &[u8], w: usize, x: usize, y: usize) -> (u8, u8, u8) {
     let i = (y * w + x) * 4;
     (img[i + 2], img[i + 1], img[i]) // BGRX -> RGB
 }
+/// White pixels on the top edge of a sidebar button: only the active (or pressed) one has a
+/// full-white outline; the resting outline is 60 % white and the icon sits lower.
+fn active_edge(img: &[u8], w: usize, r: walpad_ui::Rect) -> usize {
+    count(
+        img,
+        w,
+        (r.x + 16) as usize,
+        (r.right() - 16) as usize,
+        r.y as usize,
+        (r.y + 2) as usize,
+        TEXT,
+    )
+}
+/// The frame is drawn and the core is connected: sidebar edge present, no banner.
+fn drawn_without_banner(img: &[u8]) -> bool {
+    px(img, 800, 95, 600) == (DIVIDER.r, DIVIDER.g, DIVIDER.b)
+        && px(img, 800, 600, 92) == (BG.r, BG.g, BG.b)
+}
 fn count(img: &[u8], w: usize, x0: usize, x1: usize, y0: usize, y1: usize, c: Color) -> usize {
     (y0..y1)
         .flat_map(|y| (x0..x1).map(move |x| (x, y)))
@@ -173,36 +195,39 @@ fn shell_runs_on_a_real_x_server() {
     let g = probe.0.conn.get_geometry(win).unwrap().reply().unwrap();
     assert_eq!((g.width, g.height), (800, 1280), "portrait by default");
 
-    // 3. the first frame: status bar bg, nav bar surface, Home highlighted in accent
-    let (w, h) = (800usize, 1280usize);
+    // 3. the first frame: charcoal content, the sidebar edge, Home drawn as the active button
+    let (w, _h) = (800usize, 1280usize);
+    let side = |f: &Frame| {
+        let l = sidebar_layout(f, &[], false); // offline: no pinned apps
+        let r = |t: Target| l.items.iter().find(|i| i.target == t).unwrap().rect;
+        (r(Target::Nav(NAV_HOME)), r(Target::Nav(NAV_SETTINGS)))
+    };
+    let (home_p, settings_p) = side(&Frame::new(800, 1280));
     let img = probe.image(win, 800, 1280);
     assert_eq!(
-        px(&img, w, 400, 600),
+        px(&img, w, 700, 1200),
         (BG.r, BG.g, BG.b),
         "content background"
     );
     assert_eq!(
-        px(&img, w, 5, 1250),
-        (SURFACE.r, SURFACE.g, SURFACE.b),
-        "bottom navigation surface"
+        px(&img, w, 95, 600),
+        (DIVIDER.r, DIVIDER.g, DIVIDER.b),
+        "sidebar edge"
     );
-    let home_accent = count(&img, w, 0, 160, 1192, h, ACCENT);
-    assert!(
-        home_accent > 20,
-        "Home tab is drawn in the accent colour ({home_accent})"
-    );
+    let home_edge = active_edge(&img, w, home_p);
+    assert!(home_edge > 10, "Home is the active button ({home_edge})");
     assert_eq!(
-        count(&img, w, 320, 480, 1192, h, ACCENT),
+        active_edge(&img, w, settings_p),
         0,
-        "Network is not active yet"
+        "Settings is not active yet"
     );
 
-    // 4. a real click on the Network tab switches the active tab
-    probe.click(400, 1240);
-    wait_for("Network tab active", || {
+    // 4. a real click on the Settings button switches the destination
+    let c = settings_p.center();
+    probe.click(c.0 as i16, c.1 as i16);
+    wait_for("Settings active", || {
         let img = probe.image(win, 800, 1280);
-        count(&img, w, 320, 480, 1192, h, ACCENT) > 20
-            && count(&img, w, 0, 160, 1192, h, ACCENT) == 0
+        active_edge(&img, w, settings_p) > 10 && active_edge(&img, w, home_p) == 0
     });
 
     // 5. rotation: the window manager resizes the window; the shell re-lays-out for 1280x800
@@ -212,21 +237,23 @@ fn shell_runs_on_a_real_x_server() {
         .configure_window(win, &ConfigureWindowAux::new().width(1280).height(800))
         .unwrap();
     probe.0.conn.flush().unwrap();
+    let (home_l, settings_l) = side(&Frame::new(1280, 800));
     wait_for("landscape layout", || {
         let g = probe.0.conn.get_geometry(win).unwrap().reply().unwrap();
         if (g.width, g.height) != (1280, 800) {
             return false;
         }
         let img = probe.image(win, 1280, 800);
-        px(&img, 1280, 1270, 760) == (SURFACE.r, SURFACE.g, SURFACE.b)
-            && px(&img, 1280, 600, 400) == (BG.r, BG.g, BG.b)
-            && count(&img, 1280, 512, 768, 712, 800, ACCENT) > 20
+        px(&img, 1280, 95, 400) == (DIVIDER.r, DIVIDER.g, DIVIDER.b)
+            && px(&img, 1280, 1200, 760) == (BG.r, BG.g, BG.b)
+            && active_edge(&img, 1280, settings_l) > 10
     });
-    // the active tab (Network) is still Network after the resize, and a tap lands on the new layout
-    probe.click(1280 / 5 * 4 + 40, 760);
-    wait_for("Settings active in landscape", || {
+    // Settings is still active after the resize, and a tap lands on the new layout
+    let c = home_l.center();
+    probe.click(c.0 as i16, c.1 as i16);
+    wait_for("Home active in landscape", || {
         let img = probe.image(win, 1280, 800);
-        count(&img, 1280, 1024, 1280, 712, 800, ACCENT) > 20
+        active_edge(&img, 1280, home_l) > 10 && active_edge(&img, 1280, settings_l) == 0
     });
 }
 
@@ -257,8 +284,7 @@ fn core_status(root: &Path) -> Option<serde_json::Value> {
 #[test]
 fn shell_drives_the_core_and_shows_when_it_is_gone() {
     use walpad_core::{daemon::Daemon, fake};
-    use walpad_shell::home;
-    use walpad_ui::layout::Frame;
+    use walpad_shell::panels::qs_geom;
 
     let n = display_num();
     let Some(x) = xvfb(n) else {
@@ -282,45 +308,55 @@ fn shell_drives_the_core_and_shows_when_it_is_gone() {
     wait_for("shell window", || probe.find_shell().is_some());
     let win = probe.find_shell().unwrap();
 
-    // connected: the frame is drawn (nav bar present) AND the offline banner has disappeared.
+    // connected: the frame is drawn (sidebar present) AND the offline banner has disappeared.
     // (The window background equals BG, so "no banner" alone is true before the first frame.)
-    let banner_px = |img: &[u8]| px(img, 800, 400, 64);
     wait_for("drawn and connected (no banner)", || {
-        let img = probe.image(win, 800, 1280);
-        px(&img, 800, 5, 1250) == (SURFACE.r, SURFACE.g, SURFACE.b)
-            && banner_px(&img) == (BG.r, BG.g, BG.b)
+        drawn_without_banner(&probe.image(win, 800, 1280))
     });
 
+    // the quick toggles live in the Quick Settings dropdown under the header pill
     let frame = Frame::new(800, 1280);
-    let l = home::layout(&frame, 0, 2); // Browser + Settings tiles (terminal is not installed)
-    let c = l.buttons[0].center();
+    let pill = (frame.w - SP_4 - 20, frame.header.h / 2);
+    probe.click(pill.0 as i16, pill.1 as i16);
+    let q = qs_geom(&frame);
+    wait_for("quick settings open", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, (q.panel.right() - 1) as usize, 300)
+            == (CARD_BORDER.r, CARD_BORDER.g, CARD_BORDER.b)
+    });
+    let c = q.rotation.center();
     probe.click(c.0 as i16, c.1 as i16);
     wait_for("rotation locked in the core", || {
         core_status(&root).is_some_and(|s| s["rotation_locked"] == true)
     });
 
-    let right = (l.slider.inset(SP_4).right() - 1) as i16;
-    probe.click(right, l.slider.center().1 as i16);
+    let right = q.slider.inset(SP_4).right() as i16; // the end of the track = 100 %
+    probe.click(right, q.slider.center().1 as i16);
     wait_for("brightness 255 in the core", || {
         core_status(&root).is_some_and(|s| s["brightness"] == 255)
     });
     // the status event flows back: the shell now shows 100%
     wait_for("shell shows the new brightness", || {
-        // knob at the right end of the track: accent pixels near the right edge of the slider
+        // knob at the right end of the track: white pixels near the right edge of the slider
         let img = probe.image(win, 800, 1280);
         let (sx, sy) = (
-            l.slider.inset(SP_4).right() as usize,
-            l.slider.center().1 as usize,
+            q.slider.inset(SP_4).right() as usize,
+            q.slider.center().1 as usize - 9,
         );
-        (sx - 20..sx + 2).any(|xx| px(&img, 800, xx, sy) == (ACCENT.r, ACCENT.g, ACCENT.b))
+        (sx - 6..sx + 6).any(|xx| px(&img, 800, xx, sy) == (TEXT.r, TEXT.g, TEXT.b))
+    });
+    // a tap outside closes the dropdown
+    probe.click(300, 1000);
+    wait_for("quick settings closed", || {
+        drawn_without_banner(&probe.image(win, 800, 1280))
     });
 
     // the core goes away: the "System service not responding" banner appears
     core_stop.store(true, Ordering::Relaxed);
     core_thread.join().unwrap();
+    let fill = banner_fill(Tone::Danger);
     wait_for("offline banner", || {
-        banner_px(&probe.image(win, 800, 1280))
-            == (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
+        px(&probe.image(win, 800, 1280), 800, 600, 92) == (fill.r, fill.g, fill.b)
     });
 }
 
@@ -360,9 +396,7 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     wait_for("shell window", || probe.find_shell().is_some());
     let win = probe.find_shell().unwrap();
     wait_for("drawn and connected", || {
-        let img = probe.image(win, 800, 1280);
-        px(&img, 800, 5, 1250) == (SURFACE.r, SURFACE.g, SURFACE.b)
-            && px(&img, 800, 400, 64) == (BG.r, BG.g, BG.b)
+        drawn_without_banner(&probe.image(win, 800, 1280))
     });
     let click = |sx: i32, sy: i32| {
         probe.click(sx as i16, sy as i16);
@@ -371,17 +405,25 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     let frame = Frame::new(800, 1280);
     let view_y = frame.content.y; // no banner while connected
 
-    // Network tab (third nav item)
-    click(frame.nav.w / 5 * 2 + 20, frame.nav.y + 40);
+    // Network: the header pill opens Quick Settings, its Wi-Fi row opens the screen
+    let q = walpad_shell::panels::qs_geom(&frame);
+    click(frame.w - SP_4 - 20, frame.header.h / 2);
+    wait_for("quick settings", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, (q.panel.right() - 1) as usize, 300)
+            == (CARD_BORDER.r, CARD_BORDER.g, CARD_BORDER.b)
+    });
+    click(q.wifi.center().0, q.wifi.center().1);
     // the status has an address but no SSID yet, so there is no "connected" card
     let st = None;
     let empty = NetModel::default();
     let l = layout(&frame, &st, &empty);
-    // wait until the tab is showing: the Scan button is drawn (a Scan label region differs from bg)
+    // wait until the tab is showing: the dropdown is gone and the Scan button's outline is drawn
     let scan = l.scan_btn.center();
     wait_for("network tab", || {
         let img = probe.image(win, 800, 1280);
-        px(&img, 800, 700, (view_y + l.scan_btn.y + 2) as usize) != (BG.r, BG.g, BG.b)
+        px(&img, 800, (q.panel.right() - 1) as usize, 300) == (BG.r, BG.g, BG.b)
+            && px(&img, 800, 700, (view_y + l.scan_btn.y) as usize) != (BG.r, BG.g, BG.b)
     });
     click(scan.0, view_y + scan.1);
 
@@ -413,10 +455,10 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     // tap "Home" (secured): the password sheet opens, type the passphrase on the on-screen keyboard
     click(row0.center().0, view_y + row0.center().1);
     let g = password_geom(&frame);
+    // the focused password field's white outline crosses the sidebar column (x 60)
+    let field_edge = |img: &[u8]| px(img, 800, 60, g.field.y as usize) == (TEXT.r, TEXT.g, TEXT.b);
     wait_for("password sheet", || {
-        let img = probe.image(win, 800, 1280);
-        px(&img, 800, g.sheet.x as usize + 5, g.sheet.y as usize + 100)
-            == (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
+        field_edge(&probe.image(win, 800, 1280))
     });
     for ch in "correct horse".chars() {
         let want = if ch == ' ' { Key::Space } else { Key::Char(ch) };
@@ -439,11 +481,7 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     );
     assert!(log.contains("SET_NETWORK 1 psk "), "{log}");
     // the sheet closes by itself on success
-    wait_for("sheet closed", || {
-        let img = probe.image(win, 800, 1280);
-        px(&img, 800, g.sheet.x as usize + 5, g.sheet.y as usize + 100)
-            != (SURFACE_RAISED.r, SURFACE_RAISED.g, SURFACE_RAISED.b)
-    });
+    wait_for("sheet closed", || !field_edge(&probe.image(win, 800, 1280)));
 
     stop.store(true, Ordering::Relaxed);
     core_thread.join().unwrap();
@@ -457,7 +495,6 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
     use walpad_core::{daemon::Daemon, fake};
     use walpad_shell::config::DevdSettings;
     use walpad_shell::device_screen::{self, Item};
-    use walpad_ui::layout::Frame;
 
     let n = display_num();
     let Some(x) = xvfb(n) else {
@@ -477,9 +514,7 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
     wait_for("shell window", || probe.find_shell().is_some());
     let win = probe.find_shell().unwrap();
     wait_for("drawn and connected", || {
-        let img = probe.image(win, 800, 1280);
-        px(&img, 800, 5, 1250) == (SURFACE.r, SURFACE.g, SURFACE.b)
-            && px(&img, 800, 400, 64) == (BG.r, BG.g, BG.b)
+        drawn_without_banner(&probe.image(win, 800, 1280))
     });
     let frame = Frame::new(800, 1280);
     let (placed, _) = device_screen::layout(&frame, &None, &DevdSettings::default());
@@ -506,8 +541,15 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
             .count()
     };
 
-    // open the Device tab (fourth nav item); the default "90 s" is selected
-    probe.click((frame.nav.w / 5 * 3 + 20) as i16, (frame.nav.y + 40) as i16);
+    // open Device (header pill -> Quick Settings -> Battery row); the default "90 s" is selected
+    let q = walpad_shell::panels::qs_geom(&frame);
+    probe.click((frame.w - SP_4 - 20) as i16, (frame.header.h / 2) as i16);
+    wait_for("quick settings", || {
+        let img = probe.image(win, 800, 1280);
+        px(&img, 800, (q.panel.right() - 1) as usize, 300)
+            == (CARD_BORDER.r, CARD_BORDER.g, CARD_BORDER.b)
+    });
+    probe.click(q.battery.center().0 as i16, q.battery.center().1 as i16);
     wait_for("Device tab with 90 s selected", || {
         let img = probe.image(win, 800, 1280);
         accent_in(&img, &seg(3)) > 100
@@ -685,11 +727,10 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
         .unwrap()
         .collect::<Vec<_>>();
     assert_eq!(ty, [atom(&probe.0, "_NET_WM_WINDOW_TYPE_DOCK")]);
-    // it is drawn: surface colour with the pressed-free strip
+    // it is drawn: the charcoal strip with white icons and labels
     wait_for("dock painted", || {
         let img = probe.image(dock, 800, 56);
-        px(&img, 800, 5, 30) == (SURFACE.r, SURFACE.g, SURFACE.b)
-            && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
+        px(&img, 800, 5, 30) == (BG.r, BG.g, BG.b) && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
     });
 
     // Home (left third) raises the shell above the app and the dock
@@ -734,7 +775,6 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     assert_eq!(strut[3], 536, "480 below the panel + 56");
     wait_for("landscape dock painted", || {
         let img = probe.image(dock, 1280, 56);
-        px(&img, 1280, 5, 30) == (SURFACE.r, SURFACE.g, SURFACE.b)
-            && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
+        px(&img, 1280, 5, 30) == (BG.r, BG.g, BG.b) && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
     });
 }

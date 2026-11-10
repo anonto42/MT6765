@@ -1,4 +1,6 @@
 //! Software canvas on a tiny-skia pixmap. Opaque RGBA (premultiplied = straight, alpha is 255).
+//! Drawing calls are offset by `origin` (scrolled screens draw in content coordinates straight into
+//! the frame, no off-screen copy); `fill`, `blit`, `crop`, `copy_from` and `pixel` ignore it.
 use crate::tokens::Color;
 use tiny_skia::{FillRule, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform};
 
@@ -39,6 +41,7 @@ impl Rect {
 
 pub struct Canvas {
     pub(crate) pm: Pixmap,
+    origin: (i32, i32),
 }
 
 fn paint(c: Color) -> Paint<'static> {
@@ -81,7 +84,7 @@ impl Canvas {
     pub fn new(w: u32, h: u32, bg: Color) -> Option<Self> {
         let mut pm = Pixmap::new(w, h)?;
         pm.fill(bg.sk());
-        Some(Canvas { pm })
+        Some(Canvas { pm, origin: (0, 0) })
     }
     pub fn width(&self) -> i32 {
         self.pm.width() as i32
@@ -96,10 +99,58 @@ impl Canvas {
         self.pm.fill(c.sk());
     }
 
+    /// Offset added to every drawing call until reset (content coordinates -> screen).
+    pub fn set_origin(&mut self, dx: i32, dy: i32) {
+        self.origin = (dx, dy);
+    }
+    pub fn origin(&self) -> (i32, i32) {
+        self.origin
+    }
+    fn at(&self, r: Rect) -> Rect {
+        Rect::new(r.x + self.origin.0, r.y + self.origin.1, r.w, r.h)
+    }
+    fn t(&self) -> Transform {
+        Transform::from_translate(self.origin.0 as f32, self.origin.1 as f32)
+    }
+    /// True when `r` (in drawing coordinates) touches the pixmap: callers skip invisible work.
+    pub fn visible(&self, r: Rect) -> bool {
+        let r = self.at(r);
+        r.right() > 0 && r.bottom() > 0 && r.x < self.width() && r.y < self.height()
+    }
+
+    /// Copy every pixel of `src` (same size) into this canvas: one memcpy, for cached layers.
+    /// Returns false (and copies nothing) when the sizes differ.
+    pub fn copy_from(&mut self, src: &Canvas) -> bool {
+        if src.pm.width() != self.pm.width() || src.pm.height() != self.pm.height() {
+            return false;
+        }
+        self.pm.data_mut().copy_from_slice(src.pm.data());
+        true
+    }
+
+    /// Copy the pixels of `r` (clipped) from `src` (same size): one memcpy per row.
+    pub fn copy_rect_from(&mut self, src: &Canvas, r: Rect) -> bool {
+        if src.pm.width() != self.pm.width() || src.pm.height() != self.pm.height() {
+            return false;
+        }
+        let (w, h) = (self.width(), self.height());
+        let (x0, x1) = (r.x.clamp(0, w) as usize, r.right().clamp(0, w) as usize);
+        let (y0, y1) = (r.y.clamp(0, h) as usize, r.bottom().clamp(0, h) as usize);
+        let stride = w as usize * 4;
+        let s = src.pm.data();
+        let d = self.pm.data_mut();
+        for y in y0..y1 {
+            let (a, b) = (y * stride + x0 * 4, y * stride + x1 * 4);
+            d[a..b].copy_from_slice(&s[a..b]);
+        }
+        true
+    }
+
     pub fn rect(&mut self, r: Rect, c: Color) {
-        if r.w <= 0 || r.h <= 0 {
+        if r.w <= 0 || r.h <= 0 || !self.visible(r) {
             return;
         }
+        let r = self.at(r);
         if let Some(rect) =
             tiny_skia::Rect::from_xywh(r.x as f32, r.y as f32, r.w as f32, r.h as f32)
         {
@@ -110,7 +161,10 @@ impl Canvas {
     }
 
     pub fn rrect(&mut self, r: Rect, radius: i32, c: Color) {
-        if let Some(path) = rounded_rect_path(r, radius as f32) {
+        if !self.visible(r) {
+            return;
+        }
+        if let Some(path) = rounded_rect_path(self.at(r), radius as f32) {
             self.pm.fill_path(
                 &path,
                 &paint(c),
@@ -121,14 +175,47 @@ impl Canvas {
         }
     }
 
-    /// Filled rounded rect with a 1 px border (the only elevation cue in the design).
+    /// Filled rounded rect with a 1 px border.
     pub fn rrect_border(&mut self, r: Rect, radius: i32, fill: Color, border: Color) {
         self.rrect(r, radius, border);
         self.rrect(r.inset(1), (radius - 1).max(0), fill);
     }
 
+    /// Rounded-rect outline of `width` px drawn inside `r` (the line-art controls).
+    pub fn rrect_stroke(&mut self, r: Rect, radius: i32, width: f32, c: Color) {
+        if !self.visible(r) {
+            return;
+        }
+        let h = width / 2.0;
+        if let Some(path) = rounded_rect_f(
+            r.x as f32 + h,
+            r.y as f32 + h,
+            r.w as f32 - width,
+            r.h as f32 - width,
+            radius as f32 - h,
+        ) {
+            let stroke = Stroke {
+                width,
+                ..Stroke::default()
+            };
+            self.pm
+                .stroke_path(&path, &paint(c), &stroke, self.t(), None);
+        }
+    }
+
+    /// Straight line with round caps.
+    pub fn line(&mut self, a: (f32, f32), b: (f32, f32), width: f32, c: Color) {
+        let mut pb = PathBuilder::new();
+        pb.move_to(a.0, a.1);
+        pb.line_to(b.0, b.1);
+        if let Some(path) = pb.finish() {
+            self.stroke(&path, width, c, Transform::identity());
+        }
+    }
+
     pub fn circle(&mut self, cx: f32, cy: f32, radius: f32, c: Color) {
-        if let Some(path) = PathBuilder::from_circle(cx, cy, radius) {
+        let (ox, oy) = (self.origin.0 as f32, self.origin.1 as f32);
+        if let Some(path) = PathBuilder::from_circle(cx + ox, cy + oy, radius) {
             self.pm.fill_path(
                 &path,
                 &paint(c),
@@ -143,6 +230,7 @@ impl Canvas {
         self.rect(Rect::new(x, y, w, 1), c);
     }
 
+    /// Stroke `path` (round caps and joins); `t` maps path to drawing coordinates.
     pub(crate) fn stroke(&mut self, path: &Path, width: f32, c: Color, t: Transform) {
         let stroke = Stroke {
             width,
@@ -150,9 +238,11 @@ impl Canvas {
             line_join: tiny_skia::LineJoin::Round,
             ..Stroke::default()
         };
+        let t = t.post_concat(self.t());
         self.pm.stroke_path(path, &paint(c), &stroke, t, None);
     }
     pub(crate) fn fill_path(&mut self, path: &Path, c: Color, t: Transform) {
+        let t = t.post_concat(self.t());
         self.pm
             .fill_path(path, &paint(c), FillRule::Winding, t, None);
     }
@@ -183,7 +273,10 @@ impl Canvas {
             r.w.max(1) as u32,
             r.h.max(1) as u32,
         )?)?;
-        Some(Canvas { pm: sub })
+        Some(Canvas {
+            pm: sub,
+            origin: (0, 0),
+        })
     }
 
     pub fn pixel(&self, x: i32, y: i32) -> Option<Color> {
@@ -206,6 +299,7 @@ impl Canvas {
 
     /// Blend one glyph coverage value over the canvas (used by text).
     pub(crate) fn blend(&mut self, x: i32, y: i32, coverage: u8, c: Color) {
+        let (x, y) = (x + self.origin.0, y + self.origin.1);
         if coverage == 0 || x < 0 || y < 0 || x >= self.width() || y >= self.height() {
             return;
         }
@@ -249,26 +343,60 @@ mod tests {
     #[test]
     fn rounded_rect_corners_are_cut_and_border_shows() {
         let mut c = Canvas::new(100, 60, BG).unwrap();
-        c.rrect_border(Rect::new(10, 10, 80, 40), 16, SURFACE, BORDER);
+        c.rrect_border(Rect::new(10, 10, 80, 40), 16, PRESSED_FILL, DIVIDER);
         assert_eq!(
             c.pixel(11, 11),
             Some(BG),
             "corner pixel is outside the radius"
         );
-        assert_eq!(c.pixel(50, 10), Some(BORDER), "top edge is the 1 px border");
-        assert_eq!(c.pixel(50, 30), Some(SURFACE));
+        assert_eq!(
+            c.pixel(50, 10),
+            Some(DIVIDER),
+            "top edge is the 1 px border"
+        );
+        assert_eq!(c.pixel(50, 30), Some(PRESSED_FILL));
     }
 
     #[test]
     fn blit_and_crop_roundtrip() {
         let mut a = Canvas::new(40, 40, BG).unwrap();
-        let mut s = Canvas::new(10, 10, SURFACE_RAISED).unwrap();
+        let mut s = Canvas::new(10, 10, WATERMARK).unwrap();
         s.rect(Rect::new(0, 0, 5, 5), DANGER);
         a.blit(&s, 20, 20);
         assert_eq!(a.pixel(21, 21), Some(DANGER));
-        assert_eq!(a.pixel(28, 28), Some(SURFACE_RAISED));
+        assert_eq!(a.pixel(28, 28), Some(WATERMARK));
         let c = a.crop(Rect::new(20, 20, 10, 10)).unwrap();
         assert_eq!(c.pixel(1, 1), Some(DANGER));
+    }
+
+    #[test]
+    fn origin_offsets_drawing_but_not_reads() {
+        let mut c = Canvas::new(40, 40, BG).unwrap();
+        c.set_origin(10, -100);
+        assert!(!c.visible(Rect::new(0, 0, 5, 5)), "above the canvas");
+        assert!(c.visible(Rect::new(0, 100, 5, 5)));
+        c.rect(Rect::new(0, 100, 5, 5), DANGER);
+        c.set_origin(0, 0);
+        assert_eq!(c.pixel(12, 2), Some(DANGER));
+        assert_eq!(c.pixel(2, 2), Some(BG));
+    }
+
+    #[test]
+    fn outlines_leave_the_inside_untouched() {
+        let mut c = Canvas::new(60, 60, BG).unwrap();
+        c.rrect_stroke(Rect::new(4, 4, 52, 52), 16, OUTLINE_W, TEXT);
+        assert_eq!(c.pixel(30, 30), Some(BG), "transparent inside");
+        assert_ne!(c.pixel(30, 4), Some(BG), "top edge is drawn");
+        assert_eq!(c.pixel(30, 2), Some(BG), "nothing outside the rect");
+        let mut d = Canvas::new(60, 60, DANGER).unwrap();
+        assert!(d.copy_from(&c));
+        assert_eq!(d.pixel(30, 30), Some(BG));
+        assert!(!d.copy_from(&Canvas::new(10, 10, BG).unwrap()));
+        let mut e = Canvas::new(60, 60, DANGER).unwrap();
+        assert!(e.copy_rect_from(&c, Rect::new(20, -5, 20, 15)));
+        assert_eq!(e.pixel(30, 8), Some(BG), "copied (clipped at the top)");
+        assert_eq!(e.pixel(30, 20), Some(DANGER), "outside the rect untouched");
+        assert_eq!(e.pixel(10, 5), Some(DANGER));
     }
 
     #[test]

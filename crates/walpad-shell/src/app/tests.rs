@@ -5,7 +5,7 @@ use walpad_proto::{
     AppState, Battery, BatterySource, Hardware, ScreenState, WifiRadio, WifiStatus,
 };
 use walpad_ui::components::keyboard_layout;
-use walpad_ui::Fonts;
+use walpad_ui::{Canvas, Fonts};
 
 pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
     Status {
@@ -175,9 +175,35 @@ fn reply_err(app: &mut App, id: u64, code: &str, msg: &str) -> Outcome {
     render(app);
     o
 }
+/// Navigate by touch the way a user does: Home and Settings are sidebar buttons, Network and
+/// Device are rows of the Quick Settings dropdown (header pill), Apps is the Home grid.
 fn go(app: &mut App, tab: Tab) -> Outcome {
-    let i = Tab::ALL.iter().position(|t| *t == tab).unwrap();
-    tap(app, Target::Nav(i))
+    match tab {
+        Tab::Network | Tab::Device => {
+            tap(app, Target::QuickSettings);
+            assert_eq!(app.model.overlay, Some(Overlay::QuickSettings));
+            tap(
+                app,
+                if tab == Tab::Network {
+                    Target::WifiCard
+                } else {
+                    Target::BatteryCard
+                },
+            )
+        }
+        Tab::Apps => tap(app, Target::Nav(0)),
+        _ => {
+            let i = Tab::ALL.iter().position(|t| *t == tab).unwrap();
+            tap(app, Target::Nav(i))
+        }
+    }
+}
+/// Open the Quick Settings dropdown (brightness and the quick toggles live there).
+fn quick(app: &mut App) {
+    if app.model.overlay != Some(Overlay::QuickSettings) {
+        tap(app, Target::QuickSettings);
+    }
+    assert_eq!(app.model.overlay, Some(Overlay::QuickSettings));
 }
 fn scan_result(app: &mut App) {
     wifi_event(
@@ -254,10 +280,17 @@ fn home_tiles_are_the_pinned_installed_apps() {
 #[test]
 fn home_taps_launch_apps_or_navigate() {
     let mut app = online();
+    // sidebar pinned app and Home grid app
     assert_eq!(
         tap(&mut app, Target::Tile(0)).cmds,
         vec![Cmd::Launch("browser".into())]
     );
+    assert_eq!(
+        tap(&mut app, Target::AppTile(1)).cmds,
+        vec![Cmd::Launch("terminal".into())]
+    );
+    // the quick toggles are in the Quick Settings dropdown, which stays open for them
+    quick(&mut app);
     assert_eq!(
         tap(&mut app, Target::Rotation).cmds,
         vec![Cmd::RotateToggle]
@@ -267,18 +300,116 @@ fn home_taps_launch_apps_or_navigate() {
         vec![Cmd::KeyboardToggle]
     );
     assert_eq!(tap(&mut app, Target::ScreenOff).cmds, vec![Cmd::ScreenOff]);
-    assert!(tap(&mut app, Target::Tile(2)).cmds.is_empty());
+    // a tap outside closes the dropdown and does nothing else
+    let (x, y) = app.frame.content.center();
+    assert!(tap_at(&mut app, x, y, 1000).cmds.is_empty());
+    assert!(app.model.overlay.is_none());
+    // the Settings shortcut (Home grid; the sidebar has its own Settings button)
+    assert!(tap(&mut app, Target::AppTile(2)).cmds.is_empty());
     assert_eq!(
         app.active,
         Tab::Settings,
         "the Settings tile switches tab locally"
     );
     go(&mut app, Tab::Home);
+    quick(&mut app);
     tap(&mut app, Target::WifiCard);
     assert_eq!(app.active, Tab::Network);
+    assert!(
+        app.model.overlay.is_none(),
+        "navigating closes the dropdown"
+    );
     go(&mut app, Tab::Home);
+    quick(&mut app);
     tap(&mut app, Target::BatteryCard);
     assert_eq!(app.active, Tab::Device);
+}
+
+#[test]
+fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
+    let mut app = online();
+    let side: Vec<Target> = app
+        .hits
+        .iter()
+        .map(|(_, t)| *t)
+        .filter(|t| matches!(t, Target::Nav(_) | Target::Tile(_)))
+        .collect();
+    assert_eq!(
+        side,
+        [
+            Target::Nav(0),
+            Target::Tile(0),
+            Target::Tile(1),
+            Target::Nav(4),
+            Target::Nav(1)
+        ],
+        "Home, pinned Browser + Terminal, Settings, the Apps toggle (the pinned Settings shortcut is not repeated)"
+    );
+    tap(&mut app, Target::Nav(1));
+    assert_eq!(app.model.overlay, Some(Overlay::AppsPanel));
+    // running apps first (Terminal), then every installed app
+    let panel: Vec<Target> = app
+        .overlay_hits
+        .iter()
+        .map(|(_, t)| *t)
+        .filter(|t| matches!(t, Target::PanelApp(_) | Target::PanelActive(_)))
+        .collect();
+    assert_eq!(
+        panel,
+        [
+            Target::PanelActive(1),
+            Target::PanelApp(0),
+            Target::PanelApp(1),
+            Target::PanelApp(2)
+        ]
+    );
+    assert_eq!(
+        tap(&mut app, Target::PanelApp(0)).cmds,
+        vec![Cmd::Launch("browser".into())]
+    );
+    assert!(app.model.overlay.is_none(), "launching closes the panel");
+    // the toggle again: open, then a second tap on it (outside the panel) closes it
+    tap(&mut app, Target::Nav(1));
+    let toggle = app.frame.sidebar.bottom() - 40;
+    assert!(tap_at(&mut app, 48, toggle, 1000).cmds.is_empty());
+    assert!(app.model.overlay.is_none());
+    // the panel body swallows taps; long press on an app opens its sheet
+    tap(&mut app, Target::Nav(1));
+    tap(&mut app, Target::PanelBody);
+    assert_eq!(app.model.overlay, Some(Overlay::AppsPanel));
+    long_press(&mut app, Target::PanelActive(1));
+    assert!(matches!(&app.model.overlay, Some(Overlay::App(s)) if s.id == "terminal"));
+    // the Settings shortcut in the panel switches tab
+    tap(&mut app, Target::SheetCancel);
+    tap(&mut app, Target::Nav(1));
+    tap(&mut app, Target::PanelApp(2));
+    assert_eq!(app.active, Tab::Settings);
+    assert!(app.model.overlay.is_none());
+}
+
+#[test]
+fn background_layer_is_cached_not_redrawn_every_frame() {
+    let mut app = online();
+    let b = app.chrome.builds;
+    for _ in 0..5 {
+        render(&mut app);
+    }
+    assert_eq!(app.chrome.builds, b, "same key: memcpy only");
+    // pressing a sidebar button draws over the cache; it does not rebuild it
+    let (x, y) = centre(&app, Target::Nav(4));
+    app.on_gesture(&Gesture::Pressed { x, y }, 0);
+    render(&mut app);
+    assert_eq!(app.chrome.builds, b);
+    app.on_gesture(&Gesture::Tap { x, y }, 10);
+    render(&mut app);
+    assert_eq!(
+        app.chrome.builds,
+        b + 1,
+        "Settings became the active button"
+    );
+    app.resize(1280, 800);
+    render(&mut app);
+    assert_eq!(app.chrome.builds, b + 2, "rotation rebuilds it once");
 }
 
 #[test]
@@ -289,8 +420,10 @@ fn offline_shows_the_banner_and_ignores_commands() {
         app.banner(),
         Some(("System service not responding", Tone::Danger))
     );
+    quick(&mut app);
     assert!(tap(&mut app, Target::Rotation).cmds.is_empty());
     assert!(tap(&mut app, Target::Slider).cmds.is_empty());
+    tap(&mut app, Target::Dismiss);
     assert_eq!(
         go(&mut app, Tab::Network).cmds,
         vec![],
@@ -323,9 +456,10 @@ fn low_battery_banner_until_charging() {
 #[test]
 fn slider_tap_sets_and_drag_is_rate_limited_with_a_final_value() {
     let mut app = online();
+    quick(&mut app);
     let (cx, cy) = centre(&app, Target::Slider);
     let track = app
-        .hits
+        .overlay_hits
         .iter()
         .find(|(_, t)| *t == Target::Slider)
         .map(|(r, _)| r.inset(SP_4))
@@ -375,6 +509,7 @@ fn slider_tap_sets_and_drag_is_rate_limited_with_a_final_value() {
 fn apps_screen_launches_closes_and_pins() {
     let mut app = online();
     go(&mut app, Tab::Apps);
+    assert_eq!(app.active, Tab::Home, "the app grid is Home");
     assert_eq!(
         tap(&mut app, Target::AppTile(0)).cmds,
         vec![Cmd::Launch("browser".into())]

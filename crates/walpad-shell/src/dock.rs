@@ -99,16 +99,13 @@ pub fn button_at(w: i32, x: i32, y: i32) -> Option<DockButton> {
 /// Draw the strip (`cv` is `w` x 56). `pressed` highlights one button.
 pub fn render(p: &mut Painter, pressed: Option<DockButton>) {
     let w = p.cv.width();
-    p.cv.rect(Rect::new(0, 0, w, DOCK_H), SURFACE);
-    p.cv.hline(0, 0, w, BORDER);
+    // line-art like the shell: charcoal strip, a divider on top, outlined pill buttons
+    p.cv.rect(Rect::new(0, 0, w, DOCK_H), BG);
+    p.divider(0, 0, w);
     for (i, (r, b)) in button_rects(w).iter().enumerate() {
         let (_, label, icon) = BUTTONS[i];
-        if pressed == Some(*b) {
-            p.cv.rrect(r.inset(6), RADIUS, SURFACE_RAISED);
-        }
-        if i > 0 {
-            p.cv.rect(Rect::new(r.x, 12, 1, DOCK_H - 24), BORDER);
-        }
+        let pill = Rect::new(r.x + SP_3, 7, r.w - 2 * SP_3, DOCK_H - 14);
+        p.outline_box(pill, pill.h / 2, pressed == Some(*b), false, false);
         let tw = p.fonts.measure(label, Face::Regular, SIZE_SECONDARY).ceil() as i32;
         let group = ICON + SP_2 + tw;
         let x0 = r.x + (r.w - group) / 2;
@@ -353,7 +350,7 @@ impl Dock {
             mapped: false,
             active: 0,
             pressed: None,
-            canvas: Canvas::new(r.w as u32, DOCK_H as u32, SURFACE).ok_or("dock canvas")?,
+            canvas: Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?,
         };
         d.write_strut()?;
         let root = d.xc.root;
@@ -437,7 +434,7 @@ impl Dock {
         }
         self.area = area;
         let r = dock_rect(area);
-        self.canvas = Canvas::new(r.w as u32, DOCK_H as u32, SURFACE).ok_or("dock canvas")?;
+        self.canvas = Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?;
         self.xc.conn.configure_window(
             self.win,
             &ConfigureWindowAux::new()

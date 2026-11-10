@@ -183,6 +183,9 @@ impl Fonts {
 
     /// Draw `s` inside `r`, vertically centred, with horizontal alignment and ellipsis.
     pub fn draw_in(&mut self, cv: &mut Canvas, s: &str, style: Style, r: Rect, align: Align) {
+        if !cv.visible(r) {
+            return;
+        }
         let Style { face, px, color: _ } = style;
         let s = self.fit(s, face, px, r.w as f32);
         let w = self.measure(&s, face, px);

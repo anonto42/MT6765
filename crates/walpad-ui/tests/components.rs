@@ -472,37 +472,77 @@ fn notices_and_states() {
 }
 
 #[test]
-fn status_bar_and_bottom_nav_portrait_and_landscape() {
-    sheet!(f, c, p, 800, 520);
+fn header_pill_and_icon_boxes() {
+    sheet!(f, c, p, 800, 420);
     let fr = Frame::new(800, 1280);
-    let bar = |y| Rect::new(0, y, fr.w, fr.status.h);
-    p.status_bar(bar(0), Some("Home"), Some(62), true, false);
-    p.status_bar(bar(48), None, None, false, false);
-    p.status_bar(
-        bar(96),
-        Some("A Network With A Rather Long Name"),
-        Some(15),
+    let h = fr.header;
+    // header: 24 h clock + estimate, 12 h clock + unknown battery, low battery + failed Wi-Fi
+    for (i, (time, sfx, wifi, batt, low, pressed)) in [
+        ("14:22", None, WifiMark::Connected, "~62%", false, false),
+        (
+            "2:22",
+            Some("PM"),
+            WifiMark::Disconnected,
+            "--",
+            false,
+            true,
+        ),
+        ("09:05", None, WifiMark::Failed, "12%", true, false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let y = i as i32 * h.h;
+        p.clock(
+            Rect::new(h.x + SP_5, y, 360, h.h),
+            time,
+            sfx,
+            "Monday, 09 November",
+        );
+        let pill = p.quick_pill(
+            h.right() - SP_4,
+            y + h.h / 2,
+            wifi,
+            batt,
+            low,
+            pressed,
+            false,
+        );
+        assert!(pill.h >= 40 && pill.right() == h.right() - SP_4);
+        p.divider(h.x, y + h.h - 1, h.w);
+    }
+    // icon boxes: sidebar 56 (rest, active, pressed), round toggle, grid 64, panel 48
+    let y = 220;
+    p.icon_box(Rect::new(20, y, 56, 56), Icon::Home, false, true);
+    p.icon_box(Rect::new(96, y, 56, 56), Icon::Globe, false, false);
+    p.icon_box(Rect::new(172, y, 56, 56), Icon::Terminal, true, false);
+    p.round_button(Rect::new(248, y, 56, 56), Icon::ChevronRight, false, false);
+    p.round_button(Rect::new(324, y, 56, 56), Icon::Back, true, true);
+    p.app_icon(
+        Rect::new(400, y, 112, 96),
+        BOX_GRID,
+        Icon::Globe,
+        "Browser",
         false,
         true,
     );
-    for (i, t) in Tab::ALL.iter().enumerate() {
-        let hits = p.bottom_nav(Rect::new(0, 150 + i as i32 * 92, 800, NAV_H), *t);
-        assert_eq!(hits.len(), 5);
-        assert_eq!(hits.iter().map(|r| r.w).sum::<i32>(), 800);
-    }
-    assert_snapshot("comp_status_nav_portrait", &c);
-
-    sheet!(f2, c2, p2, 1280, 200);
-    let fl = Frame::new(1280, 800);
-    p2.status_bar(
-        Rect::new(0, 0, 1280, 40),
-        Some("Home"),
-        Some(88),
+    p.app_icon(
+        Rect::new(520, y, 112, 96),
+        BOX_GRID,
+        Icon::Folder,
+        "Files",
+        true,
+        false,
+    );
+    p.app_icon(
+        Rect::new(640, y, 70, 76),
+        BOX_PANEL,
+        Icon::Terminal,
+        "Terminal",
         false,
         false,
     );
-    let hits = p2.bottom_nav(Rect::new(0, 60, 1280, NAV_H), Tab::Network);
-    assert_eq!(hits[0].w, 256);
-    assert_eq!(fl.nav.h, NAV_H);
-    assert_snapshot("comp_status_nav_landscape", &c2);
+    p.caption_upper("Installed apps", Rect::new(20, 340, 300, 16));
+    p.popover(Rect::new(400, 330, 380, 80));
+    assert_snapshot("comp_header_icons", &c);
 }

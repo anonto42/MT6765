@@ -1,5 +1,6 @@
-//! Modal overlays: the Wi-Fi password sheet (with the on-screen keyboard), the app options sheet
-//! and the forget-network dialog. Geometry is pure so hit areas are testable.
+//! Modal overlays: the Wi-Fi password sheet (with the on-screen keyboard), the app options sheet,
+//! the forget-network and power dialogs, the power menu, and the two popovers (quick settings and
+//! the Apps panel, drawn by `panels`). Geometry is pure so hit areas are testable.
 use crate::app::Target;
 use walpad_ui::components::{keyboard_layout, ButtonKind, ButtonState, KeyboardLayer, Painter};
 use walpad_ui::layout::Frame;
@@ -70,6 +71,18 @@ pub enum Overlay {
         armed: Option<(usize, u64)>,
         until: u64,
     },
+    /// The dropdown under the header pill (Wi-Fi, Bluetooth, battery, brightness, quick toggles).
+    /// A tap outside closes it.
+    QuickSettings,
+    /// The Apps panel next to the sidebar (running and installed apps). A tap outside closes it.
+    AppsPanel,
+}
+
+impl Overlay {
+    /// Light popovers close on a tap outside; the other overlays are modal.
+    pub fn is_popover(&self) -> bool {
+        matches!(self, Overlay::QuickSettings | Overlay::AppsPanel)
+    }
 }
 
 /// Items of the power menu: (label, needs two taps).
@@ -202,9 +215,9 @@ pub fn render_app_sheet(p: &mut Painter, frame: &Frame, s: &AppSheet) -> Vec<(Re
             Target::PinToggle => p.button(
                 *r,
                 if s.pinned {
-                    "Unpin from Home"
+                    "Unpin from the sidebar"
                 } else {
-                    "Pin to Home"
+                    "Pin to the sidebar"
                 },
                 ButtonKind::Secondary,
                 ButtonState::Default,

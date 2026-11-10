@@ -1,15 +1,18 @@
-//! Frame layout (docs/rust/UI.md): status bar, content, bottom navigation; portrait and landscape.
+//! Frame layout (docs/rust/UI.md): a sidebar dock on the left, a header across the main area and
+//! the content below it; the same in portrait and landscape.
 use crate::canvas::Rect;
-use crate::tokens::{CONTENT_PAD, NAV_H, STATUS_BAR_H};
+use crate::tokens::{CONTENT_PAD, HEADER_H, SIDEBAR_W};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Frame {
     pub w: i32,
     pub h: i32,
-    pub status: Rect,
-    /// Content area without side padding.
+    /// Full-height dock on the left.
+    pub sidebar: Rect,
+    /// Clock and the quick-settings pill, right of the sidebar.
+    pub header: Rect,
+    /// Content area without side padding (right of the sidebar, below the header).
     pub content: Rect,
-    pub nav: Rect,
 }
 
 impl Frame {
@@ -17,9 +20,9 @@ impl Frame {
         Frame {
             w,
             h,
-            status: Rect::new(0, 0, w, STATUS_BAR_H),
-            content: Rect::new(0, STATUS_BAR_H, w, h - STATUS_BAR_H - NAV_H),
-            nav: Rect::new(0, h - NAV_H, w, NAV_H),
+            sidebar: Rect::new(0, 0, SIDEBAR_W, h),
+            header: Rect::new(SIDEBAR_W, 0, w - SIDEBAR_W, HEADER_H),
+            content: Rect::new(SIDEBAR_W, HEADER_H, w - SIDEBAR_W, h - HEADER_H),
         }
     }
     pub fn landscape(&self) -> bool {
@@ -34,13 +37,9 @@ impl Frame {
             self.content.h,
         )
     }
-    /// Columns for tile grids: 2 in portrait, 4 in landscape.
-    pub fn columns(&self) -> i32 {
-        if self.landscape() {
-            4
-        } else {
-            2
-        }
+    /// The whole screen.
+    pub fn screen(&self) -> Rect {
+        Rect::new(0, 0, self.w, self.h)
     }
 }
 
@@ -59,22 +58,20 @@ mod tests {
     #[test]
     fn portrait_and_landscape_frames_match_the_spec() {
         let p = Frame::new(800, 1280);
-        assert_eq!(
-            (p.status, p.nav),
-            (Rect::new(0, 0, 800, 40), Rect::new(0, 1192, 800, 88))
-        );
-        assert_eq!(p.content, Rect::new(0, 40, 800, 1152));
-        assert_eq!(p.padded(), Rect::new(24, 40, 752, 1152));
-        assert_eq!(p.columns(), 2);
+        assert_eq!(p.sidebar, Rect::new(0, 0, 96, 1280));
+        assert_eq!(p.header, Rect::new(96, 0, 704, 64));
+        assert_eq!(p.content, Rect::new(96, 64, 704, 1216));
+        assert_eq!(p.padded(), Rect::new(120, 64, 656, 1216));
         let l = Frame::new(1280, 800);
-        assert_eq!((l.content.y, l.content.bottom(), l.nav.y), (40, 712, 712));
-        assert_eq!(l.columns(), 4);
+        assert_eq!(l.content, Rect::new(96, 64, 1184, 736));
+        assert_eq!(l.sidebar.h, 800);
         assert!(l.landscape() && !p.landscape());
+        assert_eq!(l.screen(), Rect::new(0, 0, 1280, 800));
     }
 
     #[test]
-    fn two_columns_make_364_wide_tiles() {
+    fn columns_split_evenly() {
         let c = columns(Frame::new(800, 1280).padded(), 2, 24);
-        assert_eq!((c[0].w, c[1].w, c[1].x), (364, 364, 412));
+        assert_eq!((c[0].w, c[1].w, c[1].x), (316, 316, 460));
     }
 }

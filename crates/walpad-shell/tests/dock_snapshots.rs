@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use walpad_shell::dock::{render, DockButton, DOCK_H};
 use walpad_ui::components::Painter;
 use walpad_ui::snapshot::assert_snapshot_in;
-use walpad_ui::tokens::SURFACE;
+use walpad_ui::tokens::BG;
 use walpad_ui::{Canvas, Fonts};
 
 fn golden() -> PathBuf {
@@ -14,7 +14,7 @@ fn shot(name: &str, w: i32, pressed: Option<DockButton>) {
     let mut f =
         Fonts::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../walpad-ui/assets/fonts"))
             .unwrap();
-    let mut c = Canvas::new(w as u32, DOCK_H as u32, SURFACE).unwrap();
+    let mut c = Canvas::new(w as u32, DOCK_H as u32, BG).unwrap();
     render(
         &mut Painter {
             cv: &mut c,

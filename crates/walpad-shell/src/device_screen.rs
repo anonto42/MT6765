@@ -200,8 +200,10 @@ pub fn tone_color(t: Tone) -> Color {
 
 /// A read-only row: label on the left, value on the right (coloured when it needs attention).
 pub fn info_row(p: &mut Painter, r: Rect, label: &str, value: &str, tone: Tone) {
-    p.cv.rect(r, SURFACE);
-    p.cv.hline(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4, BORDER);
+    if !p.cv.visible(r) {
+        return;
+    }
+    p.divider(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4);
     let vw = (p.fonts.measure(value, Face::Regular, SIZE_BODY) as i32 + SP_4).min(r.w * 2 / 3);
     p.text(
         label,
@@ -289,15 +291,10 @@ pub fn render(
             }
             Item::RotationRow(i) => {
                 let (label, _) = ROTATION_ROWS[*i];
-                p.cv.rect(
-                    r,
-                    if pr(Target::Rot(*i)) {
-                        SURFACE_RAISED
-                    } else {
-                        SURFACE
-                    },
-                );
-                p.cv.hline(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4, BORDER);
+                if pr(Target::Rot(*i)) && online {
+                    p.row_pressed(r);
+                }
+                p.divider(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4);
                 let on = rot == Some(*i);
                 p.text(
                     label,

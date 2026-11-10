@@ -2,6 +2,7 @@
 //! and the snapshot harness for WalPad Shell. Pure Rust, software rendered, no GPU, no image assets.
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod art;
 pub mod canvas;
 pub mod components;
 pub mod icons;

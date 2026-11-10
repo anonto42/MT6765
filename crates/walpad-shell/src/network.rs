@@ -178,7 +178,7 @@ pub fn render(
         Some(WifiRadio::Down) => ("Down", TEXT_SECONDARY),
         None => ("Unknown", TEXT_DISABLED),
     };
-    p.cv.rrect_border(l.chip, 16, SURFACE_RAISED, BORDER);
+    p.outline_box(l.chip, 16, false, false, false);
     p.cv.circle(
         (l.chip.x + 16) as f32,
         (l.chip.y + 16) as f32,

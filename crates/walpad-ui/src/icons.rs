@@ -20,6 +20,8 @@ pub enum Icon {
     Battery,
     Lock,
     ChevronRight,
+    ChevronDown,
+    Bluetooth,
     Check,
     Close,
     Refresh,
@@ -34,7 +36,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    pub const ALL: [Icon; 26] = [
+    pub const ALL: [Icon; 28] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -50,6 +52,8 @@ impl Icon {
         Icon::Battery,
         Icon::Lock,
         Icon::ChevronRight,
+        Icon::ChevronDown,
+        Icon::Bluetooth,
         Icon::Check,
         Icon::Close,
         Icon::Refresh,
@@ -75,6 +79,7 @@ impl Icon {
             "terminal" => Icon::Terminal,
             "folder" | "files" => Icon::Folder,
             "keyboard" => Icon::Keyboard,
+            "bluetooth" => Icon::Bluetooth,
             _ => return None,
         })
     }
@@ -239,6 +244,18 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((16.0, 8.0), (16.0, 11.0));
         }
         Icon::ChevronRight => p.poly(&[(9.0, 6.0), (15.0, 12.0), (9.0, 18.0)], false),
+        Icon::ChevronDown => p.poly(&[(6.0, 9.0), (12.0, 15.0), (18.0, 9.0)], false),
+        Icon::Bluetooth => p.poly(
+            &[
+                (6.5, 7.0),
+                (17.0, 16.5),
+                (12.0, 21.0),
+                (12.0, 3.0),
+                (17.0, 7.5),
+                (6.5, 17.0),
+            ],
+            false,
+        ),
         Icon::Check => p.poly(&[(5.0, 13.0), (10.0, 18.0), (19.0, 7.0)], false),
         Icon::Close => {
             p.line((6.0, 6.0), (18.0, 18.0));
@@ -389,6 +406,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 26);
+        assert_eq!(Icon::ALL.len(), 28);
+        assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }
