@@ -95,5 +95,15 @@ while true; do
     fi
   fi
   echo "${state:-none} ${ip:-}" > /run/walpad/wifi-state
+  # network time once per boot (retried every ~60 s until it works), then into the RTC so the clock is
+  # right after the next power-on even before Wi-Fi; a wrong clock breaks every HTTPS site in the browser
+  if [ -n "$ip" ] && [ ! -f /run/walpad/time-synced ] && [ $(( $(date +%s) - ${LAST_NTP:-0} )) -ge 60 ]; then
+    LAST_NTP=$(date +%s)
+    if timeout 20 ntpd -n -q -p pool.ntp.org -p time.google.com -p time.cloudflare.com > /dev/null 2>&1; then
+      touch /run/walpad/time-synced; hwclock -w -u 2>/dev/null; say "time synced: $(date -u '+%F %T') UTC"
+    else
+      say "time sync failed (will retry)"
+    fi
+  fi
   sleep 4
 done

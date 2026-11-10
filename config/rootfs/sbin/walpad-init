@@ -8,6 +8,7 @@ klog "walpad-init started"
 
 /bin/busybox --install -s 2>/dev/null
 hostname walpad 2>/dev/null
+hwclock -s -u 2>/dev/null   # system time from the RTC (kept right by the network sync in walpad-wifi)
 mkdir -p /var/log /var/lib/walpad /run/walpad /tmp/.X11-unix /root/.ssh /etc/dropbear
 walpad-logcap    # trim logs left by earlier boots (they live on the ext4 rootfs); then every 5 min below
 chmod 1777 /tmp /tmp/.X11-unix
