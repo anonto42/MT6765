@@ -22,6 +22,11 @@ pub const CONTRACT_ENV: &[(&str, &str)] = &[
     ("MOZ_ACCELERATED", "0"),
     ("GTK_A11Y", "none"),
     ("NO_AT_BRIDGE", "1"),
+    // the shell's XIM server: text-input focus shows and hides the system keyboard (owner request
+    // 2026-11-10; walpad-shell ime.rs)
+    ("XMODIFIERS", "@im=walpad"),
+    ("GTK_IM_MODULE", "xim"),
+    ("QT_IM_MODULE", "xim"),
 ];
 
 const BIN_DIRS: &[&str] = &[

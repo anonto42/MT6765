@@ -105,7 +105,7 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   "Battery (~62%)" + "Estimated from voltage" in warning for an estimate, "Battery (unavailable)"
   when there is no reading, the charge state for a gauge); divider; Brightness label + percent and
   the slider; divider; Rotation: Auto/Locked, Screen off (disabled while the core is away). No
-  Keyboard row: the keyboard opens where it is needed (terminal start, dock button). Rows 56 high. The quick toggles keep it open; the two navigation rows and a tap outside
+  Keyboard row: the keyboard opens where it is needed (a focused text input, dock button). Rows 56 high. The quick toggles keep it open; the two navigation rows and a tap outside
   close it.
 - **Apps panel** (popover 320 wide, bottom-left next to the sidebar, 16 px from the bottom, padding
   20). Translucent (owner request 2026-11-10): SURFACE_STRONG fill, no scrim, 1 px CARD_BORDER
@@ -146,14 +146,29 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   focus = a 2 px white ring around the item. Volume keys move focus, a short power press activates,
   the menu closes after 20 s.
 - **System dock (D3)**: 56 px charcoal strip with a top divider and three outlined pill buttons
-  (Home, Keyboard, Close app in danger), bottom strut only while another app is in front.
+  (Home, Keyboard, Close app in danger), only while another app is in front. Collapsible (owner
+  request 2026-11-10): by default only an arrow handle shows, 56x28 at the right end of the bottom
+  edge (8 px margin), the strip colour with a CARD_BORDER line-art outline, rounded top corners
+  (radius 10, SHAPE) and a white chevron pointing up; no strut, so the app keeps its full height.
+  A tap on the handle unfolds the strip with its strut; the handle then sits on top of the strip
+  with the chevron pointing down. The strip folds again after an action (Home, Keyboard, Close
+  app), after 5 s without a tap, or on a second tap on the handle. Pressed handle = PRESSED_TINT
+  over its fill. With the keyboard or the mouse pad up, handle and strip sit directly above it.
+  Both windows are override-redirect with WM_HINTS input=false (never focused). Goldens:
+  `dock_handle_{portrait,landscape,portrait_pressed}`, `dock_expanded_{portrait,landscape}`.
 - **System keyboard** (replaces matchbox-keyboard): override-redirect strip, full width, 30 % of
   the visible height at the bottom (384 portrait, 240 landscape), BG with a top divider, outlined
   keys (radius 8), pressed or latched = 10 % fill + white outline. Five rows, 12 key units wide:
   Esc Tab 1-0 / q-p Backspace / Ctrl a-l Enter / Shift z-m . Up / / ?123, minimise, space,
   Left Down Right (symbols layer: ! @ # ... and < > ` ~ \ ; : ' " , ?). Shift and Ctrl are
-  one-shot. Toggled by the dock Keyboard button and the core's `keyboard` command; shown when the
-  terminal starts; hidden by the minimise key or going Home. The dock moves directly above it.
+  one-shot. Dynamic (owner request 2026-11-10, `ime.rs`): the shell is the XIM input method
+  (`@im=walpad`); it appears 150 ms after a text input gets the focus (Firefox URL bar and fields,
+  GTK entries, the st window) if the focus stayed, and goes away 250 ms after the focus left every
+  input (moving between two fields does not flicker). It is not shown just because an app is open.
+  The minimise key hides it until the next focus-in; the dock Keyboard button and the core's
+  `keyboard` command still toggle it by hand (opened by hand with no input focused, it stays until
+  closed by hand). The terminal start only opens it as a fallback when no XIM client spoke within
+  3 s (or the XIM server is not running). Going Home hides it. The dock moves directly above it.
   Opening it closes the mouse pad (and the other way round).
 - **Mouse pad** (Apps panel > Tools; `mousepad.rs`): the keyboard's twin: override-redirect window
   (WM_HINTS input=false, never focused) + a managed 1x1 dock-type strut window, full width, 30 % of

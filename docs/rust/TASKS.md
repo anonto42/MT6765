@@ -37,6 +37,7 @@ Gates: M0 SSH deploy + baseline + fixtures; M1 `scripts/check.sh` passes, tablet
 | M5.7 | Power menu overlay + hardware-key navigation (input topic) | done (host; see reports/M5.7.md) |
 | M5.8 | System dock (own X window, shown over foreign apps) | done (host; see reports/M5.8.md) |
 | M5.10 | System keyboard drawn by the shell, replaces matchbox-keyboard (owner request 2026-11-10) | done (host; see reports/M5.10.md) |
+| M5.11 | Dynamic keyboard (XIM focus) + collapsible dock handle (owner request 2026-11-10) | done (host, incl. GTK3/xterm/Firefox on Xvfb; see reports/M5.11.md) |
 | M5.9 [DEVICE] | UI checklist on the tablet; `walpad-shell --capabilities` already prints `shell` (reports/M5.9-prep.md) | owner runs it |
 | M6.1-M6.3 | process manager, installed-only apps, crash notice | done (host; see reports/M6.1-M6.3.md) |
 | M6.4 [DEVICE] | gate checklist: scripts/device/m6_check.sh | owner runs it |

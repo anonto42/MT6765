@@ -6,6 +6,7 @@ use crate::config::read_devd;
 use crate::core_client::{CoreClient, CoreEvent};
 use crate::dock::{load_wm_classes, Dock};
 use crate::gesture::{Gesture, Recogniser};
+use crate::ime::{FocusKbd, ImEvent, ImServer, KbdAction};
 use crate::keyboard::SysKeyboard;
 use crate::mousepad::MousePad;
 use crate::settings_screen::gather;
@@ -36,6 +37,11 @@ pub struct Shell {
     kbd: Option<SysKeyboard>,
     /// The mouse pad (None when its X connection could not be opened or died).
     pad: Option<MousePad>,
+    /// The XIM server whose focus events drive the keyboard (None when it could not start or
+    /// its X connection died: the terminal then gets the keyboard at start, as before).
+    ime: Option<ImServer>,
+    /// Text-input focus -> keyboard visibility.
+    focus: FocusKbd,
     core: CoreClient,
     canvas: Canvas,
     fonts: Fonts,
@@ -98,6 +104,13 @@ impl Shell {
                 None
             }
         };
+        let ime = match ImServer::open(&sock) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                eprintln!("walpad-shell: input method (XIM) disabled: {}", e.0);
+                None
+            }
+        };
         let canvas =
             Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
         let clock_24h = read_clock_24h(&opts.root);
@@ -112,6 +125,8 @@ impl Shell {
             dock,
             kbd,
             pad,
+            ime,
+            focus: FocusKbd::new(),
             core,
             canvas,
             fonts,
@@ -169,10 +184,25 @@ impl Shell {
         self.kbd.as_ref().is_some_and(|k| k.visible())
     }
 
-    /// Show/hide the system keyboard, move the dock above it, and (`report`) tell the core, so
-    /// its `keyboard toggle` (hardware keys, walpad-ctl) knows the real state. Requests that came
-    /// from the core are not reported back.
+    /// Show/hide the system keyboard by hand (dock button, core command, Home, the mouse pad),
+    /// move the dock above it, and (`report`) tell the core, so its `keyboard toggle` (hardware
+    /// keys, walpad-ctl) knows the real state. Requests that came from the core are not reported
+    /// back.
     fn set_keyboard(&mut self, on: bool, report: bool) {
+        self.focus.manual(on);
+        self.show_keyboard(on, report);
+    }
+
+    /// What the focus state machine decided (it already knows).
+    fn apply_focus(&mut self, a: Option<KbdAction>) {
+        match a {
+            Some(KbdAction::Show) => self.show_keyboard(true, true),
+            Some(KbdAction::Hide) => self.show_keyboard(false, true),
+            None => {}
+        }
+    }
+
+    fn show_keyboard(&mut self, on: bool, report: bool) {
         // the keyboard and the mouse pad share the bottom of the screen: one replaces the other
         if on {
             self.set_pad(false);
@@ -338,7 +368,8 @@ impl Shell {
                 Ok(hid) => {
                     self.kbd = Some(k);
                     if hid {
-                        // minimise key, or the user went Home
+                        // minimise key (down until the next focus-in), or the user went Home
+                        self.focus.manual(false);
                         self.bottom_changed();
                         self.report_keyboard();
                     }
@@ -364,6 +395,39 @@ impl Shell {
                 }
             }
         }
+        if let Some(mut s) = self.ime.take() {
+            match s.poll() {
+                Ok(evs) => {
+                    self.ime = Some(s);
+                    let now = self.now_ms();
+                    for ev in evs {
+                        let a = match ev {
+                            ImEvent::Connected => {
+                                self.focus.client_connected();
+                                None
+                            }
+                            ImEvent::FocusIn(ic) => {
+                                self.focus.focus_in(ic, now);
+                                None
+                            }
+                            ImEvent::FocusOut(ic) | ImEvent::Destroyed(ic) => {
+                                self.focus.focus_out(ic, now);
+                                None
+                            }
+                            ImEvent::ClientGone(w) => {
+                                self.focus.client_gone(w, now);
+                                None
+                            }
+                        };
+                        self.apply_focus(a);
+                    }
+                }
+                Err(e) => eprintln!("walpad-shell: input method (XIM) disabled: {}", e.0),
+            }
+        }
+        let now = self.now_ms();
+        let a = self.focus.tick(now);
+        self.apply_focus(a);
 
         let now = self.now_ms();
         for ev in self.core.tick(Instant::now()) {
@@ -375,9 +439,11 @@ impl Shell {
                 }
                 CoreEvent::Input(ShellInput::KeyboardShow) => self.set_keyboard(true, false),
                 CoreEvent::Input(ShellInput::KeyboardHide) => self.set_keyboard(false, false),
-                // a terminal is useless without keys: the keyboard comes up with it
+                // a terminal is useless without keys: XIM focus normally brings the keyboard up
+                // (st reports its focus); without an XIM connection it comes up as a fallback
                 CoreEvent::Apps(v) if v["kind"] == "started" && v["app"] == "terminal" => {
-                    self.set_keyboard(true, true)
+                    let a = self.focus.app_started(now, self.ime.is_some());
+                    self.apply_focus(a);
                 }
                 _ => {}
             }
@@ -411,6 +477,12 @@ impl Shell {
         if let Some(d) = self.rec.next_deadline() {
             wait = wait.min(d.saturating_sub(self.now_ms()));
         }
+        if let Some(d) = self.focus.next_deadline() {
+            wait = wait.min(d.saturating_sub(self.now_ms()));
+        }
+        if let Some(d) = self.dock.as_ref().and_then(|d| d.next_deadline()) {
+            wait = wait.min(d.as_millis() as u64);
+        }
         wait = wait.min(
             self.next_minute
                 .saturating_duration_since(Instant::now())
@@ -425,6 +497,7 @@ impl Shell {
         fds.extend(self.dock.as_ref().map(|d| d.wait_fd()));
         fds.extend(self.kbd.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.pad.as_ref().map(|p| p.wait_fd()));
+        fds.extend(self.ime.as_ref().map(|s| s.wait_fd()));
         walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }

@@ -1,12 +1,19 @@
-//! System dock (decision D3): a 56 px strip with Home, Keyboard and Close app, shown only while
-//! another app (Firefox, the terminal, ...) is in front, so those apps can always reach Home by
-//! touch. It is a separate small X window (WM_CLASS `walpad-dock`, `_NET_WM_WINDOW_TYPE_DOCK`) with
-//! a bottom strut, mapped while a non-shell window is `_NET_ACTIVE_WINDOW` and unmapped when the
-//! shell (or nothing) is active, so apps keep their whole area otherwise. It has its own X
-//! connection; every wait on it has a deadline (walpad-x).
+//! System dock (decision D3): a 56 px strip with Home, Keyboard and Close app for the app in front
+//! (Firefox, the terminal, ...), so those apps can always reach Home by touch.
+//!
+//! Collapsible (owner request 2026-11-10): while a non-shell window is `_NET_ACTIVE_WINDOW` only a
+//! small arrow handle (WM_CLASS `walpad-dock-handle`, 56x28, rounded top corners) sits at the
+//! right end of the bottom edge, without a strut, so the app keeps its whole height. A tap on the
+//! handle expands the strip (WM_CLASS `walpad-dock`) with a bottom strut (a managed 1x1
+//! `walpad-dock-strut` window) and turns the arrow down; the strip collapses again after an
+//! action, after `AUTO_COLLAPSE_MS` without a tap, or on a second tap on the handle. Both windows
+//! are override-redirect with WM_HINTS input=false, so they never take the focus. While the system
+//! keyboard or the mouse pad is up, handle and strip sit directly above it. The dock has its own
+//! X connection; every wait on it has a deadline (walpad-x).
 use crate::app::Cmd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::time::{Duration, Instant};
 use walpad_hw::Root;
 use walpad_ui::components::Painter;
 use walpad_ui::tokens::*;
@@ -24,6 +31,16 @@ use x11rb::wrapper::ConnectionExt as _;
 pub const DOCK_H: i32 = 56;
 pub const WM_CLASS_INSTANCE: &str = "walpad-dock";
 pub const WM_CLASS_CLASS: &str = "WalPad-Dock";
+pub const HANDLE_CLASS: &str = "walpad-dock-handle";
+/// The collapsed dock: an arrow handle, touch-wide, half a dock high.
+pub const HANDLE_W: i32 = 56;
+pub const HANDLE_H: i32 = 28;
+/// Gap between the handle and the right edge of the visible area.
+pub const HANDLE_MARGIN: i32 = SP_2;
+/// Rounded top corners of the handle (the SHAPE region and the drawing).
+pub const HANDLE_RADIUS: i32 = 10;
+/// The expanded strip folds back after this long without a tap.
+pub const AUTO_COLLAPSE_MS: u64 = 5000;
 /// Title of the shell window (what Home raises).
 pub const SHELL_TITLE: &str = crate::window::TITLE;
 
@@ -55,6 +72,71 @@ pub fn visible_area(shell_w: i32, shell_h: i32) -> (i32, i32) {
 /// system keyboard while it is up (`kbd_h` = its height, 0 when hidden).
 pub fn dock_rect(area: (i32, i32), kbd_h: i32) -> Rect {
     Rect::new(0, area.1 - kbd_h - DOCK_H, area.0, DOCK_H)
+}
+
+/// The handle: at the right end, directly on top of the strip when expanded, else on the bottom
+/// edge of the visible area (above the keyboard / mouse pad while one is up).
+pub fn handle_rect(area: (i32, i32), kbd_h: i32, expanded: bool) -> Rect {
+    let bottom = if expanded {
+        dock_rect(area, kbd_h).y
+    } else {
+        area.1 - kbd_h
+    };
+    Rect::new(
+        area.0 - HANDLE_W - HANDLE_MARGIN,
+        bottom - HANDLE_H,
+        HANDLE_W,
+        HANDLE_H,
+    )
+}
+
+/// The handle's outline as rectangles (SHAPE bounding region, handle-local): rounded top
+/// corners, square bottom (it sits on the screen edge or on the strip).
+pub fn handle_shape() -> Vec<Rect> {
+    let r = HANDLE_RADIUS;
+    let mut out = Vec::new();
+    for y in 0..r {
+        let dy = (r - y) as f32 - 0.5;
+        let inset = (r as f32 - ((r * r) as f32 - dy * dy).max(0.0).sqrt()).round() as i32;
+        out.push(Rect::new(inset, y, HANDLE_W - 2 * inset, 1));
+    }
+    out.push(Rect::new(0, r, HANDLE_W, HANDLE_H - r));
+    out
+}
+
+/// Draw the handle with its top-left corner at `at` (in its own window: (0, 0)). Only the shaped
+/// area is painted: the opaque strip colour, a line-art outline (open at the bottom) and an arrow
+/// pointing where a tap moves the strip: up = expand, down = collapse.
+pub fn render_handle(p: &mut Painter, at: (i32, i32), expanded: bool, pressed: bool) {
+    let r = Rect::new(at.0, at.1, HANDLE_W, HANDLE_H);
+    // taller than the window so the bottom corners are square (the window clips them)
+    let tall = Rect::new(r.x, r.y, r.w, r.h + HANDLE_RADIUS + 2);
+    let strip = SURFACE_STRONG.over(BG);
+    let fill = if pressed {
+        PRESSED_TINT.over(strip)
+    } else {
+        strip
+    };
+    // paint into a handle-sized canvas (it clips the bottom corners square), then copy only the
+    // shaped rows, so whatever lies around the rounded corners stays as it is
+    let Some(mut c) = Canvas::new(HANDLE_W as u32, HANDLE_H as u32, BG) else {
+        return;
+    };
+    let local = Rect::new(0, 0, tall.w, tall.h);
+    c.rrect(local, HANDLE_RADIUS, fill);
+    c.rrect_stroke(local, HANDLE_RADIUS, OUTLINE_W, CARD_BORDER);
+    let (cx, cy) = (HANDLE_W as f32 / 2.0, HANDLE_H as f32 / 2.0 + 1.0);
+    let (dx, dy) = (8.0, 4.5);
+    let (tip, base) = if expanded {
+        (cy + dy, cy - dy)
+    } else {
+        (cy - dy, cy + dy)
+    };
+    c.line((cx - dx, base), (cx, tip), 2.0, TEXT);
+    c.line((cx, tip), (cx + dx, base), 2.0, TEXT);
+    for s in handle_shape() {
+        p.cv.copy_rect_from_at(&c, (r.x, r.y), Rect::new(r.x + s.x, r.y + s.y, s.w, s.h));
+    }
 }
 
 /// `_NET_WM_STRUT_PARTIAL`: struts count from the screen edge, so the part of the root below the
@@ -140,10 +222,10 @@ pub fn app_for_class(apps: &[(String, String)], wm_class: &[String]) -> Option<S
         .map(|(id, _)| id.clone())
 }
 
-/// Should the dock be up? `active` is `_NET_ACTIVE_WINDOW` (0 = none). The dock's own window being
-/// active (a tap on it) changes nothing.
-pub fn wants_visible(active: u32, shell: u32, dock: u32, currently: bool) -> bool {
-    if active == dock {
+/// Should the dock (its handle) be up? `active` is `_NET_ACTIVE_WINDOW` (0 = none). One of the
+/// dock's own windows being active (a tap on it) changes nothing.
+pub fn wants_visible(active: u32, shell: u32, dock: &[u32], currently: bool) -> bool {
+    if dock.contains(&active) {
         currently
     } else {
         active != 0 && active != shell
@@ -163,6 +245,47 @@ pub fn command_for(
     }
 }
 
+/// Expanded / collapsed state of the strip with its auto-collapse timer (milliseconds on any
+/// monotonic clock).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Fold {
+    pub expanded: bool,
+    collapse_at: Option<u64>,
+}
+
+impl Fold {
+    /// A tap on the handle: expand (with the timer) or collapse.
+    pub fn toggle(&mut self, now: u64) {
+        if self.expanded {
+            self.collapse();
+        } else {
+            self.expanded = true;
+            self.collapse_at = Some(now + AUTO_COLLAPSE_MS);
+        }
+    }
+    /// A touch on the expanded strip restarts the timer.
+    pub fn touched(&mut self, now: u64) {
+        if self.expanded {
+            self.collapse_at = Some(now + AUTO_COLLAPSE_MS);
+        }
+    }
+    pub fn collapse(&mut self) {
+        self.expanded = false;
+        self.collapse_at = None;
+    }
+    /// True when the timer just folded the strip.
+    pub fn tick(&mut self, now: u64) -> bool {
+        if self.collapse_at.is_some_and(|t| now >= t) {
+            self.collapse();
+            return true;
+        }
+        false
+    }
+    pub fn deadline(&self) -> Option<u64> {
+        self.collapse_at
+    }
+}
+
 struct Atoms {
     active: u32,
     window_type: u32,
@@ -173,26 +296,44 @@ struct Atoms {
     utf8: u32,
 }
 
+/// What is pressed (highlighted until the release).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pressed {
+    Handle,
+    Button(DockButton),
+}
+
 pub struct Dock {
     xc: XConn,
+    /// the strip (override-redirect: openbox moved a managed strip to the top of the screen)
     win: XWindow,
-    /// 1x1 managed window that only carries the strut (the strip itself is override-redirect so
-    /// openbox cannot move it; openbox only honours struts of windows it manages)
+    /// the arrow handle (override-redirect, SHAPE-d with rounded top corners when available)
+    handle: XWindow,
+    /// 1x1 managed window that only carries the strut while the strip is expanded (openbox only
+    /// honours struts of windows it manages)
     strut_win: XWindow,
     shell: XWindow,
     gc: u32,
+    handle_gc: u32,
     depth: u8,
     atoms: Atoms,
     apps: Vec<(String, String)>,
     root_h: i32,
     area: (i32, i32),
-    /// Height of the system keyboard below the dock (0 while it is hidden).
+    /// Height of the system keyboard / mouse pad below the dock (0 while hidden).
     kbd_h: i32,
+    /// the handle is up (a foreign app is active)
     mapped: bool,
+    fold: Fold,
     active: u32,
-    pressed: Option<DockButton>,
+    pressed: Option<Pressed>,
     canvas: Canvas,
+    handle_canvas: Canvas,
+    epoch: Instant,
 }
+
+/// WM_HINTS flags=InputHint, input=false: never take the keyboard focus from the app in front.
+const NO_INPUT: [u32; 9] = [1, 0, 0, 0, 0, 0, 0, 0, 0];
 
 impl Dock {
     pub fn open(
@@ -219,71 +360,73 @@ impl Dock {
         let depth = setup.roots.first().map(|s| s.root_depth).unwrap_or(24);
         let root_h = conn.get_geometry(xc.root)?.reply()?.height as i32;
         let area = visible_area(shell_size.0, shell_size.1);
+        let events = EventMask::BUTTON_PRESS
+            | EventMask::BUTTON_RELEASE
+            | EventMask::EXPOSURE
+            | EventMask::STRUCTURE_NOTIFY;
+        let make = |r: Rect, instance: &str, class: &str| -> Result<(XWindow, u32), XError> {
+            let win = conn.generate_id()?;
+            let aux = CreateWindowAux::new()
+                .event_mask(events)
+                .background_pixel(0x001A_1D21)
+                .override_redirect(1);
+            conn.create_window(
+                0,
+                win,
+                xc.root,
+                r.x as i16,
+                r.y as i16,
+                r.w as u16,
+                r.h as u16,
+                0,
+                WindowClass::INPUT_OUTPUT,
+                0,
+                &aux,
+            )?;
+            let gc = conn.generate_id()?;
+            conn.create_gc(gc, win, &CreateGCAux::new())?;
+            let wm_class = format!("{instance}\0{class}\0");
+            conn.change_property8(
+                PropMode::REPLACE,
+                win,
+                AtomEnum::WM_CLASS,
+                AtomEnum::STRING,
+                wm_class.as_bytes(),
+            )?;
+            conn.change_property8(
+                PropMode::REPLACE,
+                win,
+                AtomEnum::WM_NAME,
+                AtomEnum::STRING,
+                instance.as_bytes(),
+            )?;
+            conn.change_property8(
+                PropMode::REPLACE,
+                win,
+                atoms.net_name,
+                atoms.utf8,
+                instance.as_bytes(),
+            )?;
+            conn.change_property32(
+                PropMode::REPLACE,
+                win,
+                atoms.window_type,
+                AtomEnum::ATOM,
+                &[atoms.type_dock],
+            )?;
+            conn.change_property32(
+                PropMode::REPLACE,
+                win,
+                AtomEnum::WM_HINTS,
+                AtomEnum::WM_HINTS,
+                &NO_INPUT,
+            )?;
+            Ok((win, gc))
+        };
         let r = dock_rect(area, 0);
-        let win = conn.generate_id()?;
-        let aux = CreateWindowAux::new()
-            .event_mask(
-                EventMask::BUTTON_PRESS
-                    | EventMask::BUTTON_RELEASE
-                    | EventMask::EXPOSURE
-                    | EventMask::STRUCTURE_NOTIFY,
-            )
-            .background_pixel(0x001A_1D21)
-            // openbox placed the managed strip at the top of the screen over the app, ignoring
-            // the requested position: the strip is unmanaged and placed by us
-            .override_redirect(1);
-        conn.create_window(
-            0,
-            win,
-            xc.root,
-            r.x as i16,
-            r.y as i16,
-            r.w as u16,
-            r.h as u16,
-            0,
-            WindowClass::INPUT_OUTPUT,
-            0,
-            &aux,
-        )?;
-        let gc = conn.generate_id()?;
-        conn.create_gc(gc, win, &CreateGCAux::new())?;
-        let class = format!("{WM_CLASS_INSTANCE}\0{WM_CLASS_CLASS}\0");
-        conn.change_property8(
-            PropMode::REPLACE,
-            win,
-            AtomEnum::WM_CLASS,
-            AtomEnum::STRING,
-            class.as_bytes(),
-        )?;
-        conn.change_property8(
-            PropMode::REPLACE,
-            win,
-            AtomEnum::WM_NAME,
-            AtomEnum::STRING,
-            WM_CLASS_INSTANCE.as_bytes(),
-        )?;
-        conn.change_property8(
-            PropMode::REPLACE,
-            win,
-            atoms.net_name,
-            atoms.utf8,
-            WM_CLASS_INSTANCE.as_bytes(),
-        )?;
-        conn.change_property32(
-            PropMode::REPLACE,
-            win,
-            atoms.window_type,
-            AtomEnum::ATOM,
-            &[atoms.type_dock],
-        )?;
-        // never take the keyboard focus from the app in front: WM_HINTS flags=InputHint, input=false
-        conn.change_property32(
-            PropMode::REPLACE,
-            win,
-            AtomEnum::WM_HINTS,
-            AtomEnum::WM_HINTS,
-            &[1, 0, 0, 0, 0, 0, 0, 0, 0],
-        )?;
+        let (win, gc) = make(r, WM_CLASS_INSTANCE, WM_CLASS_CLASS)?;
+        let (handle, handle_gc) = make(handle_rect(area, 0, false), HANDLE_CLASS, HANDLE_CLASS)?;
+        shape_handle(&xc, handle);
         let strut_win = conn.generate_id()?;
         conn.create_window(
             0,
@@ -310,7 +453,7 @@ impl Dock {
             strut_win,
             AtomEnum::WM_HINTS,
             AtomEnum::WM_HINTS,
-            &[1, 0, 0, 0, 0, 0, 0, 0, 0],
+            &NO_INPUT,
         )?;
         conn.change_property8(
             PropMode::REPLACE,
@@ -329,9 +472,11 @@ impl Dock {
         let mut d = Dock {
             xc,
             win,
+            handle,
             strut_win,
             shell,
             gc,
+            handle_gc,
             depth,
             atoms,
             apps,
@@ -339,9 +484,13 @@ impl Dock {
             area,
             kbd_h: 0,
             mapped: false,
+            fold: Fold::default(),
             active: 0,
             pressed: None,
             canvas: Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?,
+            handle_canvas: Canvas::new(HANDLE_W as u32, HANDLE_H as u32, BG)
+                .ok_or("dock canvas")?,
+            epoch: Instant::now(),
         };
         d.write_strut()?;
         let root = d.xc.root;
@@ -357,11 +506,32 @@ impl Dock {
     pub fn wait_fd(&self) -> &UnixStream {
         &self.xc.wait_fd
     }
+    /// The strip window.
     pub fn window(&self) -> XWindow {
         self.win
     }
+    /// The handle window.
+    pub fn handle_window(&self) -> XWindow {
+        self.handle
+    }
+    /// The handle is up (a foreign app is in front).
     pub fn visible(&self) -> bool {
         self.mapped
+    }
+    /// The strip is expanded.
+    pub fn expanded(&self) -> bool {
+        self.mapped && self.fold.expanded
+    }
+
+    fn now_ms(&self) -> u64 {
+        self.epoch.elapsed().as_millis() as u64
+    }
+
+    /// Time until the strip folds back by itself (None while collapsed).
+    pub fn next_deadline(&self) -> Option<Duration> {
+        self.fold
+            .deadline()
+            .map(|t| Duration::from_millis(t.saturating_sub(self.now_ms())))
     }
 
     fn write_strut(&self) -> Result<(), XError> {
@@ -417,7 +587,8 @@ impl Dock {
             .unwrap_or_default()
     }
 
-    /// The shell window changed size (rotation): move and resize the strip and its strut.
+    /// The shell window changed size (rotation): move and resize the strip, the handle and the
+    /// strut.
     pub fn set_shell_size(&mut self, w: i32, h: i32) -> Result<(), XError> {
         let area = visible_area(w, h);
         if area == self.area {
@@ -426,64 +597,68 @@ impl Dock {
         self.area = area;
         let r = dock_rect(area, self.kbd_h);
         self.canvas = Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?;
-        self.place(r)
+        self.place()
     }
 
-    /// The system keyboard appeared (its height) or went away (0): stack the strip directly above
-    /// it and extend the strut over both.
+    /// The system keyboard / mouse pad appeared (its height) or went away (0): stack handle and
+    /// strip directly above it and extend the strut over both.
     pub fn set_keyboard_height(&mut self, kbd_h: i32) -> Result<(), XError> {
         if kbd_h == self.kbd_h {
             return Ok(());
         }
         self.kbd_h = kbd_h;
-        self.place(dock_rect(self.area, kbd_h))
+        self.place()
     }
 
-    fn place(&mut self, r: Rect) -> Result<(), XError> {
-        self.xc.conn.configure_window(
-            self.win,
-            &ConfigureWindowAux::new()
-                .x(r.x)
-                .y(r.y)
-                .width(r.w as u32)
-                .height(r.h as u32),
+    fn configure(&self, w: XWindow, r: Rect, raise: bool) -> Result<(), XError> {
+        let mut aux = ConfigureWindowAux::new()
+            .x(r.x)
+            .y(r.y)
+            .width(r.w as u32)
+            .height(r.h as u32);
+        if raise {
+            aux = aux.stack_mode(StackMode::ABOVE);
+        }
+        self.xc.conn.configure_window(w, &aux)?;
+        Ok(())
+    }
+
+    /// Put both windows where the current state wants them (and the strut).
+    fn place(&mut self) -> Result<(), XError> {
+        let expanded = self.fold.expanded;
+        self.configure(self.win, dock_rect(self.area, self.kbd_h), false)?;
+        self.configure(
+            self.handle,
+            handle_rect(self.area, self.kbd_h, expanded),
+            false,
         )?;
         self.write_strut()?;
         self.xc.conn.flush()?;
         Ok(())
     }
 
+    /// Show or hide everything (the handle follows the active window; the strip starts folded).
     fn set_mapped(&mut self, on: bool) -> Result<(), XError> {
         if on == self.mapped {
             if on {
-                // the window manager restacks the apps it manages; keep the unmanaged strip on top
-                self.xc.conn.configure_window(
-                    self.win,
-                    &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
-                )?;
+                // the window manager restacks the apps it manages; keep the unmanaged windows on
+                // top
+                self.raise()?;
                 self.xc.conn.flush()?;
             }
             return Ok(());
         }
         self.mapped = on;
+        self.pressed = None;
         if on {
-            self.xc.conn.map_window(self.strut_win)?;
-            self.xc.conn.map_window(self.win)?;
-            // openbox places a newly mapped window itself (it ended up at the top of the screen,
-            // covering the app): ask for our place again once mapped, and put the strip on top
-            // (a remapped window keeps its old place in the stack)
-            let r = dock_rect(self.area, self.kbd_h);
-            self.xc.conn.configure_window(
-                self.win,
-                &ConfigureWindowAux::new()
-                    .x(r.x)
-                    .y(r.y)
-                    .width(r.w as u32)
-                    .height(r.h as u32)
-                    .stack_mode(StackMode::ABOVE),
-            )?;
+            self.fold.collapse();
+            self.xc.conn.map_window(self.handle)?;
+            // openbox places a newly mapped window itself: ask for our place again once mapped,
+            // and put it on top (a remapped window keeps its old place in the stack)
+            self.configure(self.handle, handle_rect(self.area, self.kbd_h, false), true)?;
         } else {
-            self.pressed = None;
+            self.fold.collapse();
+            self.xc.conn.unmap_window(self.handle)?;
             self.xc.conn.unmap_window(self.win)?;
             self.xc.conn.unmap_window(self.strut_win)?;
         }
@@ -491,13 +666,60 @@ impl Dock {
         Ok(())
     }
 
+    fn raise(&self) -> Result<(), XError> {
+        let above = ConfigureWindowAux::new().stack_mode(StackMode::ABOVE);
+        if self.fold.expanded {
+            self.xc.conn.configure_window(self.win, &above)?;
+        }
+        self.xc.conn.configure_window(self.handle, &above)?;
+        Ok(())
+    }
+
+    /// Expand or fold the strip (the handle moves with it, the strut comes and goes with it).
+    fn apply_fold(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
+        let expanded = self.fold.expanded;
+        if expanded {
+            self.write_strut()?;
+            self.xc.conn.map_window(self.strut_win)?;
+            self.xc.conn.map_window(self.win)?;
+            self.configure(self.win, dock_rect(self.area, self.kbd_h), true)?;
+        } else {
+            self.xc.conn.unmap_window(self.win)?;
+            self.xc.conn.unmap_window(self.strut_win)?;
+        }
+        self.configure(
+            self.handle,
+            handle_rect(self.area, self.kbd_h, expanded),
+            true,
+        )?;
+        if expanded {
+            // paint right away: a remapped window is not always sent an Expose
+            self.redraw(fonts)?;
+        }
+        self.redraw_handle(fonts)?;
+        self.xc.conn.flush()?;
+        Ok(())
+    }
+
+    fn collapse(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
+        if self.fold.expanded {
+            self.fold.collapse();
+            self.apply_fold(fonts)?;
+        }
+        Ok(())
+    }
+
     fn redraw(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
+        let pressed = match self.pressed {
+            Some(Pressed::Button(b)) => Some(b),
+            _ => None,
+        };
         render(
             &mut Painter {
                 cv: &mut self.canvas,
                 fonts,
             },
-            self.pressed,
+            pressed,
         );
         crate::present::present(
             &self.xc.conn,
@@ -506,6 +728,26 @@ impl Dock {
             self.depth,
             &self.canvas,
             self.canvas.bounds(),
+        )
+    }
+
+    fn redraw_handle(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
+        render_handle(
+            &mut Painter {
+                cv: &mut self.handle_canvas,
+                fonts,
+            },
+            (0, 0),
+            self.fold.expanded,
+            self.pressed == Some(Pressed::Handle),
+        );
+        crate::present::present(
+            &self.xc.conn,
+            self.handle,
+            self.handle_gc,
+            self.depth,
+            &self.handle_canvas,
+            self.handle_canvas.bounds(),
         )
     }
 
@@ -528,7 +770,8 @@ impl Dock {
         Ok(())
     }
 
-    /// Handle everything the server has sent (non-blocking); returns the commands for the core.
+    /// Handle everything the server has sent (non-blocking) and the auto-collapse timer; returns
+    /// the commands for the core.
     pub fn poll(&mut self, fonts: &mut Fonts) -> Result<Vec<Cmd>, XError> {
         let mut cmds = Vec::new();
         let (w, _) = self.area;
@@ -536,24 +779,53 @@ impl Dock {
             match ev {
                 Event::PropertyNotify(e) if e.atom == self.atoms.active => {
                     self.active = self.read_active();
-                    let on = wants_visible(self.active, self.shell, self.win, self.mapped);
+                    let mine = [self.win, self.handle, self.strut_win];
+                    let on = wants_visible(self.active, self.shell, &mine, self.mapped);
                     let was = self.mapped;
                     self.set_mapped(on)?;
                     if on && !was {
                         // paint right away: a remapped window is not always sent an Expose
-                        self.redraw(fonts)?;
+                        self.redraw_handle(fonts)?;
                     }
                 }
                 Event::Expose(e) if e.window == self.win && e.count == 0 => {
                     self.redraw(fonts)?;
                 }
+                Event::Expose(e) if e.window == self.handle && e.count == 0 => {
+                    self.redraw_handle(fonts)?;
+                }
+                Event::ButtonPress(e) if e.event == self.handle && e.detail == 1 => {
+                    self.pressed = Some(Pressed::Handle);
+                    self.redraw_handle(fonts)?;
+                }
+                Event::ButtonRelease(e) if e.event == self.handle && e.detail == 1 => {
+                    let inside = Rect::new(0, 0, HANDLE_W, HANDLE_H)
+                        .contains(e.event_x as i32, e.event_y as i32);
+                    let down = self.pressed.take();
+                    if inside && down == Some(Pressed::Handle) {
+                        let now = self.now_ms();
+                        self.fold.toggle(now);
+                        self.apply_fold(fonts)?;
+                    } else {
+                        self.redraw_handle(fonts)?;
+                    }
+                }
                 Event::ButtonPress(e) if e.event == self.win && e.detail == 1 => {
-                    self.pressed = button_at(w, e.event_x as i32, e.event_y as i32);
+                    self.pressed =
+                        button_at(w, e.event_x as i32, e.event_y as i32).map(Pressed::Button);
+                    let now = self.now_ms();
+                    self.fold.touched(now);
                     self.redraw(fonts)?;
                 }
                 Event::ButtonRelease(e) if e.event == self.win && e.detail == 1 => {
                     let hit = button_at(w, e.event_x as i32, e.event_y as i32);
-                    let down = self.pressed.take();
+                    let down = match self.pressed.take() {
+                        Some(Pressed::Button(b)) => Some(b),
+                        _ => None,
+                    };
+                    let now = self.now_ms();
+                    self.fold.touched(now);
+                    self.redraw(fonts)?;
                     if let (Some(b), true) = (hit, hit == down) {
                         if b == DockButton::Home {
                             self.raise_shell()?;
@@ -564,17 +836,23 @@ impl Dock {
                             let class = self.class_of(self.active);
                             cmds.extend(command_for(b, &self.apps, &class));
                         }
+                        // an action folds the strip back
+                        self.collapse(fonts)?;
                     }
-                    self.redraw(fonts)?;
                 }
                 Event::Error(e) => return Err(XError(format!("dock X error: {e:?}"))),
                 _ => {}
             }
         }
+        let now = self.now_ms();
+        if self.fold.tick(now) {
+            self.pressed = None;
+            self.apply_fold(fonts)?;
+        }
         Ok(cmds)
     }
 
-    /// For tests and diagnostics: is the window currently mapped according to the server?
+    /// For tests and diagnostics: is the strip currently mapped according to the server?
     pub fn server_mapped(&self) -> bool {
         self.xc
             .conn
@@ -583,6 +861,38 @@ impl Dock {
             .and_then(|c| c.reply().ok())
             .is_some_and(|a| a.map_state != MapState::UNMAPPED)
     }
+}
+
+/// Round the handle's top corners with the SHAPE extension (a plain rectangle without it).
+fn shape_handle(xc: &XConn, win: XWindow) {
+    use x11rb::connection::RequestConnection as _;
+    use x11rb::protocol::shape::{ConnectionExt as _, SK, SO};
+    use x11rb::protocol::xproto::{ClipOrdering, Rectangle};
+    let conn = &xc.conn;
+    if !matches!(
+        conn.extension_information(x11rb::protocol::shape::X11_EXTENSION_NAME),
+        Ok(Some(_))
+    ) {
+        return;
+    }
+    let rects: Vec<Rectangle> = handle_shape()
+        .iter()
+        .map(|r| Rectangle {
+            x: r.x as i16,
+            y: r.y as i16,
+            width: r.w as u16,
+            height: r.h as u16,
+        })
+        .collect();
+    let _ = conn.shape_rectangles(
+        SO::SET,
+        SK::BOUNDING,
+        ClipOrdering::UNSORTED,
+        win,
+        0,
+        0,
+        &rects,
+    );
 }
 
 #[cfg(test)]
@@ -646,18 +956,89 @@ mod tests {
 
     #[test]
     fn visibility_follows_the_active_window() {
-        let (shell, dock) = (10, 20);
-        assert!(!wants_visible(0, shell, dock, false), "nothing active");
+        let (shell, dock) = (10, [20, 21]);
+        assert!(!wants_visible(0, shell, &dock, false), "nothing active");
         assert!(
-            !wants_visible(shell, shell, dock, true),
+            !wants_visible(shell, shell, &dock, true),
             "the shell is in front"
         );
-        assert!(wants_visible(77, shell, dock, false), "a foreign window");
+        assert!(wants_visible(77, shell, &dock, false), "a foreign window");
         assert!(
-            wants_visible(dock, shell, dock, true),
+            wants_visible(20, shell, &dock, true),
             "a tap on the dock keeps it"
         );
-        assert!(!wants_visible(dock, shell, dock, false));
+        assert!(
+            wants_visible(21, shell, &dock, true),
+            "... or on its handle"
+        );
+        assert!(!wants_visible(20, shell, &dock, false));
+    }
+
+    #[test]
+    fn handle_sits_at_the_right_end_of_the_bottom_edge_or_on_the_strip() {
+        // collapsed: on the bottom edge, nothing reserved
+        assert_eq!(
+            handle_rect((800, 1280), 0, false),
+            Rect::new(800 - 56 - 8, 1252, 56, 28)
+        );
+        assert_eq!(
+            handle_rect((1280, 800), 0, false),
+            Rect::new(1280 - 56 - 8, 772, 56, 28)
+        );
+        // expanded: directly on top of the strip
+        assert_eq!(handle_rect((800, 1280), 0, true).bottom(), 1224);
+        assert_eq!(handle_rect((1280, 800), 0, true).bottom(), 744);
+        // with the keyboard (or the mouse pad) up: above it, folded or not
+        assert_eq!(handle_rect((800, 1280), 384, false).bottom(), 896);
+        assert_eq!(handle_rect((800, 1280), 384, true).bottom(), 840);
+        assert_eq!(handle_rect((1280, 800), 240, false).bottom(), 560);
+        assert_eq!(handle_rect((1280, 800), 240, true).bottom(), 504);
+        for area in [(800, 1280), (1280, 800)] {
+            let h = handle_rect(area, 0, false);
+            assert!(h.x >= 0 && h.right() <= area.0);
+            assert!(h.w >= TOUCH_MIN, "touch-wide");
+        }
+    }
+
+    #[test]
+    fn handle_shape_rounds_only_the_top_corners() {
+        let s = handle_shape();
+        let inside = |x, y| s.iter().any(|r| r.contains(x, y));
+        assert!(!inside(0, 0) && !inside(HANDLE_W - 1, 0), "top corners cut");
+        assert!(inside(HANDLE_W / 2, 0), "top edge");
+        assert!(inside(0, HANDLE_H - 1) && inside(HANDLE_W - 1, HANDLE_H - 1));
+        assert!(s
+            .iter()
+            .all(|r| r.x >= 0 && r.right() <= HANDLE_W && r.bottom() <= HANDLE_H));
+        // rows widen monotonically down to the full width
+        let widths: Vec<i32> = s.iter().map(|r| r.w).collect();
+        assert!(widths.windows(2).all(|p| p[0] <= p[1]));
+        assert_eq!(*widths.last().unwrap(), HANDLE_W);
+    }
+
+    #[test]
+    fn fold_expands_on_a_tap_and_collapses_by_itself() {
+        let mut f = Fold::default();
+        assert!(!f.expanded, "collapsed by default");
+        assert_eq!(f.deadline(), None);
+        f.toggle(1000);
+        assert!(f.expanded);
+        assert_eq!(f.deadline(), Some(1000 + AUTO_COLLAPSE_MS));
+        // a touch on the strip restarts the timer
+        f.touched(3000);
+        assert!(!f.tick(1000 + AUTO_COLLAPSE_MS));
+        assert!(f.expanded);
+        assert!(f.tick(3000 + AUTO_COLLAPSE_MS), "folds after 5 s idle");
+        assert!(!f.expanded);
+        assert!(!f.tick(99_999), "only once");
+        // a second tap on the handle folds it at once
+        f.toggle(0);
+        f.toggle(10);
+        assert!(!f.expanded);
+        assert_eq!(f.deadline(), None);
+        // touches while folded do nothing
+        f.touched(20);
+        assert_eq!(f.deadline(), None);
     }
 
     #[test]

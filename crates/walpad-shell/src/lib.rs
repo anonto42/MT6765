@@ -10,6 +10,7 @@ pub mod device_screen;
 pub mod dock;
 pub mod gesture;
 pub mod home;
+pub mod ime;
 pub mod keyboard;
 pub mod mousepad;
 pub mod network;

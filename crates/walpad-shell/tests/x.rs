@@ -27,10 +27,18 @@ const STRIP: Color = SURFACE_STRONG.over(BG);
 fn display_num() -> u32 {
     use std::sync::atomic::AtomicU32;
     static NEXT: AtomicU32 = AtomicU32::new(0);
-    200 + (std::process::id() % 100) * 8 + NEXT.fetch_add(1, Ordering::SeqCst) % 8
+    // 16 per process: more than the tests in this file (a killed Xvfb leaves its socket behind)
+    200 + (std::process::id() % 100) * 16 + NEXT.fetch_add(1, Ordering::SeqCst) % 16
 }
 
-struct Xvfb(Child, PathBuf);
+/// The server, its socket, and the turn of this test: the X tests run one at a time (they drive
+/// the shell with real clicks and timeouts; nine shells at once on a loaded host missed clicks).
+struct Xvfb(
+    Child,
+    PathBuf,
+    #[allow(dead_code)] std::sync::MutexGuard<'static, ()>,
+);
+static X_TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
 impl Drop for Xvfb {
     fn drop(&mut self) {
         let _ = self.0.kill();
@@ -38,6 +46,15 @@ impl Drop for Xvfb {
     }
 }
 fn xvfb(n: u32) -> Option<Xvfb> {
+    let turn = X_TURN.lock().unwrap_or_else(|e| e.into_inner());
+    // a non-root Xvfb does not create the socket directory itself; parallel servers raced on it
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let d = Path::new("/tmp/.X11-unix");
+        if std::fs::create_dir(d).is_ok() {
+            let _ = std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o1777));
+        }
+    }
     let c = Command::new("Xvfb")
         .args([
             &format!(":{n}"),
@@ -57,7 +74,7 @@ fn xvfb(n: u32) -> Option<Xvfb> {
     while !sock.exists() && t.elapsed() < Duration::from_secs(5) {
         std::thread::sleep(Duration::from_millis(50));
     }
-    sock.exists().then_some(Xvfb(c, sock))
+    sock.exists().then_some(Xvfb(c, sock, turn))
 }
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
     let t = Instant::now();
@@ -634,8 +651,26 @@ fn stack_pos(c: &XConn, w: Window) -> usize {
         .unwrap()
 }
 
+/// Tap the dock's handle (wherever it is) and wait for the strip to unfold.
+fn expand_dock(probe: &Probe, handle: Window, strip: Window) {
+    let p = &probe.0;
+    wait_for("dock handle mapped", || is_mapped(p, handle));
+    let (x, y, w, h) = geom(p, handle);
+    probe.click(x + w as i16 / 2, y + h as i16 / 2);
+    wait_for("dock strip expanded", || is_mapped(p, strip));
+}
+
+fn dock_windows(p: &XConn) -> (Window, Window, Window) {
+    (
+        find_by_class(p, b"walpad-dock\0").expect("dock strip window"),
+        find_by_class(p, b"walpad-dock-handle\0").expect("dock handle window"),
+        find_by_class(p, b"walpad-dock-strut\0").expect("dock strut window"),
+    )
+}
+
 #[test]
 fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
+    use walpad_shell::dock::{handle_rect, AUTO_COLLAPSE_MS};
     use x11rb::protocol::xproto::{CreateWindowAux, WindowClass};
     let n = display_num();
     let Some(x) = xvfb(n) else {
@@ -649,22 +684,24 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     let probe = Probe(walpad_x::connect(&x.1).unwrap());
     wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
     let shell = probe.find_shell().expect("shell window");
-    let dock = find_by_class(&probe.0, b"walpad-dock\0").expect("dock window exists");
-    let c = &probe.0.conn;
+    let p = &probe.0;
+    let (dock, handle, strut_win) = dock_windows(p);
+    let c = &p.conn;
 
-    // nothing active: the dock is not mapped, so apps keep their whole area
-    assert!(!is_mapped(&probe.0, dock));
+    // nothing active: nothing of the dock is mapped, so apps keep their whole area
+    assert!(!is_mapped(p, dock) && !is_mapped(p, handle) && !is_mapped(p, strut_win));
 
-    // a foreign app (WM_CLASS st) becomes active: the dock appears at the bottom, strut and type set
+    // a foreign app (WM_CLASS st) becomes active: only the handle appears (collapsed by default),
+    // at the right end of the bottom edge, with no strut
     let app = c.generate_id().unwrap();
     c.create_window(
         0,
         app,
-        probe.0.root,
+        p.root,
         0,
         0,
         800,
-        1224,
+        1280,
         0,
         WindowClass::INPUT_OUTPUT,
         0,
@@ -681,48 +718,63 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     .unwrap();
     c.map_window(app).unwrap();
     c.flush().unwrap();
-    set_active(&probe.0, app);
-    wait_for("dock mapped for a foreign window", || {
-        is_mapped(&probe.0, dock)
+    set_active(p, app);
+    wait_for("handle mapped for a foreign window", || {
+        is_mapped(p, handle)
     });
-    let g = c.get_geometry(dock).unwrap().reply().unwrap();
-    assert_eq!((g.x, g.y, g.width, g.height), (0, 1224, 800, 56));
-    // the strip is override-redirect (openbox moved a managed strip to the top); a managed 1x1
-    // window carries the strut and the dock type
-    assert!(
-        c.get_window_attributes(dock)
+    let hr = handle_rect((800, 1280), 0, false);
+    assert_eq!(
+        geom(p, handle),
+        (hr.x as i16, hr.y as i16, hr.w as u16, hr.h as u16)
+    );
+    assert_eq!(hr.bottom(), 1280, "on the bottom edge");
+    assert!(!is_mapped(p, dock), "collapsed by default");
+    assert!(!is_mapped(p, strut_win), "no strut while collapsed");
+    for w in [dock, handle] {
+        let a = c.get_window_attributes(w).unwrap().reply().unwrap();
+        assert!(a.override_redirect, "never managed (or moved) by openbox");
+        let hints = c
+            .get_property(false, w, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 0, 9)
             .unwrap()
             .reply()
             .unwrap()
-            .override_redirect
-    );
-    let strut_win = find_by_class(&probe.0, b"walpad-dock-strut\0").expect("strut window");
-    assert!(is_mapped(&probe.0, strut_win));
-    let strut = c
-        .get_property(
-            false,
-            strut_win,
-            atom(&probe.0, "_NET_WM_STRUT_PARTIAL"),
-            AtomEnum::CARDINAL,
-            0,
-            12,
-        )
-        .unwrap()
-        .reply()
-        .unwrap()
-        .value32()
-        .unwrap()
-        .collect::<Vec<_>>();
+            .value32()
+            .unwrap()
+            .collect::<Vec<_>>();
+        assert_eq!(&hints[..2], &[1, 0], "WM_HINTS input=false");
+    }
+    // the handle is drawn: the strip colour inside, an arrow in white
+    wait_for("handle painted", || {
+        let img = probe.image(handle, hr.w as u16, hr.h as u16);
+        px(&img, hr.w as usize, 4, 20) == (STRIP.r, STRIP.g, STRIP.b)
+            && count(
+                &img,
+                hr.w as usize,
+                0,
+                hr.w as usize,
+                0,
+                hr.h as usize,
+                TEXT,
+            ) > 10
+    });
+
+    // a tap on the handle unfolds the strip at the bottom with its strut; the handle moves on top
+    expand_dock(&probe, handle, dock);
+    assert_eq!(geom(p, dock), (0, 1224, 800, 56));
+    assert!(is_mapped(p, strut_win));
     assert_eq!(
-        strut,
+        strut_of(p, strut_win),
         [0, 0, 0, 56, 0, 0, 0, 0, 0, 0, 0, 799],
         "bottom strut 56 px"
     );
+    wait_for("handle on top of the strip", || {
+        geom(p, handle).1 == 1224 - 28
+    });
     let ty = c
         .get_property(
             false,
             strut_win,
-            atom(&probe.0, "_NET_WM_WINDOW_TYPE"),
+            atom(p, "_NET_WM_WINDOW_TYPE"),
             AtomEnum::ATOM,
             0,
             4,
@@ -733,59 +785,64 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
         .value32()
         .unwrap()
         .collect::<Vec<_>>();
-    assert_eq!(ty, [atom(&probe.0, "_NET_WM_WINDOW_TYPE_DOCK")]);
+    assert_eq!(ty, [atom(p, "_NET_WM_WINDOW_TYPE_DOCK")]);
     // it is drawn: the charcoal strip with white icons and labels
     wait_for("dock painted", || {
         let img = probe.image(dock, 800, 56);
         px(&img, 800, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
             && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
     });
+    // a second tap on the handle folds it again
+    let (hx, hy, _, _) = geom(p, handle);
+    probe.click(hx + 28, hy + 14);
+    wait_for("strip folded by the handle", || {
+        !is_mapped(p, dock) && !is_mapped(p, strut_win)
+    });
+    wait_for("handle back on the edge", || geom(p, handle).1 == 1252);
 
-    // Home (left third) raises the shell above the app and the dock
-    assert!(stack_pos(&probe.0, shell) < stack_pos(&probe.0, dock));
+    // Home (left third) raises the shell above the app and the dock, and folds the strip
+    expand_dock(&probe, handle, dock);
+    assert!(stack_pos(p, shell) < stack_pos(p, dock));
     probe.click(100, 1250);
-    wait_for("shell raised above the dock", || {
-        stack_pos(&probe.0, shell) > stack_pos(&probe.0, dock)
-            && stack_pos(&probe.0, shell) > stack_pos(&probe.0, app)
+    wait_for("shell raised above the app", || {
+        stack_pos(p, shell) > stack_pos(p, app)
+    });
+    wait_for("strip folded after the action", || !is_mapped(p, dock));
+    assert!(!is_mapped(p, strut_win));
+
+    // the window manager (the test) reports the shell active: the handle goes away too
+    set_active(p, shell);
+    wait_for("handle unmapped while the shell is active", || {
+        !is_mapped(p, handle)
     });
 
-    // the window manager (the test) reports the shell active: the dock goes away
-    set_active(&probe.0, shell);
-    wait_for("dock unmapped while the shell is active", || {
-        !is_mapped(&probe.0, dock)
-    });
-
-    // rotation: the shell is resized to landscape; the dock follows (also while hidden)
+    // rotation: the shell is resized to landscape; strip and handle follow (also while hidden)
     c.configure_window(shell, &ConfigureWindowAux::new().width(1280).height(800))
         .unwrap();
     c.flush().unwrap();
     wait_for("dock moved for landscape", || {
-        let g = c.get_geometry(dock).unwrap().reply().unwrap();
-        (g.x, g.y, g.width, g.height) == (0, 744, 1280, 56)
+        geom(p, dock) == (0, 744, 1280, 56)
     });
-    set_active(&probe.0, app);
-    wait_for("dock back for the app", || is_mapped(&probe.0, dock));
-    let strut = c
-        .get_property(
-            false,
-            strut_win,
-            atom(&probe.0, "_NET_WM_STRUT_PARTIAL"),
-            AtomEnum::CARDINAL,
-            0,
-            12,
-        )
-        .unwrap()
-        .reply()
-        .unwrap()
-        .value32()
-        .unwrap()
-        .collect::<Vec<_>>();
-    assert_eq!(strut[3], 536, "480 below the panel + 56");
+    let hl = handle_rect((1280, 800), 0, false);
+    wait_for("handle moved for landscape", || {
+        geom(p, handle) == (hl.x as i16, hl.y as i16, hl.w as u16, hl.h as u16)
+    });
+    set_active(p, app);
+    let t = Instant::now();
+    expand_dock(&probe, handle, dock);
+    assert_eq!(strut_of(p, strut_win)[3], 536, "480 below the panel + 56");
     wait_for("landscape dock painted", || {
         let img = probe.image(dock, 1280, 56);
         px(&img, 1280, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
             && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
     });
+    // left alone, it folds back by itself after 5 s
+    std::thread::sleep(Duration::from_millis(AUTO_COLLAPSE_MS - 1500));
+    assert!(is_mapped(p, dock), "still open before the timeout");
+    wait_for("auto-collapse", || !is_mapped(p, dock));
+    assert!(t.elapsed() >= Duration::from_millis(AUTO_COLLAPSE_MS));
+    assert!(!is_mapped(p, strut_win));
+    assert!(is_mapped(p, handle), "the handle stays");
 }
 
 // system keyboard (replaces matchbox-keyboard): override-redirect window at the bottom of the
@@ -890,12 +947,18 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     c.set_input_focus(InputFocus::PARENT, app, x11rb::CURRENT_TIME)
         .unwrap();
     c.flush().unwrap();
-    wait_for("dock mapped", || is_mapped(p, dock));
+    let handle = find_by_class(p, b"walpad-dock-handle\0").expect("dock handle");
 
     // the dock's Keyboard button (middle third) shows the keyboard: 30 % of 1280 at the bottom,
     // the dock moves directly above it, struts cover both
+    expand_dock(&probe, handle, dock);
     probe.click(400, 1250);
     wait_for("keyboard mapped", || is_mapped(p, kbd));
+    // the action folded the strip: the handle sits directly on the keyboard
+    wait_for("handle above the keyboard", || {
+        !is_mapped(p, dock) && geom(p, handle).1 == 896 - 28
+    });
+    assert!(!is_mapped(p, dstrut), "folded: no dock strut");
     assert_eq!(geom(p, kbd), (0, 896, 800, 384));
     assert!(is_mapped(p, kstrut));
     assert_eq!(
@@ -980,7 +1043,7 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     wait_for("keyboard unmapped", || !is_mapped(p, kbd));
     assert!(!is_mapped(p, kstrut));
     wait_for("dock back at the bottom", || {
-        geom(p, dock) == (0, 1224, 800, 56)
+        geom(p, dock) == (0, 1224, 800, 56) && geom(p, handle).1 == 1280 - 28
     });
     assert_eq!(strut_of(p, dstrut)[3], 56);
 
@@ -991,6 +1054,7 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     wait_for("dock moved for landscape", || {
         geom(p, dock) == (0, 744, 1280, 56)
     });
+    expand_dock(&probe, handle, dock);
     probe.click(640, 772);
     wait_for("landscape keyboard mapped", || is_mapped(p, kbd));
     let r = keyboard_rect((1280, 800));
@@ -998,23 +1062,29 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     assert_eq!((r.y, r.h), (560, 240));
     assert_eq!(strut_of(p, kstrut)[3], 720, "480 below the panel + 240");
     wait_for("landscape dock above the keyboard", || {
-        geom(p, dock) == (0, 504, 1280, 56)
+        geom(p, dock) == (0, 504, 1280, 56) && geom(p, handle).1 == 560 - 28
     });
     assert_eq!(strut_of(p, dstrut)[3], 776);
 
     // Home (dock) puts the keyboard away
+    expand_dock(&probe, handle, dock);
+    wait_for("handle on the strip above the keyboard", || {
+        geom(p, handle).1 == 504 - 28
+    });
     probe.click(100, 530);
     wait_for("keyboard hidden by Home", || !is_mapped(p, kbd));
 
     // shown again, then the shell comes to the front (the user went Home another way): hidden.
     // Home raised the shell over the dock: the window manager reports the shell, then the app
     set_active(p, shell);
-    wait_for("dock unmapped for the shell", || !is_mapped(p, dock));
+    wait_for("dock unmapped for the shell", || {
+        !is_mapped(p, dock) && !is_mapped(p, handle)
+    });
     set_active(p, app);
-    wait_for("dock mapped again", || is_mapped(p, dock));
     wait_for("dock at the landscape bottom", || {
         geom(p, dock) == (0, 744, 1280, 56)
     });
+    expand_dock(&probe, handle, dock);
     probe.click(640, 772);
     wait_for("keyboard shown again", || is_mapped(p, kbd));
     set_active(p, shell);
@@ -1037,10 +1107,38 @@ fn open_mouse_pad(probe: &Probe, frame: &Frame) {
         .unwrap()
         .hit
         .center();
-    probe.click(chevron.0 as i16, chevron.1 as i16);
-    std::thread::sleep(Duration::from_millis(300));
-    let tool = panel_geom(frame, 0, TOOLS.len()).tools[0].center();
-    probe.click(tool.0 as i16, tool.1 as i16);
+    let tool = panel_geom(frame, 0, TOOLS.len()).tools[0];
+    let shell = probe.find_shell().expect("shell window");
+    let pad = find_by_class(&probe.0, b"walpad-mousepad\0").expect("mouse pad window");
+    let (w, h) = (frame.w as u16, frame.h as u16);
+    let snap = |p: &Probe| {
+        let img = p.image(shell, w, h);
+        let (x0, y0) = (tool.x as usize, tool.y as usize);
+        (0..tool.h as usize)
+            .flat_map(|dy| (0..tool.w as usize).map(move |dx| (x0 + dx, y0 + dy)))
+            .map(|(x, y)| px(&img, w as usize, x, y))
+            .collect::<Vec<_>>()
+    };
+    // the clicks race a busy shell on a loaded host: wait for the panel to be drawn before the
+    // tool is tapped, and start over (up to 3 times) if the pad still did not come
+    for _ in 0..3 {
+        let before = snap(probe);
+        probe.click(chevron.0 as i16, chevron.1 as i16);
+        let t = Instant::now();
+        while snap(probe) == before && t.elapsed() < Duration::from_secs(3) {
+            std::thread::sleep(Duration::from_millis(60));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let c = tool.center();
+        probe.click(c.0 as i16, c.1 as i16);
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(3) {
+            if is_mapped(&probe.0, pad) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+    }
 }
 
 #[test]
@@ -1214,13 +1312,15 @@ fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
 
     // the app becomes active: the dock appears directly above the pad; its Keyboard button
     // replaces the pad with the keyboard
-    let dock = find_by_class(p, b"walpad-dock\0").expect("dock window");
+    let (dock, handle, _) = dock_windows(p);
     let kbd = find_by_class(p, b"walpad-keyboard\0").expect("keyboard window");
     set_active(p, app);
-    wait_for("dock mapped above the pad", || {
-        is_mapped(p, dock) && geom(p, dock) == (0, 840, 800, 56)
+    wait_for("dock handle mapped above the pad", || {
+        is_mapped(p, handle) && geom(p, handle).1 == 896 - 28
     });
     assert!(is_mapped(p, pad), "the pad stays for the app");
+    expand_dock(&probe, handle, dock);
+    assert_eq!(geom(p, dock), (0, 840, 800, 56));
     probe.click(400, 868);
     wait_for("keyboard replaces the pad", || {
         is_mapped(p, kbd) && !is_mapped(p, pad)
@@ -1270,4 +1370,260 @@ fn mouse_pad_close_button_hides_it_in_landscape() {
         .0;
     probe.click(r.center().0 as i16, (560 + r.center().1) as i16);
     wait_for("pad closed", || !is_mapped(p, pad));
+}
+
+// dynamic keyboard (owner request 2026-11-10): the shell is an XIM server (`@im=walpad`); a text
+// input gaining the focus (XIM SetICFocus) brings the system keyboard up, losing it (UnsetICFocus,
+// IC destroyed, client gone) puts it away after a 250 ms debounce. The test is an XIM client
+// (the xim crate's client, speaking the protocol Xlib and GTK speak).
+
+mod xim_client {
+    use x11rb::rust_connection::RustConnection;
+    use xim::x11rb::X11rbClient;
+    use xim::{AttributeName, Client, ClientError, ClientHandler, InputStyle};
+
+    pub type C = X11rbClient<RustConnection>;
+
+    #[derive(Default)]
+    pub struct H {
+        pub connected: bool,
+        pub im: Option<u16>,
+        pub ics: Vec<u16>,
+        /// (forward mask, synchronous mask) the server set per IC
+        pub masks: Vec<(u32, u32)>,
+        pub window: u32,
+    }
+
+    impl ClientHandler<C> for H {
+        fn handle_connect(&mut self, client: &mut C) -> Result<(), ClientError> {
+            self.connected = true;
+            client.open("C")
+        }
+        fn handle_open(&mut self, client: &mut C, im: u16) -> Result<(), ClientError> {
+            self.im = Some(im);
+            self.create(client)
+        }
+        fn handle_create_ic(&mut self, _: &mut C, _: u16, ic: u16) -> Result<(), ClientError> {
+            self.ics.push(ic);
+            Ok(())
+        }
+        fn handle_set_event_mask(
+            &mut self,
+            _: &mut C,
+            _: u16,
+            _: u16,
+            forward: u32,
+            sync: u32,
+        ) -> Result<(), ClientError> {
+            self.masks.push((forward, sync));
+            Ok(())
+        }
+    }
+
+    impl H {
+        /// One more input context (st/GTK: one per text widget or window), "nothing" styles.
+        pub fn create(&mut self, client: &mut C) -> Result<(), ClientError> {
+            let attrs = client
+                .build_ic_attributes()
+                .push(
+                    AttributeName::InputStyle,
+                    InputStyle::PREEDIT_NOTHING | InputStyle::STATUS_NOTHING,
+                )
+                .push(AttributeName::ClientWindow, self.window)
+                .push(AttributeName::FocusWindow, self.window)
+                .build();
+            client.create_ic(self.im.unwrap(), attrs)
+        }
+    }
+}
+
+struct XimApp {
+    client: xim_client::C,
+    h: xim_client::H,
+}
+
+impl XimApp {
+    fn connect(display: u32) -> XimApp {
+        use xim::x11rb::HasConnection;
+        let (conn, _) =
+            x11rb::rust_connection::RustConnection::connect(Some(&format!(":{display}"))).unwrap();
+        let screen = &conn.setup().roots[0];
+        let root = screen.root;
+        let window = conn.generate_id().unwrap();
+        conn.create_window(
+            0,
+            window,
+            root,
+            0,
+            0,
+            100,
+            100,
+            0,
+            xproto::WindowClass::INPUT_OUTPUT,
+            0,
+            &Default::default(),
+        )
+        .unwrap();
+        conn.flush().unwrap();
+        let mut client =
+            xim::x11rb::X11rbClient::init(conn, 0, Some("walpad")).expect("XIM server");
+        let mut h = xim_client::H {
+            window,
+            ..Default::default()
+        };
+        let mut app_ok = false;
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(8) && !app_ok {
+            while let Some(ev) = client.conn().poll_for_event().unwrap() {
+                client.filter_event(&ev, &mut h).unwrap();
+            }
+            app_ok = !h.ics.is_empty();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(app_ok, "XIM handshake: connect, open, create IC");
+        XimApp { client, h }
+    }
+    fn pump(&mut self, ms: u64) {
+        use xim::x11rb::HasConnection;
+        let t = Instant::now();
+        loop {
+            while let Some(ev) = self.client.conn().poll_for_event().unwrap() {
+                self.client.filter_event(&ev, &mut self.h).unwrap();
+            }
+            if t.elapsed() >= Duration::from_millis(ms) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    fn focus(&mut self, ic: u16, on: bool) {
+        use xim::Client;
+        let im = self.h.im.unwrap();
+        if on {
+            self.client.set_focus(im, ic).unwrap();
+        } else {
+            self.client.unset_focus(im, ic).unwrap();
+        }
+        self.pump(20);
+    }
+}
+
+#[test]
+fn xim_focus_shows_and_hides_the_system_keyboard() {
+    use walpad_shell::ime::HIDE_DEBOUNCE_MS;
+    use walpad_shell::keyboard::keyboard_rect;
+    use walpad_ui::components::{system_keyboard_layout, SysKey};
+    use xim::Client;
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-xim-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let p = &probe.0;
+    let kbd = find_by_class(p, b"walpad-keyboard\0").expect("keyboard window");
+    // the server is announced the way Xlib looks for it
+    let servers = p
+        .conn
+        .get_property(false, p.root, atom(p, "XIM_SERVERS"), AtomEnum::ATOM, 0, 16)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect::<Vec<_>>();
+    let ours = atom(p, "@server=walpad");
+    assert!(servers.contains(&ours), "listed in XIM_SERVERS");
+    assert_ne!(
+        p.conn
+            .get_selection_owner(ours)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .owner,
+        0,
+        "@server=walpad has an owner"
+    );
+
+    let mut app = XimApp::connect(n);
+    assert!(app.h.connected);
+    let a = app.h.ics[0];
+    // keys never pass through the server: nothing is forwarded
+    app.pump(100);
+    assert_eq!(app.h.masks, [(0, 0)], "forward / synchronous event masks");
+    // an IC alone (an app with a text widget somewhere) does not bring the keyboard
+    app.pump(300);
+    assert!(!is_mapped(p, kbd));
+
+    // focus in: up; focus out: down after the debounce
+    app.focus(a, true);
+    wait_for("keyboard up on focus-in", || is_mapped(p, kbd));
+    let t = Instant::now();
+    app.focus(a, false);
+    wait_for("keyboard down after focus-out", || !is_mapped(p, kbd));
+    assert!(t.elapsed() >= Duration::from_millis(HIDE_DEBOUNCE_MS - 30));
+
+    // moving between two inputs within the debounce: no flicker
+    let b = {
+        app.h.create(&mut app.client).unwrap();
+        let t = Instant::now();
+        while app.h.ics.len() < 2 && t.elapsed() < Duration::from_secs(5) {
+            app.pump(20);
+        }
+        app.h.ics[1]
+    };
+    app.focus(a, true);
+    wait_for("keyboard up", || is_mapped(p, kbd));
+    app.focus(a, false);
+    app.focus(b, true);
+    for _ in 0..10 {
+        app.pump(50);
+        assert!(
+            is_mapped(p, kbd),
+            "stays up while the focus moves between inputs"
+        );
+    }
+
+    // the minimise key hides it until the next focus-in
+    let keys = system_keyboard_layout(walpad_ui::Rect::new(0, 0, 800, 384), false);
+    let r = keys.iter().find(|k| k.key == SysKey::Hide).unwrap().rect;
+    let top = keyboard_rect((800, 1280)).y;
+    probe.click(r.center().0 as i16, (top + r.center().1) as i16);
+    wait_for("minimised", || !is_mapped(p, kbd));
+    app.pump(500);
+    assert!(!is_mapped(p, kbd), "stays down while b keeps the focus");
+    app.focus(b, false);
+    app.focus(a, true);
+    wait_for("next focus-in brings it back", || is_mapped(p, kbd));
+
+    // the focused IC is destroyed (the widget went away): down
+    app.client.destroy_ic(app.h.im.unwrap(), a).unwrap();
+    app.pump(20);
+    wait_for("keyboard down after the IC is destroyed", || {
+        !is_mapped(p, kbd)
+    });
+
+    // the client dies with an input focused (no disconnect): its window goes, and so does the
+    // keyboard
+    app.focus(b, true);
+    wait_for("keyboard up for b", || is_mapped(p, kbd));
+    drop(app);
+    wait_for("keyboard down when the client is gone", || {
+        !is_mapped(p, kbd)
+    });
+
+    // a fresh client still works (the server survived)
+    let mut app2 = XimApp::connect(n);
+    let c0 = app2.h.ics[0];
+    app2.focus(c0, true);
+    wait_for("keyboard up for the second client", || is_mapped(p, kbd));
+    // a clean disconnect with the focus inside: down
+    app2.client.disconnect().unwrap();
+    app2.pump(20);
+    wait_for("keyboard down after disconnect", || !is_mapped(p, kbd));
 }

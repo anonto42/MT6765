@@ -26,6 +26,11 @@ klog "runtime: device=$RT_DEVICE input=$RT_INPUT shell=$RT_SHELL"
 [ "$RT_INPUT" = python ] && walpad-python-daemons touchd
 xset s off; xset -dpms; xset s noblank
 xsetroot -solid '#0b0e16' 2>/dev/null
+# the Rust shell is the input method (XIM @im=walpad): a focused text input brings up its keyboard
+[ "$RT_SHELL" = rust ] && export XMODIFIERS=@im=walpad GTK_IM_MODULE=xim QT_IM_MODULE=xim
+# apk installed GTK with --no-scripts, so its input-method module cache was never built and
+# GTK_IM_MODULE=xim would be ignored: build it once
+[ -s /usr/lib/gtk-3.0/3.0.0/immodules.cache ] || gtk-query-immodules-3.0 --update-cache >/dev/null 2>&1 || klog "GTK immodules cache not built"
 openbox --config-file /etc/walpad/openbox-rc.xml >> /var/log/openbox.log 2>&1 &
 sleep 1
 [ "$RT_DEVICE" = python ] && walpad-python-daemons devd

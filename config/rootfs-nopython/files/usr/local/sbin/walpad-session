@@ -8,6 +8,8 @@ export HOME=/root DISPLAY=:0 XDG_RUNTIME_DIR=/run/walpad
 # software rendering only (no GPU user space) and no browser sandbox (no user namespaces in this kernel)
 export LIBGL_ALWAYS_SOFTWARE=1 MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 \
        MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_WEBRENDER=0 MOZ_ACCELERATED=0 GTK_A11Y=none NO_AT_BRIDGE=1
+# the shell is the input method (XIM @im=walpad): a focused text input brings up its keyboard
+export XMODIFIERS=@im=walpad GTK_IM_MODULE=xim QT_IM_MODULE=xim
 RUN=/run/walpad
 klog() { echo "WALPAD-SESSION: $*" > /dev/kmsg 2>/dev/null; }
 rescue_and_idle() { klog "rescue: $*"; walpad-rescue "$*"; while :; do sleep 3600; done; }
@@ -34,6 +36,9 @@ echo 0 > /run/walpad/orientation
 fbmirror /run/walpad/xfb/Xvfb_screen0 >> /var/log/fbmirror.log 2>&1 &
 xset s off; xset -dpms; xset s noblank
 xsetroot -solid '#0b0e16' 2>/dev/null
+# apk installed GTK with --no-scripts, so its input-method module cache was never built and
+# GTK_IM_MODULE=xim would be ignored: build it once
+[ -s /usr/lib/gtk-3.0/3.0.0/immodules.cache ] || gtk-query-immodules-3.0 --update-cache >/dev/null 2>&1 || klog "GTK immodules cache not built"
 openbox --config-file /etc/walpad/openbox-rc.xml >> /var/log/openbox.log 2>&1 &
 sleep 1
 # The shell runs in its own restart loop: a shell crash does not restart X or close apps.  3 exits
