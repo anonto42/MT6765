@@ -125,6 +125,12 @@ pub struct ChromeKey {
 /// The wallpaper (bottom-aligned: the shell shrinks above the dock strip), the sidebar edge and its
 /// buttons at rest.  Without a wallpaper (decode failed) plain charcoal with the line-art cup.
 pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Canvas>) {
+    render_base(p, frame, key, wall);
+    render_items(p, key);
+}
+
+/// Everything of the background except the sidebar buttons.
+fn render_base(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Canvas>) {
     p.cv.fill(BG);
     match wall {
         Some(w) => p.cv.blit(w, 0, frame.h - w.height()),
@@ -133,15 +139,27 @@ pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: 
     let sb = frame.sidebar;
     p.cv.rect(Rect::new(sb.right() - 1, sb.y, 1, sb.h), DIVIDER);
     p.divider(sb.x + (sb.w - 40) / 2, key.sidebar.divider_y, 40);
+}
+
+fn render_items(p: &mut Painter, key: &ChromeKey) {
     for it in &key.sidebar.items {
         draw_item(p, it, false, key.active == Some(it.target));
     }
 }
 
+struct Cached {
+    key: ChromeKey,
+    cv: Canvas,
+    /// The sidebar strip before its buttons were drawn (x 0, y 0, sidebar width): a pressed
+    /// button is drawn over this, never over the resting one (translucent fills would stack) and
+    /// never over a square of plain colour (the round toggle would show a box).
+    bare_sidebar: Option<Canvas>,
+}
+
 /// The cached background layer.
 #[derive(Default)]
 pub struct Chrome {
-    cache: Option<(ChromeKey, Canvas)>,
+    cache: Option<Cached>,
     /// Decoded wallpaper and whether it is the landscape one (decoded once per orientation).
     wall: Option<(bool, Canvas)>,
     /// Times the layer was rebuilt (tests check it is not per frame).
@@ -151,7 +169,7 @@ pub struct Chrome {
 impl Chrome {
     /// Copy the background for `key` into `p.cv`, rebuilding the cache when the key changed.
     pub fn paint(&mut self, p: &mut Painter, frame: &Frame, key: ChromeKey) {
-        let stale = self.cache.as_ref().is_none_or(|(k, _)| *k != key);
+        let stale = self.cache.as_ref().is_none_or(|c| c.key != key);
         let landscape = frame.w > frame.h;
         if self.wall.as_ref().is_none_or(|(l, _)| *l != landscape) {
             self.wall = walpad_ui::art::wallpaper(frame.w, frame.h).map(|c| (landscape, c));
@@ -160,23 +178,26 @@ impl Chrome {
         if stale {
             match Canvas::new(frame.w as u32, frame.h as u32, BG) {
                 Some(mut cv) => {
-                    render_background(
-                        &mut Painter {
-                            cv: &mut cv,
-                            fonts: &mut *p.fonts,
-                        },
-                        frame,
-                        &key,
-                        wall,
-                    );
+                    let mut bp = Painter {
+                        cv: &mut cv,
+                        fonts: &mut *p.fonts,
+                    };
+                    render_base(&mut bp, frame, &key, wall);
+                    let sb = frame.sidebar;
+                    let bare_sidebar = bp.cv.crop(Rect::new(0, 0, sb.right(), frame.h));
+                    render_items(&mut bp, &key);
                     self.builds += 1;
-                    self.cache = Some((key.clone(), cv));
+                    self.cache = Some(Cached {
+                        key: key.clone(),
+                        cv,
+                        bare_sidebar,
+                    });
                 }
                 None => self.cache = None,
             }
         }
         match &self.cache {
-            Some((_, cv)) if p.cv.copy_from(cv) => {}
+            Some(c) if p.cv.copy_from(&c.cv) => {}
             // no cache (allocation failed) or a canvas of another size: draw it directly
             _ => render_background(p, frame, &key, wall),
         }
@@ -186,17 +207,23 @@ impl Chrome {
     /// content was drawn under them). Falls back to a plain fill.
     pub fn restore(&self, cv: &mut Canvas, r: Rect) {
         match &self.cache {
-            Some((_, src)) if cv.copy_rect_from(src, r) => {}
+            Some(c) if cv.copy_rect_from(&c.cv, r) => {}
             _ => cv.rect(r, BG),
         }
     }
-}
 
-/// Draw the pressed sidebar button over the cached one (the only per-frame sidebar work).
-pub fn render_pressed(p: &mut Painter, layout: &SidebarLayout, pressed: Option<Target>) {
-    if let Some(it) = layout.items.iter().find(|it| Some(it.target) == pressed) {
-        // repaint the button area first: the pressed fill replaces the resting outline
-        p.cv.rect(it.rect, BG);
+    /// Draw the pressed sidebar button (the only per-frame sidebar work): its rect is first put
+    /// back to the bare background (wallpaper, no button), then the button is drawn pressed. The
+    /// round toggle's pressed state is a circle; its bounding-box corners keep the background.
+    pub fn render_pressed(&self, p: &mut Painter, layout: &SidebarLayout, pressed: Option<Target>) {
+        let Some(it) = layout.items.iter().find(|it| Some(it.target) == pressed) else {
+            return;
+        };
+        // without a cache the frame was drawn directly and the resting button stays under the
+        // pressed one (only the tint and the white outline are added: still round)
+        if let Some(bare) = self.cache.as_ref().and_then(|c| c.bare_sidebar.as_ref()) {
+            p.cv.copy_rect_from_at(bare, (0, 0), it.rect);
+        }
         draw_item(p, it, true, false);
     }
 }

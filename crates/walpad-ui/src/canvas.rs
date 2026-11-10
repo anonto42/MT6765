@@ -1,7 +1,9 @@
 //! Software canvas on a tiny-skia pixmap. Opaque RGBA (premultiplied = straight, alpha is 255).
+//! Fills take `impl Into<Tint>`: an opaque `Color` is a plain write (tiny-skia's opaque fast path),
+//! a translucent `Tint` is blended source-over onto the opaque pixels, which stay opaque.
 //! Drawing calls are offset by `origin` (scrolled screens draw in content coordinates straight into
 //! the frame, no off-screen copy); `fill`, `blit`, `crop`, `copy_from` and `pixel` ignore it.
-use crate::tokens::Color;
+use crate::tokens::{Color, Tint};
 use tiny_skia::{FillRule, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,9 +46,9 @@ pub struct Canvas {
     origin: (i32, i32),
 }
 
-fn paint(c: Color) -> Paint<'static> {
+fn paint(c: impl Into<Tint>) -> Paint<'static> {
     let mut p = Paint::default();
-    p.set_color(c.sk());
+    p.set_color(c.into().sk());
     p.anti_alias = true;
     p
 }
@@ -151,8 +153,31 @@ impl Canvas {
         true
     }
 
-    pub fn rect(&mut self, r: Rect, c: Color) {
-        if r.w <= 0 || r.h <= 0 || !self.visible(r) {
+    /// Copy the pixels of `r` (screen coordinates, clipped) from `src`, which holds the screen
+    /// region starting at `src_at` (a cached strip smaller than this canvas).
+    pub fn copy_rect_from_at(&mut self, src: &Canvas, src_at: (i32, i32), r: Rect) {
+        let (w, h) = (self.width(), self.height());
+        let x0 = r.x.max(0).max(src_at.0);
+        let x1 = r.right().min(w).min(src_at.0 + src.width());
+        let y0 = r.y.max(0).max(src_at.1);
+        let y1 = r.bottom().min(h).min(src_at.1 + src.height());
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let (ds, ss) = (w as usize * 4, src.width() as usize * 4);
+        let n = (x1 - x0) as usize * 4;
+        let s = src.pm.data();
+        let d = self.pm.data_mut();
+        for y in y0..y1 {
+            let di = y as usize * ds + x0 as usize * 4;
+            let si = (y - src_at.1) as usize * ss + (x0 - src_at.0) as usize * 4;
+            d[di..di + n].copy_from_slice(&s[si..si + n]);
+        }
+    }
+
+    pub fn rect(&mut self, r: Rect, c: impl Into<Tint>) {
+        let c = c.into();
+        if c.a == 0 || r.w <= 0 || r.h <= 0 || !self.visible(r) {
             return;
         }
         let r = self.at(r);
@@ -165,8 +190,9 @@ impl Canvas {
         }
     }
 
-    pub fn rrect(&mut self, r: Rect, radius: i32, c: Color) {
-        if !self.visible(r) {
+    pub fn rrect(&mut self, r: Rect, radius: i32, c: impl Into<Tint>) {
+        let c = c.into();
+        if c.a == 0 || !self.visible(r) {
             return;
         }
         if let Some(path) = rounded_rect_path(self.at(r), radius as f32) {
@@ -218,7 +244,11 @@ impl Canvas {
         }
     }
 
-    pub fn circle(&mut self, cx: f32, cy: f32, radius: f32, c: Color) {
+    pub fn circle(&mut self, cx: f32, cy: f32, radius: f32, c: impl Into<Tint>) {
+        let c = c.into();
+        if c.a == 0 {
+            return;
+        }
         let (ox, oy) = (self.origin.0 as f32, self.origin.1 as f32);
         if let Some(path) = PathBuilder::from_circle(cx + ox, cy + oy, radius) {
             self.pm.fill_path(
@@ -402,6 +432,45 @@ mod tests {
         assert_eq!(e.pixel(30, 8), Some(BG), "copied (clipped at the top)");
         assert_eq!(e.pixel(30, 20), Some(DANGER), "outside the rect untouched");
         assert_eq!(e.pixel(10, 5), Some(DANGER));
+    }
+
+    #[test]
+    fn translucent_fills_blend_and_stay_opaque() {
+        let mut c = Canvas::new(40, 40, BG).unwrap();
+        c.rect(Rect::new(0, 0, 20, 40), SURFACE_STRONG);
+        let (px, want) = (c.pixel(5, 5).unwrap(), SURFACE_STRONG.over(BG));
+        assert!(
+            px.r.abs_diff(want.r) <= 1 && px.g.abs_diff(want.g) <= 1 && px.b.abs_diff(want.b) <= 1,
+            "{px:?} ~ {want:?} (blend rounding)"
+        );
+        assert_eq!(c.pixel(30, 5), Some(BG), "outside untouched");
+        assert!(c.rgba().chunks(4).all(|p| p[3] == 255), "still opaque");
+        // a second layer darkens further (real blending, not a replace)
+        c.rect(Rect::new(0, 0, 10, 10), SURFACE_STRONG);
+        let twice = SURFACE_STRONG.over(SURFACE_STRONG.over(BG));
+        let px = c.pixel(5, 5).unwrap();
+        assert!(
+            px.r.abs_diff(twice.r) <= 1 && px.b.abs_diff(twice.b) <= 1,
+            "{px:?}"
+        );
+        // fully transparent: nothing drawn
+        c.rrect(Rect::new(20, 0, 20, 20), 4, Tint::new(TEXT, 0));
+        assert_eq!(c.pixel(30, 10), Some(BG));
+        // opaque colours keep the plain write
+        c.circle(30.0, 30.0, 6.0, DANGER);
+        assert_eq!(c.pixel(30, 30), Some(DANGER));
+    }
+
+    #[test]
+    fn copy_rect_from_a_strip() {
+        let strip = Canvas::new(10, 40, DANGER).unwrap();
+        let mut c = Canvas::new(40, 40, BG).unwrap();
+        c.copy_rect_from_at(&strip, (5, 0), Rect::new(0, 10, 12, 5));
+        assert_eq!(c.pixel(4, 12), Some(BG), "left of the strip");
+        assert_eq!(c.pixel(5, 12), Some(DANGER));
+        assert_eq!(c.pixel(11, 14), Some(DANGER));
+        assert_eq!(c.pixel(12, 12), Some(BG), "right of the rect");
+        assert_eq!(c.pixel(8, 15), Some(BG), "below the rect");
     }
 
     #[test]

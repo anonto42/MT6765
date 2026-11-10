@@ -252,6 +252,19 @@ pub fn render(
     let mut hits = Vec::new();
     let pr = |t: Target| pressed == Some(t);
     let rot = selected_rotation(st);
+    // a translucent card behind every run of list rows (rotation, cover toggle, info)
+    let runs = walpad_ui::components::row_runs(placed.iter().map(|pl| {
+        (
+            pl.rect,
+            matches!(
+                pl.item,
+                Item::RotationRow(_) | Item::LidRow | Item::Info(..)
+            ),
+        )
+    }));
+    for g in runs {
+        p.row_group(g);
+    }
     for Placed { item, rect: r } in &placed {
         let r = *r;
         match item {

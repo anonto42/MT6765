@@ -86,8 +86,9 @@ pub fn button_at(w: i32, x: i32, y: i32) -> Option<DockButton> {
 /// Draw the strip (`cv` is `w` x 56). `pressed` highlights one button.
 pub fn render(p: &mut Painter, pressed: Option<DockButton>) {
     let w = p.cv.width();
-    // line-art like the shell: charcoal strip, a divider on top, outlined pill buttons
-    p.cv.rect(Rect::new(0, 0, w, DOCK_H), BG);
+    // its own window over other apps (no compositor): SURFACE_STRONG over BG flattened into one
+    // opaque strip, a divider on top, translucent outlined pill buttons
+    p.cv.rect(Rect::new(0, 0, w, DOCK_H), SURFACE_STRONG.over(BG));
     p.divider(0, 0, w);
     for (i, (r, b)) in button_rects(w).iter().enumerate() {
         let (_, label, icon) = BUTTONS[i];

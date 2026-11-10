@@ -9,7 +9,7 @@ use walpad_hw::Root;
 use walpad_shell::app::Target;
 use walpad_shell::chrome::{sidebar_layout, NAV_HOME, NAV_SETTINGS};
 use walpad_shell::shell::{Options, Shell};
-use walpad_ui::components::{banner_fill, Tone};
+use walpad_ui::components::{banner_tint, Tone};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
 use walpad_x::XConn;
@@ -19,6 +19,9 @@ use x11rb::protocol::xproto::{
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::wrapper::ConnectionExt as _;
+
+/// The dock / keyboard / pad strip colour: SURFACE_STRONG over BG, flattened (opaque).
+const STRIP: Color = SURFACE_STRONG.over(BG);
 
 /// A display number no other test in this binary (or process) uses: the tests run in parallel.
 fn display_num() -> u32 {
@@ -356,9 +359,11 @@ fn shell_drives_the_core_and_shows_when_it_is_gone() {
     // the core goes away: the "System service not responding" banner appears
     core_stop.store(true, Ordering::Relaxed);
     core_thread.join().unwrap();
-    let fill = banner_fill(Tone::Danger);
+    // the banner's translucent fill over the plain top of the wallpaper (blend rounding: +-2)
+    let fill = banner_tint(Tone::Danger).over(SURFACE_STRONG.over(BG));
     wait_for("offline banner", || {
-        px(&probe.image(win, 800, 1280), 800, 600, 92) == (fill.r, fill.g, fill.b)
+        let (r, g, b) = px(&probe.image(win, 800, 1280), 800, 600, 92);
+        r.abs_diff(fill.r) <= 2 && g.abs_diff(fill.g) <= 2 && b.abs_diff(fill.b) <= 2
     });
 }
 
@@ -732,7 +737,8 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     // it is drawn: the charcoal strip with white icons and labels
     wait_for("dock painted", || {
         let img = probe.image(dock, 800, 56);
-        px(&img, 800, 5, 30) == (BG.r, BG.g, BG.b) && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
+        px(&img, 800, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
+            && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
     });
 
     // Home (left third) raises the shell above the app and the dock
@@ -777,7 +783,8 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     assert_eq!(strut[3], 536, "480 below the panel + 56");
     wait_for("landscape dock painted", || {
         let img = probe.image(dock, 1280, 56);
-        px(&img, 1280, 5, 30) == (BG.r, BG.g, BG.b) && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
+        px(&img, 1280, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
+            && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
     });
 }
 
@@ -901,7 +908,8 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     assert_eq!(strut_of(p, dstrut)[3], 440, "dock + keyboard");
     wait_for("keyboard painted", || {
         let img = probe.image(kbd, 800, 384);
-        px(&img, 800, 3, 200) == (BG.r, BG.g, BG.b) && count(&img, 800, 0, 800, 0, 384, TEXT) > 500
+        px(&img, 800, 3, 200) == (STRIP.r, STRIP.g, STRIP.b)
+            && count(&img, 800, 0, 800, 0, 384, TEXT) > 500
     });
 
     // XTEST into the focused window
@@ -1098,13 +1106,24 @@ fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
         std::thread::sleep(Duration::from_millis(60));
     };
     let mv = xproto::MOTION_NOTIFY_EVENT;
+    // (the touch bridge's order: motion to the finger, then the press)
     step(mv, 0, 200, 1000);
     step(xproto::BUTTON_PRESS_EVENT, 1, 0, 0);
     step(mv, 0, 220, 1000);
+    // a stray pointer position far from the finger (a warp-back echo the pad did not send, or
+    // touch noise) in the middle of the drag: ignored, no jump
+    step(mv, 0, 400, 448);
     step(mv, 0, 260, 1000);
     step(mv, 0, 260, 980);
     step(xproto::BUTTON_RELEASE_EVENT, 1, 0, 0);
     wait_for("pointer moved relatively", || pointer() == (490, 418));
+    // our own arrow follows the virtual cursor (the Xvfb cursor may not reach the panel); it is
+    // input-transparent, so the clicks below still reach the app under it
+    let marker = find_by_class(p, b"walpad-cursor\0").expect("cursor marker window");
+    wait_for("cursor marker on the cursor", || {
+        let g = geom(p, marker);
+        is_mapped(p, marker) && (g.0, g.1) == (490, 418)
+    });
 
     // an app window under the cursor records button presses
     let app = c.generate_id().unwrap();
@@ -1121,7 +1140,7 @@ fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
         0,
         &CreateWindowAux::new()
             .background_pixel(0x0033_6699)
-            .event_mask(EventMask::BUTTON_PRESS),
+            .event_mask(EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE),
     )
     .unwrap();
     c.change_property8(
@@ -1154,6 +1173,29 @@ fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
     probe.click(300, 1000);
     assert_eq!(next_press("left click"), (1, 490, 418));
     wait_for("pointer back on the cursor", || pointer() == (490, 418));
+    // a noisy tap (the panel's touch wanders ~15 px): exactly one press and one release on the
+    // app, at the cursor, which did not move (the first tap's release is drained first)
+    std::thread::sleep(Duration::from_millis(200));
+    while c.poll_for_event().unwrap().is_some() {}
+    step(mv, 0, 300, 1000);
+    step(xproto::BUTTON_PRESS_EVENT, 1, 0, 0);
+    step(mv, 0, 312, 994);
+    step(mv, 0, 296, 1009);
+    step(xproto::BUTTON_RELEASE_EVENT, 1, 0, 0);
+    std::thread::sleep(Duration::from_millis(500));
+    let (mut presses, mut releases) = (Vec::new(), 0);
+    while let Some(ev) = c.poll_for_event().unwrap() {
+        match ev {
+            x11rb::protocol::Event::ButtonPress(e) if e.event == app => {
+                presses.push((e.detail, e.root_x, e.root_y))
+            }
+            x11rb::protocol::Event::ButtonRelease(e) if e.event == app => releases += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(presses, [(1, 490, 418)], "one click at the cursor");
+    assert_eq!(releases, 1);
+    assert_eq!(pointer(), (490, 418));
     // a long press: right click
     step(mv, 0, 300, 1000);
     step(xproto::BUTTON_PRESS_EVENT, 1, 0, 0);

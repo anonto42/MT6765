@@ -112,9 +112,9 @@ pub fn tone_color(t: Tone) -> Color {
     }
 }
 
-/// Background of a banner: its tone at 14 % over the charcoal (opaque).
-pub fn banner_fill(t: Tone) -> Color {
-    BG.mix(
+/// Tone wash of a banner (14 %), blended over its `SURFACE_STRONG` fill.
+pub fn banner_tint(t: Tone) -> Tint {
+    Tint::new(
         match t {
             Tone::Info => TEXT,
             other => tone_color(other),
@@ -123,7 +123,28 @@ pub fn banner_fill(t: Tone) -> Color {
     )
 }
 
-const DANGER_FILL: Color = BG.mix(DANGER, 16);
+/// Danger wash of a danger button (rest 16 %, pressed 30 %), over its surface fill.
+const DANGER_TINT: Tint = Tint::new(DANGER, 16);
+const DANGER_TINT_PRESSED: Tint = Tint::new(DANGER, 30);
+
+/// Bounding rects of the runs of vertically adjacent list rows (`(row, in a group)`; a row that
+/// is not grouped, or a gap, ends the run): what `Painter::row_group` backs.
+pub fn row_runs(rows: impl IntoIterator<Item = (Rect, bool)>) -> Vec<Rect> {
+    let mut out: Vec<Rect> = Vec::new();
+    let mut open = false;
+    for (r, grouped) in rows {
+        if !grouped {
+            open = false;
+            continue;
+        }
+        match out.last_mut() {
+            Some(g) if open && g.bottom() == r.y && g.x == r.x && g.w == r.w => g.h += r.h,
+            _ => out.push(r),
+        }
+        open = true;
+    }
+    out
+}
 
 /// Icon size for a box of side `box_px` (24 px grid icons, scaled up in the bigger boxes).
 pub fn icon_for_box(box_px: i32) -> i32 {
@@ -154,8 +175,9 @@ impl Painter<'_> {
     }
 
     // ------------------------------------------------------------------ outlines
-    /// The basic line-art control: a rounded outline, filled only while pressed. `active` marks
-    /// the current destination (full-white outline without the fill).
+    /// The basic line-art control: a translucent `SURFACE` fill (blended over the wallpaper) and
+    /// a rounded outline; pressed adds `PRESSED_TINT`. `active` marks the current destination
+    /// (full-white outline).
     pub fn outline_box(
         &mut self,
         r: Rect,
@@ -164,8 +186,22 @@ impl Painter<'_> {
         active: bool,
         disabled: bool,
     ) {
+        self.surface_box(r, radius, SURFACE, pressed, active, disabled);
+    }
+
+    /// `outline_box` with an explicit surface fill (`SURFACE_ICON` for icon boxes).
+    pub fn surface_box(
+        &mut self,
+        r: Rect,
+        radius: i32,
+        fill: Tint,
+        pressed: bool,
+        active: bool,
+        disabled: bool,
+    ) {
+        self.cv.rrect(r, radius, fill);
         if pressed && !disabled {
-            self.cv.rrect(r, radius, PRESSED_FILL);
+            self.cv.rrect(r, radius, PRESSED_TINT);
         }
         let c = if disabled {
             DIVIDER
@@ -179,15 +215,34 @@ impl Painter<'_> {
 
     /// Rounded-square icon button (sidebar 56, Home grid 64, Apps panel 48).
     pub fn icon_box(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
-        self.outline_box(r, RADIUS_ICON.min(r.w / 3), pressed, active, false);
+        self.surface_box(
+            r,
+            RADIUS_ICON.min(r.w / 3),
+            SURFACE_ICON,
+            pressed,
+            active,
+            false,
+        );
         let s = icon_for_box(r.w);
         self.cv
             .icon(icon, r.x + (r.w - s) / 2, r.y + (r.h - s) / 2, s, TEXT);
     }
 
-    /// Round outlined button with an icon (the sidebar's Apps toggle).
+    /// Round outlined button with an icon (the sidebar's Apps toggle). Every state is a circle:
+    /// circle fill, circle pressed tint, circle outline; nothing is drawn outside the circle
+    /// inscribed in `r` (its bounding-box corners stay untouched).
     pub fn round_button(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
-        self.outline_box(r, r.w / 2, pressed, active, false);
+        let d = r.w.min(r.h);
+        let (cx, cy) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
+        let rad = d as f32 / 2.0;
+        // it sits on the wallpaper art (bottom of the sidebar): the strong fill keeps the chevron clear
+        self.cv.circle(cx, cy, rad, SURFACE_STRONG);
+        if pressed {
+            self.cv.circle(cx, cy, rad, PRESSED_TINT);
+        }
+        let c = if pressed || active { TEXT } else { OUTLINE };
+        let sq = Rect::new(r.x + (r.w - d) / 2, r.y + (r.h - d) / 2, d, d);
+        self.cv.rrect_stroke(sq, d / 2, OUTLINE_W, c);
         self.cv.icon(
             icon,
             r.x + (r.w - ICON) / 2,
@@ -241,16 +296,24 @@ impl Painter<'_> {
         );
     }
 
-    /// Card container: 1 px border, transparent inside (pressed: 10 % fill).
+    /// Card container: translucent `SURFACE` fill and a 1 px border (pressed: + `PRESSED_TINT`).
     pub fn card(&mut self, r: Rect, pressed: bool) {
+        self.cv.rrect(r, RADIUS_CARD, SURFACE);
         if pressed {
-            self.cv.rrect(r, RADIUS_CARD, PRESSED_FILL);
+            self.cv.rrect(r, RADIUS_CARD, PRESSED_TINT);
         }
         self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, CARD_BORDER);
     }
-    /// Popover / dropdown / dialog body: background fill (hides what is below) and a 1 px border.
+    /// The backing of a run of list rows (Settings, Device): a card around them, so rows over the
+    /// wallpaper art stay readable. The rows themselves add no fill (only the pressed tint).
+    pub fn row_group(&mut self, r: Rect) {
+        if self.cv.visible(r) {
+            self.card(r, false);
+        }
+    }
+    /// Popover / dropdown / dialog / sheet body: `SURFACE_STRONG` fill and a 1 px border.
     pub fn popover(&mut self, r: Rect) {
-        self.cv.rrect(r, RADIUS_CARD, BG);
+        self.cv.rrect(r, RADIUS_CARD, SURFACE_STRONG);
         self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, CARD_BORDER);
     }
     /// 1 px horizontal divider.
@@ -295,25 +358,26 @@ impl Painter<'_> {
     ) {
         let disabled = state == ButtonState::Disabled;
         let pressed = state == ButtonState::Pressed;
-        let (fill, line, fg) = match (kind, disabled) {
+        let (wash, line, fg) = match (kind, disabled) {
             (_, true) => (None, DIVIDER, TEXT_DISABLED),
-            (ButtonKind::Primary, _) => (pressed.then_some(PRESSED_FILL), TEXT, TEXT),
+            (ButtonKind::Primary, _) => (pressed.then_some(PRESSED_TINT), TEXT, TEXT),
             (ButtonKind::Danger, _) => (
                 Some(if pressed {
-                    BG.mix(DANGER, 30)
+                    DANGER_TINT_PRESSED
                 } else {
-                    DANGER_FILL
+                    DANGER_TINT
                 }),
                 DANGER,
                 DANGER,
             ),
             (ButtonKind::Secondary, _) => (
-                pressed.then_some(PRESSED_FILL),
+                pressed.then_some(PRESSED_TINT),
                 if pressed { TEXT } else { OUTLINE },
                 TEXT,
             ),
         };
-        if let Some(f) = fill {
+        self.cv.rrect(r, RADIUS, SURFACE);
+        if let Some(f) = wash {
             self.cv.rrect(r, RADIUS, f);
         }
         let width = if kind == ButtonKind::Primary && !disabled {
@@ -442,6 +506,7 @@ impl Painter<'_> {
         pressed: Option<usize>,
         disabled: bool,
     ) -> Vec<Rect> {
+        self.cv.rrect(r, RADIUS, SURFACE);
         self.cv
             .rrect_stroke(r, RADIUS, 1.0, if disabled { DIVIDER } else { OUTLINE });
         let n = labels.len().max(1) as i32;
@@ -451,7 +516,7 @@ impl Painter<'_> {
             let seg = Rect::new(r.x + 4 + i as i32 * w, r.y + 4, w, r.h - 8);
             let sel = i == selected;
             if sel {
-                self.cv.rrect(seg, RADIUS - 4, PRESSED_FILL);
+                self.cv.rrect(seg, RADIUS - 4, PRESSED_TINT);
                 self.cv.rrect_stroke(
                     seg,
                     RADIUS - 4,
@@ -459,7 +524,7 @@ impl Painter<'_> {
                     if disabled { TEXT_DISABLED } else { TEXT },
                 );
             } else if pressed == Some(i) && !disabled {
-                self.cv.rrect(seg, RADIUS - 4, PRESSED_FILL);
+                self.cv.rrect(seg, RADIUS - 4, PRESSED_TINT);
             }
             let fg = match (sel, disabled) {
                 (_, true) => TEXT_DISABLED,
@@ -482,12 +547,12 @@ impl Painter<'_> {
     }
 
     // ------------------------------------------------------------------ ListRow
-    /// Pressed highlight of a list row: a rounded 10 % fill inset from the row edges.
+    /// Pressed highlight of a list row: a rounded `PRESSED_TINT` inset from the row edges.
     pub fn row_pressed(&mut self, r: Rect) {
         self.cv.rrect(
             Rect::new(r.x + 4, r.y + 3, r.w - 8, r.h - 6),
             RADIUS - 2,
-            PRESSED_FILL,
+            PRESSED_TINT,
         );
     }
 
@@ -836,6 +901,7 @@ impl Painter<'_> {
         } else {
             (OUTLINE, 1.0)
         };
+        self.cv.rrect(r, RADIUS, SURFACE);
         self.cv.rrect_stroke(r, RADIUS, width, border);
         let eye = secret.then(|| Rect::new(r.right() - TOUCH_MIN, r.y, TOUCH_MIN, r.h));
         let text_w = r.w - 2 * SP_4 - if secret { TOUCH_MIN - SP_4 } else { 0 };
@@ -890,7 +956,7 @@ impl Painter<'_> {
             .min(area.w - 2 * SP_5)
             .max(160);
         let r = Rect::new(area.x + (area.w - w) / 2, area.y + SP_2, w, 48);
-        self.cv.rrect(r, 24, BG);
+        self.cv.rrect(r, 24, SURFACE_STRONG);
         self.cv.rrect_stroke(r, 24, OUTLINE_W, tone_color(tone));
         let ic = match tone {
             Tone::Info => Icon::Check,
@@ -913,7 +979,8 @@ impl Painter<'_> {
     }
 
     pub fn banner(&mut self, r: Rect, text: &str, tone: Tone) {
-        self.cv.rrect(r, RADIUS, banner_fill(tone));
+        self.cv.rrect(r, RADIUS, SURFACE_STRONG);
+        self.cv.rrect(r, RADIUS, banner_tint(tone));
         self.cv.rrect_stroke(r, RADIUS, 1.0, tone_color(tone));
         self.cv.icon(
             Icon::Warning,
@@ -1195,6 +1262,7 @@ impl Painter<'_> {
                 // shift engaged: drawn as held
                 self.outline_box(k.rect, RADIUS - 4, true, true, false);
             } else {
+                self.cv.rrect(k.rect, RADIUS - 4, SURFACE_ICON);
                 self.cv.rrect_stroke(
                     k.rect,
                     RADIUS - 4,
@@ -1374,7 +1442,9 @@ impl Painter<'_> {
     /// `pressed` = index into the returned vec.
     pub fn system_keyboard(&mut self, st: SysKbdState, pressed: Option<usize>) -> Vec<SysKeyBtn> {
         let area = self.cv.bounds();
-        self.cv.rect(area, BG);
+        // its own window over other apps (no compositor, nothing to blend with): the strip is
+        // SURFACE_STRONG over BG flattened into one opaque fill; the keys blend over it
+        self.cv.rect(area, SURFACE_STRONG.over(BG));
         self.divider(area.x, area.y, area.w);
         let keys = system_keyboard_layout(area, st.symbols);
         let compact = area.h < 300;
@@ -1387,7 +1457,7 @@ impl Painter<'_> {
                 _ => false,
             };
             let down = pressed == Some(i);
-            // pressed: 10 % fill + white outline; a latched modifier: white outline
+            // surface fill; pressed: + white 12 % and a white outline; latched modifier: white outline
             self.outline_box(k.rect, RADIUS - 4, down || latched, latched, false);
             let c = k.rect;
             let label = |s: &'static str| (s, Face::Bold, label_px);
@@ -1495,6 +1565,20 @@ mod tests {
             6,
             "6 px gaps"
         );
+    }
+
+    #[test]
+    fn row_runs_merge_adjacent_grouped_rows_only() {
+        let r = |y, h| Rect::new(0, y, 100, h);
+        let runs = row_runs([
+            (r(0, 64), true),
+            (r(64, 64), true),
+            (r(128, 56), false),
+            (r(184, 64), true),
+            (r(260, 64), true), // gap above: a new run
+        ]);
+        assert_eq!(runs, vec![r(0, 128), r(184, 64), r(260, 64)]);
+        assert!(row_runs([(r(0, 10), false)]).is_empty());
     }
 
     #[test]

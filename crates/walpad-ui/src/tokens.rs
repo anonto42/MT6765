@@ -1,7 +1,9 @@
 //! Design tokens (docs/rust/UI.md): the line-art theme. One charcoal background, white strokes and
-//! text. "White at N %" colours are pre-blended over the background at compile time, so every
-//! draw stays an opaque write: no per-pixel alpha, no gradients, no shadows. Controls are outlines;
-//! the only fills are the pressed state (`PRESSED_FILL`) and popovers that must hide what is below.
+//! text. "White at N %" stroke/text colours are pre-blended over the background at compile time
+//! (opaque writes). Surfaces (popovers, cards, rows, buttons, icon boxes, sheets, the dock, the
+//! keyboard, the mouse pad) get a translucent dark fill (`Tint`, owner request 2026-11-10) that is
+//! alpha-blended over whatever is beneath (the wallpaper art), so a component always reads apart
+//! from the background. No gradients, no shadows.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color {
@@ -38,6 +40,49 @@ impl Color {
 }
 
 const WHITE: Color = Color::hex(0xFFFFFF);
+const BLACK: Color = Color::hex(0x000000);
+
+/// A colour with straight alpha: a translucent fill blended over what is already drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Tint {
+    pub c: Color,
+    pub a: u8,
+}
+
+impl Tint {
+    /// `c` at `pct` % opacity.
+    pub const fn new(c: Color, pct: u32) -> Tint {
+        Tint {
+            c,
+            a: ((if pct > 100 { 100 } else { pct } * 255 + 50) / 100) as u8,
+        }
+    }
+    pub const fn opaque(self) -> bool {
+        self.a == 255
+    }
+    /// The opaque result of this tint over `base` (for strips whose base is known, e.g. the
+    /// keyboard window over plain BG: one opaque fill instead of a blend).
+    pub const fn over(self, base: Color) -> Color {
+        const fn ch(b: u8, t: u8, a: u32) -> u8 {
+            ((b as u32 * (255 - a) + t as u32 * a + 127) / 255) as u8
+        }
+        let a = self.a as u32;
+        Color {
+            r: ch(base.r, self.c.r, a),
+            g: ch(base.g, self.c.g, a),
+            b: ch(base.b, self.c.b, a),
+        }
+    }
+    pub(crate) fn sk(self) -> tiny_skia::Color {
+        tiny_skia::Color::from_rgba8(self.c.r, self.c.g, self.c.b, self.a)
+    }
+}
+
+impl From<Color> for Tint {
+    fn from(c: Color) -> Tint {
+        Tint { c, a: 255 }
+    }
+}
 
 /// White at `pct` % over the background.
 pub const fn white(pct: u32) -> Color {
@@ -57,8 +102,21 @@ pub const OUTLINE: Color = white(60);
 pub const CARD_BORDER: Color = white(50);
 /// Dividers, the sidebar edge, unlit signal bars (white 30 %).
 pub const DIVIDER: Color = white(30);
-/// Pressed state fill (white 10 %); the outline turns full white at the same time.
+/// Pressed state fill (white 10 %, opaque over BG); kept for opaque contexts. Surfaces use
+/// `SURFACE*` + `PRESSED_TINT`.
 pub const PRESSED_FILL: Color = white(10);
+/// Translucent surface fills (black at N %, blended over the wallpaper):
+/// cards, row groups, buttons, fields, the header pill, the dock's buttons (55 %: secondary text
+/// inside a card must stay readable where the card crosses the white wallpaper art);
+pub const SURFACE: Tint = Tint::new(BLACK, 55);
+/// popovers (Apps panel, Quick Settings), sheets, dialogs, toasts, banners, the keyboard / pad / dock
+/// strips, the sidebar's round Apps toggle (65 %: the white wallpaper art behind a panel must stay
+/// well below the text);
+pub const SURFACE_STRONG: Tint = Tint::new(BLACK, 65);
+/// small icon boxes (Home grid, sidebar, panel icons, keys) (30 %).
+pub const SURFACE_ICON: Tint = Tint::new(BLACK, 30);
+/// Pressed state: drawn over the surface fill (white 12 %); the outline turns full white too.
+pub const PRESSED_TINT: Tint = Tint::new(WHITE, 12);
 /// The coffee-cup watermark (white 15 %).
 pub const WATERMARK: Color = white(15);
 /// Selected / active marks (check, caret, slider fill): plain white in the line-art theme.
@@ -146,6 +204,20 @@ mod tests {
         ] {
             assert_eq!(c.to_hex(), hex);
         }
+    }
+
+    #[test]
+    fn tints_are_translucent_and_flatten_like_a_blend() {
+        assert_eq!(
+            (SURFACE.a, SURFACE_STRONG.a, SURFACE_ICON.a),
+            (140, 166, 77)
+        );
+        assert_eq!(PRESSED_TINT.a, 31);
+        assert!(!SURFACE.opaque() && Tint::from(BG).opaque());
+        assert_eq!(Tint::new(TEXT, 100).over(BG), TEXT);
+        assert_eq!(Tint::new(TEXT, 0).over(BG), BG);
+        // black 50 % over the charcoal halves every channel (rounded)
+        assert_eq!(Tint::new(BLACK, 50).over(BG), Color::hex(0x1C1F23));
     }
 
     #[test]

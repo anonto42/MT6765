@@ -403,6 +403,15 @@ pub fn render(
         }
         _ => p.screen_title("Settings", l.title),
     }
+    // rows over the wallpaper get a translucent card behind each run (buttons have their own fill)
+    let runs = walpad_ui::components::row_runs(
+        l.rows
+            .iter()
+            .map(|(r, row)| (*r, !matches!(row, Row::Action { .. }))),
+    );
+    for g in runs {
+        p.row_group(g);
+    }
     for (r, row) in &l.rows {
         match row {
             Row::Info(label, value, tone) => info_row(p, *r, label, value, *tone),

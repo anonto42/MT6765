@@ -1527,7 +1527,7 @@ impl App {
             active: chrome::active_target(self.active, panel_open),
         };
         self.chrome.paint(p, &frame, key);
-        chrome::render_pressed(p, &sidebar, self.model.pressed);
+        self.chrome.render_pressed(p, &sidebar, self.model.pressed);
         self.hits.clear();
         self.content_hits.clear();
         for it in &sidebar.items {

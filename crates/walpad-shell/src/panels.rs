@@ -481,42 +481,22 @@ pub fn running(apps: &[Tile]) -> Vec<usize> {
         .collect()
 }
 
-/// The panel has no fill (it shows the wallpaper art through): a BG plate sized to the text keeps
-/// a caption or a name readable over the art without filling the whole panel.
-fn plate(p: &mut Painter, s: &str, face: Face, px: f32, r: Rect, align: Align) {
-    let w = (p.fonts.measure(s, face, px).ceil() as i32 + 8).min(r.w + 8);
-    let x = match align {
-        Align::Left => r.x - 4,
-        Align::Center => r.x + (r.w - w) / 2,
-        Align::Right => r.right() - w + 4,
-    };
-    p.cv.rrect(Rect::new(x, r.y - 1, w, r.h + 2), 4, BG);
-}
-
-/// A panel cell over the art: the icon box and the name get a BG backing, then the usual icon.
+/// A panel cell: the 48 px icon box (translucent `SURFACE_ICON` over the panel fill) and its name.
 fn panel_icon(p: &mut Painter, cell: Rect, icon: Icon, name: &str, pressed: bool) {
-    let b = cell_box(cell);
-    p.cv.rrect(b, RADIUS_ICON.min(b.w / 3), BG);
-    plate(
-        p,
-        name,
-        Face::Regular,
-        SIZE_TINY,
-        Rect::new(cell.x - 4, b.bottom() + 6, cell.w + 8, 18),
-        Align::Center,
-    );
     p.app_icon(cell, BOX_PANEL, icon, name, pressed, false);
 }
 
 fn panel_caption(p: &mut Painter, s: &str, r: Rect) {
-    plate(p, &s.to_uppercase(), Face::Bold, SIZE_TINY, r, Align::Left);
     p.caption_upper(s, r);
 }
 
+/// Round close badge: it overlaps the icon box's corner, so it gets a near-opaque disc (the box
+/// outline must not show through the x), then the pressed tint, all circles.
 fn paint_close_badge(p: &mut Painter, r: Rect, pressed: bool) {
-    p.cv.rrect(r, BADGE_R, BG);
+    let (cx, cy) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
+    p.cv.circle(cx, cy, BADGE_R as f32, Tint::new(Color::hex(0x000000), 70));
     if pressed {
-        p.cv.rrect(r, BADGE_R, PRESSED_FILL);
+        p.cv.circle(cx, cy, BADGE_R as f32, PRESSED_TINT);
     }
     p.cv.rrect_stroke(r, BADGE_R, OUTLINE_W, TEXT);
     p.cv.icon(Icon::Close, r.x + 4, r.y + 4, r.w - 8, TEXT);
@@ -534,18 +514,10 @@ pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect
         (frame.screen(), Target::Dismiss),
         (g.panel, Target::PanelBody),
     ];
-    // transparent (owner request): only the outline over the background, no fill, no scrim
-    p.cv.rrect_stroke(g.panel, RADIUS_CARD, 1.0, CARD_BORDER);
+    // translucent (owner request 2026-11-10): SURFACE_STRONG over the wallpaper, no scrim
+    p.popover(g.panel);
     panel_caption(p, "Active apps", g.active_label);
     if let Some(r) = g.active_empty {
-        plate(
-            p,
-            "No apps running",
-            Face::Regular,
-            SIZE_CAPTION,
-            r,
-            Align::Left,
-        );
         p.text(
             "No apps running",
             Style::new(Face::Regular, SIZE_CAPTION, TEXT_DISABLED),
