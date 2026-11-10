@@ -11,6 +11,7 @@ pub mod dock;
 pub mod gesture;
 pub mod home;
 pub mod keyboard;
+pub mod mousepad;
 pub mod network;
 pub mod overlay;
 pub mod panels;

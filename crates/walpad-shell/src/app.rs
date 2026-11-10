@@ -146,13 +146,14 @@ pub enum Target {
     BatteryCard,
     Slider,
     Rotation,
-    Keyboard,
     ScreenOff,
     // Home grid (index into `Model::apps`)
     AppTile(usize),
-    // Apps panel: installed / running (index into `Model::apps`)
-    PanelApp(usize),
+    // Apps panel: a running app (index into `Model::apps`), its close badge, a tool (index into
+    // `panels::TOOLS`)
     PanelActive(usize),
+    PanelClose(usize),
+    PanelTool(usize),
     /// Tap outside a popover: closes it.
     Dismiss,
     /// Inside a popover but not on a control: nothing happens.
@@ -199,6 +200,10 @@ pub enum Cmd {
     KeyboardToggle,
     KeyboardShow,
     KeyboardHide,
+    /// Show / hide the shell's mouse pad (mousepad.rs). Handled by the shell loop itself, never
+    /// sent to the core (the core has no mouse pad command).
+    MousePadShow,
+    MousePadHide,
     ScreenOff,
     Launch(String),
     CloseApp(String),
@@ -247,6 +252,9 @@ impl Cmd {
             Cmd::KeyboardToggle => ("keyboard", json!({"mode": "toggle"})),
             Cmd::KeyboardShow => ("keyboard", json!({"mode": "show"})),
             Cmd::KeyboardHide => ("keyboard", json!({"mode": "hide"})),
+            // shell-local: `Shell::send` applies these and never puts them on the socket
+            Cmd::MousePadShow => ("mouse_pad", json!({"mode": "show"})),
+            Cmd::MousePadHide => ("mouse_pad", json!({"mode": "hide"})),
             Cmd::ScreenOff => ("screen", json!({"mode": "off"})),
             Cmd::Launch(id) => ("launch", json!({"app": id})),
             Cmd::CloseApp(id) => ("close_app", json!({"app": id})),
@@ -913,7 +921,7 @@ impl App {
                 if self.model.overlay.is_none() || panel {
                     let id = match self.hit(x, y) {
                         Some(Target::Tile(i)) => self.model.tiles.get(i).map(|t| t.id.clone()),
-                        Some(Target::AppTile(i) | Target::PanelApp(i) | Target::PanelActive(i)) => {
+                        Some(Target::AppTile(i) | Target::PanelActive(i)) => {
                             self.model.apps.get(i).map(|t| t.id.clone())
                         }
                         _ => None,
@@ -986,10 +994,25 @@ impl App {
                 }
             }
             Target::PanelBody => {}
-            Target::PanelApp(i) | Target::PanelActive(i) => {
+            Target::PanelActive(i) => {
                 self.model.overlay = None;
                 if let Some(id) = self.model.apps.get(i).map(|t| t.id.clone()) {
                     self.activate(&id, out);
+                }
+            }
+            // the close badge: the panel stays open (the app leaves "Active apps" with the next
+            // status), so several apps can be closed in a row
+            Target::PanelClose(i) if interactive => {
+                if let Some(id) = self.model.apps.get(i).map(|t| t.id.clone()) {
+                    out.cmd(Cmd::CloseApp(id));
+                }
+            }
+            Target::PanelTool(i) => {
+                if let Some(tool) = panels::TOOLS.get(i) {
+                    self.model.overlay = None;
+                    match tool.action {
+                        panels::ToolAction::MousePad => out.cmd(Cmd::MousePadShow),
+                    }
                 }
             }
             Target::WifiCard => self.go(Tab::Network, out),
@@ -1013,7 +1036,6 @@ impl App {
                 out.cmd(Cmd::SetBrightness(native_brightness(v)));
             }
             Target::Rotation if interactive => out.cmd(Cmd::RotateToggle),
-            Target::Keyboard if interactive => out.cmd(Cmd::KeyboardToggle),
             Target::ScreenOff if interactive => out.cmd(Cmd::ScreenOff),
             Target::Scan if interactive && !self.model.net.scanning => {
                 self.model.net.scanning = true;

@@ -295,11 +295,21 @@ fn home_taps_launch_apps_or_navigate() {
         tap(&mut app, Target::Rotation).cmds,
         vec![Cmd::RotateToggle]
     );
-    assert_eq!(
-        tap(&mut app, Target::Keyboard).cmds,
-        vec![Cmd::KeyboardToggle]
-    );
     assert_eq!(tap(&mut app, Target::ScreenOff).cmds, vec![Cmd::ScreenOff]);
+    // no Keyboard row any more: the keyboard opens where it is needed (terminal, dock)
+    let qs: Vec<Target> = app.overlay_hits.iter().map(|(_, t)| *t).collect();
+    assert_eq!(
+        qs,
+        [
+            Target::Dismiss,
+            Target::PanelBody,
+            Target::WifiCard,
+            Target::BatteryCard,
+            Target::Slider,
+            Target::Rotation,
+            Target::ScreenOff
+        ]
+    );
     // a tap outside closes the dropdown and does nothing else
     let (x, y) = app.frame.content.center();
     assert!(tap_at(&mut app, x, y, 1000).cmds.is_empty());
@@ -347,25 +357,30 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
     );
     tap(&mut app, Target::Nav(1));
     assert_eq!(app.model.overlay, Some(Overlay::AppsPanel));
-    // running apps first (Terminal), then every installed app
+    // the running apps (Terminal) with their close badges, then the tools
     let panel: Vec<Target> = app
         .overlay_hits
         .iter()
         .map(|(_, t)| *t)
-        .filter(|t| matches!(t, Target::PanelApp(_) | Target::PanelActive(_)))
+        .filter(|t| {
+            matches!(
+                t,
+                Target::PanelActive(_) | Target::PanelClose(_) | Target::PanelTool(_)
+            )
+        })
         .collect();
     assert_eq!(
         panel,
         [
             Target::PanelActive(1),
-            Target::PanelApp(0),
-            Target::PanelApp(1),
-            Target::PanelApp(2)
+            Target::PanelClose(1),
+            Target::PanelTool(0)
         ]
     );
+    // tapping the running app focuses it (launch = focus when it runs) and closes the panel
     assert_eq!(
-        tap(&mut app, Target::PanelApp(0)).cmds,
-        vec![Cmd::Launch("browser".into())]
+        tap(&mut app, Target::PanelActive(1)).cmds,
+        vec![Cmd::Launch("terminal".into())]
     );
     assert!(app.model.overlay.is_none(), "launching closes the panel");
     // the toggle again: open, then a second tap on it (outside the panel) closes it
@@ -379,12 +394,69 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
     assert_eq!(app.model.overlay, Some(Overlay::AppsPanel));
     long_press(&mut app, Target::PanelActive(1));
     assert!(matches!(&app.model.overlay, Some(Overlay::App(s)) if s.id == "terminal"));
-    // the Settings shortcut in the panel switches tab
+    // the Mouse pad tool opens the pad (a shell-local command) and closes the panel
     tap(&mut app, Target::SheetCancel);
     tap(&mut app, Target::Nav(1));
-    tap(&mut app, Target::PanelApp(2));
-    assert_eq!(app.active, Tab::Settings);
+    assert_eq!(
+        tap(&mut app, Target::PanelTool(0)).cmds,
+        vec![Cmd::MousePadShow]
+    );
     assert!(app.model.overlay.is_none());
+}
+
+#[test]
+fn apps_panel_close_badge_closes_the_app_and_keeps_the_panel_open() {
+    use crate::panels::{close_badge, panel_geom, BADGE_HIT, TOOLS};
+    let mut app = online();
+    app.on_core(
+        &CoreEvent::Status(Box::new(status(
+            120,
+            &[("browser", true), ("terminal", true)],
+        ))),
+        0,
+    );
+    tap(&mut app, Target::Nav(1));
+    let g = panel_geom(&app.frame, 2, TOOLS.len());
+    // browser (apps[0]) is the first running cell: its badge's corners of the enlarged hit
+    // rectangle all hit the badge, the icon centre still hits the icon
+    let (badge, hit) = close_badge(g.active[0]);
+    assert!(hit.w >= BADGE_HIT && hit.h >= BADGE_HIT);
+    for (x, y) in [
+        (hit.x, hit.y),
+        (hit.right() - 1, hit.y),
+        (hit.x, hit.bottom() - 1),
+        (hit.right() - 1, hit.bottom() - 1),
+        badge.center(),
+    ] {
+        assert_eq!(app.hit(x, y), Some(Target::PanelClose(0)), "({x}, {y})");
+    }
+    let (cx, cy) = crate::panels::cell_box(g.active[0]).center();
+    assert_eq!(app.hit(cx, cy), Some(Target::PanelActive(0)));
+    // the badge overlaps the next cell's edge and wins there
+    let (bx, by) = (hit.right() - 1, g.active[1].y + 4);
+    assert!(g.active[1].contains(bx, by));
+    assert_eq!(app.hit(bx, by), Some(Target::PanelClose(0)));
+    // tapping it sends close_app for that app id; the panel stays open for the next one
+    let out = tap_at(&mut app, badge.center().0, badge.center().1, 1000);
+    assert_eq!(out.cmds, vec![Cmd::CloseApp("browser".into())]);
+    assert_eq!(
+        Cmd::CloseApp("browser".into()).request(),
+        ("close_app", json!({"app": "browser"}))
+    );
+    assert_eq!(app.model.overlay, Some(Overlay::AppsPanel));
+    // long press on the badge does nothing (the sheet is on the icon)
+    long_press(&mut app, Target::PanelClose(1));
+    assert_eq!(app.model.overlay, Some(Overlay::AppsPanel));
+    // while the core is away the badge does nothing
+    app.on_core(&CoreEvent::Disconnected, 2000);
+    app.on_core(
+        &CoreEvent::Status(Box::new(status(120, &[("terminal", true)]))),
+        2000,
+    );
+    app.model.connected = false;
+    render(&mut app);
+    // (only the terminal is installed in that status: it is apps[0] now)
+    assert!(tap(&mut app, Target::PanelClose(0)).cmds.is_empty());
 }
 
 #[test]

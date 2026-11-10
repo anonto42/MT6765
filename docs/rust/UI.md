@@ -63,6 +63,7 @@ buttons 56 high. Icons: 24 px grid, round 2 px strokes (28 px in 64 boxes).
 | Device | header pill > Quick Settings > Battery, or Settings > Display |
 | Settings (+ subpages) | sidebar Settings, or the Settings icon on Home / in the Apps panel |
 | Power menu | long power press, or Settings > Maintenance > Power menu |
+| Mouse pad | sidebar chevron > Apps panel > Tools > Mouse pad |
 
 The old bottom navigation is gone. `Tab::Apps` is kept for compatibility and shows Home (the grid
 is the app list); `Target::Nav(1)` is the Apps-panel toggle.
@@ -82,14 +83,21 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   opens Network); Bluetooth (disabled, "Not supported on this tablet"); Battery (NN %) (opens Device;
   "Battery (~62%)" + "Estimated from voltage" in warning for an estimate, "Battery (unavailable)"
   when there is no reading, the charge state for a gauge); divider; Brightness label + percent and
-  the slider; divider; Rotation: Auto/Locked, Keyboard, Screen off (disabled while the core is
-  away). Rows 56 high. The quick toggles keep it open; the two navigation rows and a tap outside
+  the slider; divider; Rotation: Auto/Locked, Screen off (disabled while the core is away). No
+  Keyboard row: the keyboard opens where it is needed (terminal start, dock button). Rows 56 high. The quick toggles keep it open; the two navigation rows and a tap outside
   close it.
 - **Apps panel** (popover 320 wide, bottom-left next to the sidebar, 16 px from the bottom, padding
-  20): "ACTIVE APPS" with the running apps as 48x48 outlined icons (or "No apps running"), a
-  divider, "INSTALLED APPS" in a 4-column grid of 48x48 icons with 11 px names. Cells are 70x72
-  touch targets. Tap launches (and closes the panel); long press opens the app sheet; a tap outside
-  closes it.
+  20). Transparent (owner request 2026-11-10): no fill and no scrim, only its 1 px CARD_BORDER
+  outline (radius 16) over the background; captions, names and icon boxes get small BG plates so
+  the wallpaper art under them cannot make them unreadable, and Home grid items that would sit
+  under the panel are not drawn while it is open. "ACTIVE APPS": the running apps as 48x48
+  outlined icons (or "No apps running"); each has a 20 px round close badge (x, white outline) on
+  its icon's top-right corner, tapped through a 40x40 rectangle that stays clear of the icon
+  centre: it sends `close_app` for that app id and the panel stays open. Tapping the icon focuses
+  the app (launch = focus) and closes the panel; long press opens the app sheet. A divider, then
+  "TOOLS": a generic 4-column grid of tools (`panels::TOOLS`: icon, label, action); the first is
+  "Mouse pad". Installed apps are on Home and the sidebar, not here. Cells are 70x72 touch
+  targets; a tap outside closes the panel.
 - **Network**: title "Wi-Fi" + outlined radio chip (Up/Starting/Failed/Down; Failed shows "Restart
   the tablet to retry Wi-Fi"); no on/off toggle. Connected card (outlined: SSID, signal, IP mono,
   Disconnect). Scan button (outlined, spinner while scanning). Available networks in an outlined
@@ -116,9 +124,25 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   keys (radius 8), pressed or latched = 10 % fill + white outline. Five rows, 12 key units wide:
   Esc Tab 1-0 / q-p Backspace / Ctrl a-l Enter / Shift z-m . Up / / ?123, minimise, space,
   Left Down Right (symbols layer: ! @ # ... and < > ` ~ \ ; : ' " , ?). Shift and Ctrl are
-  one-shot. Toggled by the dock and Quick Settings Keyboard buttons, the core's `keyboard`
-  command; shown when the terminal starts; hidden by the minimise key or going Home. The dock
-  moves directly above it.
+  one-shot. Toggled by the dock Keyboard button and the core's `keyboard` command; shown when the
+  terminal starts; hidden by the minimise key or going Home. The dock moves directly above it.
+  Opening it closes the mouse pad (and the other way round).
+- **Mouse pad** (Apps panel > Tools; `mousepad.rs`): the keyboard's twin: override-redirect window
+  (WM_HINTS input=false, never focused) + a managed 1x1 dock-type strut window, full width, 30 % of
+  the visible height at the bottom, the dock directly above it. Inside: an outlined touch surface
+  with a hint ("Drag to move the pointer", "Tap to click · hold for a right click") and a mini-map
+  of the screen (the pad's band greyed, a white dot at the cursor), and a row of five outlined
+  56 px buttons: Left click, Right click, Scroll up (button 4), Scroll down (button 5), minimise
+  (mouse + chevron). The pad keeps a virtual cursor (starts in the middle of the area above the
+  pad, clamped to that area: 800 x 896 portrait, 1280 x 560 landscape, so a click never lands on
+  the pad). One-finger drag moves it relatively x1.5 once the finger left a 10 px slop (the whole
+  travel then counts, fractions carry); a tap = left click; a hold >= 500 ms without moving = right
+  click (the core bridge's 150 ms lift delay is subtracted); buttons act on release over the same
+  button. The core's touch bridge moves the real pointer to the finger, so after every pad event
+  the shell puts it back on the virtual cursor with an XTEST motion (echoes of those warps are
+  recognised and ignored) and clicks with XTEST at the cursor after the finger lifted. Hidden by
+  its minimise button, by going Home (dock Home, or the shell becoming active), or by the keyboard
+  opening. Only the mini-map is repainted while the cursor moves.
 
 ## Components and states
 Outline box / icon box / round button (rest, active, pressed); Button primary (2 px white outline),

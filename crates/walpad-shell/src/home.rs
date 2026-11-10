@@ -93,9 +93,17 @@ pub fn wifi_card(m: &Model) -> (CardValue, Option<String>) {
 /// Draws Home and returns the hit rectangles (`AppTile(i)` indexes `model.apps`).
 pub fn render(p: &mut Painter, frame: &Frame, m: &Model, banner_h: i32) -> Vec<(Rect, Target)> {
     let l = layout(frame, banner_h, m.apps.len());
+    // the Apps panel has no fill: grid items under it are not drawn while it is open
+    let panel = matches!(m.overlay, Some(crate::overlay::Overlay::AppsPanel))
+        .then(|| crate::panels::apps_panel_rect(frame, m).inset(-SP_2));
     let mut hits = Vec::new();
     for (i, (r, t)) in l.tiles.iter().zip(&m.apps).enumerate() {
         let target = Target::AppTile(i);
+        if panel.is_some_and(|pr| {
+            r.x < pr.right() && pr.x < r.right() && r.y < pr.bottom() && pr.y < r.bottom()
+        }) {
+            continue;
+        }
         p.app_icon(
             *r,
             BOX_GRID,

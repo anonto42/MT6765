@@ -33,10 +33,12 @@ pub enum Icon {
     Eye,
     EyeOff,
     Spinner,
+    /// The mouse pad tool (Apps panel > Tools).
+    Mouse,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 28] = [
+    pub const ALL: [Icon; 29] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -65,6 +67,7 @@ impl Icon {
         Icon::Eye,
         Icon::EyeOff,
         Icon::Spinner,
+        Icon::Mouse,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -80,6 +83,7 @@ impl Icon {
             "folder" | "files" => Icon::Folder,
             "keyboard" => Icon::Keyboard,
             "bluetooth" => Icon::Bluetooth,
+            "mouse" => Icon::Mouse,
             _ => return None,
         })
     }
@@ -312,6 +316,11 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             }
         }
         Icon::Spinner => p.arc(12.0, 12.0, 9.0, -90.0, 180.0),
+        Icon::Mouse => {
+            p.rrect(6.0, 2.5, 12.0, 19.0, 6.0);
+            p.line((12.0, 2.5), (12.0, 9.5));
+            p.line((6.0, 9.5), (18.0, 9.5));
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -406,7 +415,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 28);
+        assert_eq!(Icon::ALL.len(), 29);
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }

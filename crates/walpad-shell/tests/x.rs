@@ -1014,3 +1014,218 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
         !is_mapped(p, kbd)
     });
 }
+
+// mouse pad (Apps panel > Tools): override-redirect pad at the bottom like the keyboard, relative
+// pointer motion through XTEST with the real pointer kept on the virtual cursor, tap = click at the
+// virtual cursor, long press = right click, the button row, and the keyboard replacing it.
+
+fn open_mouse_pad(probe: &Probe, frame: &Frame) {
+    use walpad_shell::panels::{panel_geom, TOOLS};
+    let l = sidebar_layout(frame, &[], false); // offline: no pinned apps
+    let chevron = l
+        .items
+        .iter()
+        .find(|i| i.target == Target::Nav(1))
+        .unwrap()
+        .hit
+        .center();
+    probe.click(chevron.0 as i16, chevron.1 as i16);
+    std::thread::sleep(Duration::from_millis(300));
+    let tool = panel_geom(frame, 0, TOOLS.len()).tools[0].center();
+    probe.click(tool.0 as i16, tool.1 as i16);
+}
+
+#[test]
+fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
+    use walpad_shell::mousepad::{pad_layout, PadButton};
+    use x11rb::protocol::xproto::{CreateWindowAux, EventMask, WindowClass};
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-pad-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let p = &probe.0;
+    let c = &p.conn;
+    let pad = find_by_class(p, b"walpad-mousepad\0").expect("mouse pad window exists");
+    let pstrut = find_by_class(p, b"walpad-mousepad-strut\0").expect("mouse pad strut window");
+    assert!(!is_mapped(p, pad), "hidden until asked for");
+    assert!(
+        c.get_window_attributes(pad)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .override_redirect
+    );
+    let hints = c
+        .get_property(false, pad, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 0, 9)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(&hints[..2], &[1, 0], "WM_HINTS input=false");
+
+    // sidebar chevron -> Apps panel -> Tools > Mouse pad
+    open_mouse_pad(&probe, &Frame::new(800, 1280));
+    wait_for("mouse pad mapped", || is_mapped(p, pad));
+    assert_eq!(geom(p, pad), (0, 896, 800, 384));
+    assert!(is_mapped(p, pstrut));
+    assert_eq!(
+        strut_of(p, pstrut),
+        [0, 0, 0, 384, 0, 0, 0, 0, 0, 0, 0, 799]
+    );
+    let pointer = || {
+        let r = c.query_pointer(p.root).unwrap().reply().unwrap();
+        (r.root_x as i32, r.root_y as i32)
+    };
+    wait_for("pointer on the virtual cursor", || pointer() == (400, 448));
+    wait_for("pad painted", || {
+        let img = probe.image(pad, 800, 384);
+        count(&img, 800, 0, 800, 0, 384, TEXT) > 300
+    });
+
+    // a drag on the surface: 60 px right, 20 px up -> the pointer moves 90 / 30 (x1.5)
+    let step = |ty: u8, detail: u8, x: i16, y: i16| {
+        c.xtest_fake_input(ty, detail, 0, p.root, x, y, 0).unwrap();
+        c.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(60));
+    };
+    let mv = xproto::MOTION_NOTIFY_EVENT;
+    step(mv, 0, 200, 1000);
+    step(xproto::BUTTON_PRESS_EVENT, 1, 0, 0);
+    step(mv, 0, 220, 1000);
+    step(mv, 0, 260, 1000);
+    step(mv, 0, 260, 980);
+    step(xproto::BUTTON_RELEASE_EVENT, 1, 0, 0);
+    wait_for("pointer moved relatively", || pointer() == (490, 418));
+
+    // an app window under the cursor records button presses
+    let app = c.generate_id().unwrap();
+    c.create_window(
+        0,
+        app,
+        p.root,
+        0,
+        0,
+        800,
+        800,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        0,
+        &CreateWindowAux::new()
+            .background_pixel(0x0033_6699)
+            .event_mask(EventMask::BUTTON_PRESS),
+    )
+    .unwrap();
+    c.change_property8(
+        xproto::PropMode::REPLACE,
+        app,
+        AtomEnum::WM_CLASS,
+        AtomEnum::STRING,
+        b"st\0St\0",
+    )
+    .unwrap();
+    c.map_window(app).unwrap();
+    c.flush().unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    let next_press = |what: &str| -> (u8, i16, i16) {
+        let mut got = None;
+        wait_for(what, || {
+            while let Some(ev) = c.poll_for_event().unwrap() {
+                if let x11rb::protocol::Event::ButtonPress(e) = ev {
+                    if e.event == app {
+                        got = Some((e.detail, e.root_x, e.root_y));
+                        return true;
+                    }
+                }
+            }
+            false
+        });
+        got.unwrap()
+    };
+    // a quick tap anywhere on the surface: a left click at the virtual cursor, not the finger
+    probe.click(300, 1000);
+    assert_eq!(next_press("left click"), (1, 490, 418));
+    wait_for("pointer back on the cursor", || pointer() == (490, 418));
+    // a long press: right click
+    step(mv, 0, 300, 1000);
+    step(xproto::BUTTON_PRESS_EVENT, 1, 0, 0);
+    std::thread::sleep(Duration::from_millis(750));
+    step(xproto::BUTTON_RELEASE_EVENT, 1, 0, 0);
+    assert_eq!(next_press("right click"), (3, 490, 418));
+    // the button row: Scroll down = button 5
+    let r = pad_layout((800, 1280))
+        .buttons
+        .into_iter()
+        .find(|(_, b)| *b == PadButton::ScrollDown)
+        .unwrap()
+        .0;
+    probe.click(r.center().0 as i16, (896 + r.center().1) as i16);
+    assert_eq!(next_press("scroll down"), (5, 490, 418));
+
+    // the app becomes active: the dock appears directly above the pad; its Keyboard button
+    // replaces the pad with the keyboard
+    let dock = find_by_class(p, b"walpad-dock\0").expect("dock window");
+    let kbd = find_by_class(p, b"walpad-keyboard\0").expect("keyboard window");
+    set_active(p, app);
+    wait_for("dock mapped above the pad", || {
+        is_mapped(p, dock) && geom(p, dock) == (0, 840, 800, 56)
+    });
+    assert!(is_mapped(p, pad), "the pad stays for the app");
+    probe.click(400, 868);
+    wait_for("keyboard replaces the pad", || {
+        is_mapped(p, kbd) && !is_mapped(p, pad)
+    });
+    assert!(!is_mapped(p, pstrut));
+}
+
+#[test]
+fn mouse_pad_close_button_hides_it_in_landscape() {
+    use walpad_shell::mousepad::{pad_layout, PadButton};
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-padc-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let p = &probe.0;
+    let pad = find_by_class(p, b"walpad-mousepad\0").expect("mouse pad window exists");
+    let shell = probe.find_shell().unwrap();
+    p.conn
+        .configure_window(shell, &ConfigureWindowAux::new().width(1280).height(800))
+        .unwrap();
+    p.conn.flush().unwrap();
+    wait_for("pad moved for landscape", || {
+        geom(p, pad) == (0, 560, 1280, 240)
+    });
+    std::thread::sleep(Duration::from_millis(300));
+    open_mouse_pad(&probe, &Frame::new(1280, 800));
+    wait_for("landscape pad mapped", || is_mapped(p, pad));
+    let pointer = || {
+        let r = p.conn.query_pointer(p.root).unwrap().reply().unwrap();
+        (r.root_x as i32, r.root_y as i32)
+    };
+    wait_for("pointer in the middle above the pad", || {
+        pointer() == (640, 280)
+    });
+    let r = pad_layout((1280, 800))
+        .buttons
+        .into_iter()
+        .find(|(_, b)| *b == PadButton::Close)
+        .unwrap()
+        .0;
+    probe.click(r.center().0 as i16, (560 + r.center().1) as i16);
+    wait_for("pad closed", || !is_mapped(p, pad));
+}

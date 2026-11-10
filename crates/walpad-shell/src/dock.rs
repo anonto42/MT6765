@@ -556,8 +556,9 @@ impl Dock {
                     if let (Some(b), true) = (hit, hit == down) {
                         if b == DockButton::Home {
                             self.raise_shell()?;
-                            // going Home puts the system keyboard away
+                            // going Home puts the system keyboard and the mouse pad away
                             cmds.push(Cmd::KeyboardHide);
+                            cmds.push(Cmd::MousePadHide);
                         } else {
                             let class = self.class_of(self.active);
                             cmds.extend(command_for(b, &self.apps, &class));

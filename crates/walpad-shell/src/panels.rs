@@ -25,7 +25,6 @@ pub struct QsGeom {
     pub slider: Rect,
     pub divider2: i32,
     pub rotation: Rect,
-    pub keyboard: Rect,
     pub screen_off: Rect,
 }
 
@@ -50,7 +49,8 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         y += QS_ROW;
         r
     };
-    let (rotation, keyboard, screen_off) = (row(), row(), row());
+    // no Keyboard row: the keyboard opens where it is needed (terminal start, dock button)
+    let (rotation, screen_off) = (row(), row());
     QsGeom {
         panel: Rect::new(x, top, QS_W, screen_off.bottom() + QS_PAD - top),
         wifi,
@@ -61,7 +61,6 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         slider,
         divider2,
         rotation,
-        keyboard,
         screen_off,
     }
 }
@@ -255,7 +254,6 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     };
     for (r, icon, label, t) in [
         (g.rotation, Icon::Rotate, rot, Target::Rotation),
-        (g.keyboard, Icon::Keyboard, "Keyboard", Target::Keyboard),
         (g.screen_off, Icon::Screen, "Screen off", Target::ScreenOff),
     ] {
         qs_row(p, r, icon, label, None, false, pr(t), !online);
@@ -273,6 +271,30 @@ const CELL_W: i32 = (PANEL_W - 2 * PANEL_PAD) / PANEL_COLS;
 const CELL_H: i32 = BOX_PANEL + 6 + 18;
 const CELL_GAP: i32 = SP_3;
 const CAPTION_H: i32 = 16;
+/// Close badge on a running app: drawn 20 px round, tapped through a 40x40 rectangle.
+pub const BADGE_R: i32 = 10;
+pub const BADGE_HIT: i32 = 40;
+
+/// What a tool in the Apps panel's TOOLS grid does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolAction {
+    /// Open the mouse pad (a touchpad over the apps: mousepad.rs).
+    MousePad,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Tool {
+    pub icon: Icon,
+    pub label: &'static str,
+    pub action: ToolAction,
+}
+
+/// The TOOLS section, in grid order. Add a tool here (and its action in `App::on_tap`).
+pub const TOOLS: [Tool; 1] = [Tool {
+    icon: Icon::Mouse,
+    label: "Mouse pad",
+    action: ToolAction::MousePad,
+}];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelGeom {
@@ -282,8 +304,8 @@ pub struct PanelGeom {
     /// "No apps running" line when nothing runs.
     pub active_empty: Option<Rect>,
     pub divider: i32,
-    pub installed_label: Rect,
-    pub installed: Vec<Rect>,
+    pub tools_label: Rect,
+    pub tools: Vec<Rect>,
 }
 
 fn grid_h(n: usize) -> i32 {
@@ -291,8 +313,30 @@ fn grid_h(n: usize) -> i32 {
     rows * CELL_H + (rows - 1).max(0) * CELL_GAP
 }
 
+/// The icon box of a panel cell (48 px, centred at the top of the cell).
+pub fn cell_box(cell: Rect) -> Rect {
+    Rect::new(
+        cell.x + (cell.w - BOX_PANEL) / 2,
+        cell.y,
+        BOX_PANEL,
+        BOX_PANEL,
+    )
+}
+
+/// The close badge of a running app's cell: (drawn circle bounds, enlarged hit rectangle). The
+/// badge sits on the icon box's top-right corner; the hit rectangle stays clear of the box centre,
+/// so a tap on the icon itself still focuses the app.
+pub fn close_badge(cell: Rect) -> (Rect, Rect) {
+    let b = cell_box(cell);
+    let (cx, cy) = (b.right() - 2, b.y + 2);
+    (
+        Rect::new(cx - BADGE_R, cy - BADGE_R, 2 * BADGE_R, 2 * BADGE_R),
+        Rect::new(cx - BADGE_HIT / 2, cy - BADGE_HIT / 2, BADGE_HIT, BADGE_HIT),
+    )
+}
+
 /// Bottom-left next to the sidebar: the panel grows upwards from 16 px above the bottom edge.
-pub fn panel_geom(frame: &Frame, running: usize, installed: usize) -> PanelGeom {
+pub fn panel_geom(frame: &Frame, running: usize, tools: usize) -> PanelGeom {
     let active_h = if running == 0 { 24 } else { grid_h(running) };
     let h = PANEL_PAD
         + CAPTION_H
@@ -303,7 +347,7 @@ pub fn panel_geom(frame: &Frame, running: usize, installed: usize) -> PanelGeom 
         + SP_4
         + CAPTION_H
         + SP_3
-        + grid_h(installed)
+        + grid_h(tools)
         + PANEL_PAD;
     let x = SIDEBAR_W + SP_3;
     let top = (frame.h - SP_4 - h).max(HEADER_H + SP_2);
@@ -328,7 +372,7 @@ pub fn panel_geom(frame: &Frame, running: usize, installed: usize) -> PanelGeom 
     y += active_h + SP_4;
     let divider = y;
     y += 1 + SP_4;
-    let installed_label = Rect::new(ix, y, PANEL_W - 2 * PANEL_PAD, CAPTION_H);
+    let tools_label = Rect::new(ix, y, PANEL_W - 2 * PANEL_PAD, CAPTION_H);
     y += CAPTION_H + SP_3;
     PanelGeom {
         panel: Rect::new(x, top, PANEL_W, h),
@@ -336,8 +380,8 @@ pub fn panel_geom(frame: &Frame, running: usize, installed: usize) -> PanelGeom 
         active,
         active_empty,
         divider,
-        installed_label,
-        installed: cells(y, installed),
+        tools_label,
+        tools: cells(y, tools),
     }
 }
 
@@ -350,16 +394,71 @@ pub fn running(apps: &[Tile]) -> Vec<usize> {
         .collect()
 }
 
+/// The panel has no fill (it shows the wallpaper art through): a BG plate sized to the text keeps
+/// a caption or a name readable over the art without filling the whole panel.
+fn plate(p: &mut Painter, s: &str, face: Face, px: f32, r: Rect, align: Align) {
+    let w = (p.fonts.measure(s, face, px).ceil() as i32 + 8).min(r.w + 8);
+    let x = match align {
+        Align::Left => r.x - 4,
+        Align::Center => r.x + (r.w - w) / 2,
+        Align::Right => r.right() - w + 4,
+    };
+    p.cv.rrect(Rect::new(x, r.y - 1, w, r.h + 2), 4, BG);
+}
+
+/// A panel cell over the art: the icon box and the name get a BG backing, then the usual icon.
+fn panel_icon(p: &mut Painter, cell: Rect, icon: Icon, name: &str, pressed: bool) {
+    let b = cell_box(cell);
+    p.cv.rrect(b, RADIUS_ICON.min(b.w / 3), BG);
+    plate(
+        p,
+        name,
+        Face::Regular,
+        SIZE_TINY,
+        Rect::new(cell.x - 4, b.bottom() + 6, cell.w + 8, 18),
+        Align::Center,
+    );
+    p.app_icon(cell, BOX_PANEL, icon, name, pressed, false);
+}
+
+fn panel_caption(p: &mut Painter, s: &str, r: Rect) {
+    plate(p, &s.to_uppercase(), Face::Bold, SIZE_TINY, r, Align::Left);
+    p.caption_upper(s, r);
+}
+
+fn paint_close_badge(p: &mut Painter, r: Rect, pressed: bool) {
+    p.cv.rrect(r, BADGE_R, BG);
+    if pressed {
+        p.cv.rrect(r, BADGE_R, PRESSED_FILL);
+    }
+    p.cv.rrect_stroke(r, BADGE_R, OUTLINE_W, TEXT);
+    p.cv.icon(Icon::Close, r.x + 4, r.y + 4, r.w - 8, TEXT);
+}
+
+/// The Apps panel's outline rectangle for the current model.
+pub fn apps_panel_rect(frame: &Frame, m: &Model) -> Rect {
+    panel_geom(frame, running(&m.apps).len(), TOOLS.len()).panel
+}
+
 pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect, Target)> {
     let run = running(&m.apps);
-    let g = panel_geom(frame, run.len(), m.apps.len());
+    let g = panel_geom(frame, run.len(), TOOLS.len());
     let mut hits = vec![
         (frame.screen(), Target::Dismiss),
         (g.panel, Target::PanelBody),
     ];
-    p.popover(g.panel);
-    p.caption_upper("Active apps", g.active_label);
+    // transparent (owner request): only the outline over the background, no fill, no scrim
+    p.cv.rrect_stroke(g.panel, RADIUS_CARD, 1.0, CARD_BORDER);
+    panel_caption(p, "Active apps", g.active_label);
     if let Some(r) = g.active_empty {
+        plate(
+            p,
+            "No apps running",
+            Face::Regular,
+            SIZE_CAPTION,
+            r,
+            Align::Left,
+        );
         p.text(
             "No apps running",
             Style::new(Face::Regular, SIZE_CAPTION, TEXT_DISABLED),
@@ -370,28 +469,21 @@ pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect
     for (cell, &i) in g.active.iter().zip(&run) {
         let t = &m.apps[i];
         let target = Target::PanelActive(i);
-        p.app_icon(
-            *cell,
-            BOX_PANEL,
-            t.icon,
-            &t.name,
-            m.pressed == Some(target),
-            false,
-        );
+        panel_icon(p, *cell, t.icon, &t.name, m.pressed == Some(target));
         hits.push((*cell, target));
     }
+    // the badges after every icon: their hit rectangles overlap the neighbouring cell and must win
+    // the hit test (it searches from the end)
+    for (cell, &i) in g.active.iter().zip(&run) {
+        let (badge, hit) = close_badge(*cell);
+        paint_close_badge(p, badge, m.pressed == Some(Target::PanelClose(i)));
+        hits.push((hit, Target::PanelClose(i)));
+    }
     p.divider(g.panel.x + PANEL_PAD, g.divider, PANEL_W - 2 * PANEL_PAD);
-    p.caption_upper("Installed apps", g.installed_label);
-    for (i, (cell, t)) in g.installed.iter().zip(&m.apps).enumerate() {
-        let target = Target::PanelApp(i);
-        p.app_icon(
-            *cell,
-            BOX_PANEL,
-            t.icon,
-            &t.name,
-            m.pressed == Some(target),
-            t.running,
-        );
+    panel_caption(p, "Tools", g.tools_label);
+    for (i, (cell, t)) in g.tools.iter().zip(TOOLS.iter()).enumerate() {
+        let target = Target::PanelTool(i);
+        panel_icon(p, *cell, t.icon, t.label, m.pressed == Some(target));
         hits.push((*cell, target));
     }
     hits
@@ -417,7 +509,6 @@ mod tests {
                 g.battery,
                 g.slider,
                 g.rotation,
-                g.keyboard,
                 g.screen_off,
             ];
             for (i, a) in rows.iter().enumerate() {
@@ -427,6 +518,9 @@ mod tests {
                     assert!(!overlaps(*a, *b), "{a:?} overlaps {b:?}");
                 }
             }
+            // Rotation and Screen off are the last two rows (no Keyboard row between them)
+            assert_eq!(g.screen_off.y, g.rotation.bottom());
+            assert_eq!(g.panel.bottom(), g.screen_off.bottom() + QS_PAD);
         }
     }
 
@@ -437,23 +531,48 @@ mod tests {
             assert_eq!(g.panel.x, SIDEBAR_W + SP_3);
             assert_eq!(g.panel.bottom(), f.h - SP_4);
             assert_eq!(g.panel.w, PANEL_W);
-            assert_eq!(g.installed.len(), 7);
+            assert_eq!(g.tools.len(), 7);
             assert_eq!(
-                g.installed
-                    .iter()
-                    .filter(|r| r.y == g.installed[0].y)
-                    .count(),
+                g.tools.iter().filter(|r| r.y == g.tools[0].y).count(),
                 4,
                 "four columns"
             );
-            for r in g.active.iter().chain(&g.installed) {
+            for r in g.active.iter().chain(&g.tools) {
                 assert!(r.w >= TOUCH_MIN && r.h >= TOUCH_MIN, "{r:?}");
                 assert!(r.right() <= g.panel.right() - PANEL_PAD + 1);
                 assert!(r.bottom() <= g.panel.bottom());
             }
-            assert!(g.active[0].bottom() < g.divider && g.divider < g.installed_label.y);
+            assert!(g.active[0].bottom() < g.divider && g.divider < g.tools_label.y);
         }
         let none = panel_geom(&Frame::new(800, 1280), 0, 3);
         assert!(none.active.is_empty() && none.active_empty.is_some());
+    }
+
+    #[test]
+    fn close_badges_are_big_enough_and_leave_the_icon_centre_alone() {
+        let g = panel_geom(&Frame::new(800, 1280), 4, TOOLS.len());
+        for cell in &g.active {
+            let (badge, hit) = close_badge(*cell);
+            let b = cell_box(*cell);
+            assert!(hit.w >= 40 && hit.h >= 40, "touch target >= 40 px");
+            let (bx, by) = badge.center();
+            // the badge sits on the box's top-right corner
+            assert!(b.contains(bx - 1, by + 1) && !b.contains(bx + 2, by - 3));
+            assert!(hit.contains(bx, by));
+            // the icon centre (and the box's left half) still belong to the icon
+            let (cx, cy) = b.center();
+            assert!(!hit.contains(cx, cy) && !hit.contains(b.x + 2, b.y + 2));
+            // inside the panel
+            assert!(g.panel.contains(hit.x, hit.y) && hit.right() <= g.panel.right());
+        }
+    }
+
+    #[test]
+    fn tools_grid_is_generic() {
+        assert_eq!(TOOLS[0].label, "Mouse pad");
+        assert_eq!(TOOLS[0].action, ToolAction::MousePad);
+        assert_eq!(TOOLS[0].icon, Icon::Mouse);
+        let g = panel_geom(&Frame::new(800, 1280), 1, TOOLS.len());
+        assert_eq!(g.tools.len(), TOOLS.len());
     }
 }

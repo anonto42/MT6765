@@ -7,6 +7,7 @@ use crate::core_client::{CoreClient, CoreEvent};
 use crate::dock::{load_wm_classes, Dock};
 use crate::gesture::{Gesture, Recogniser};
 use crate::keyboard::SysKeyboard;
+use crate::mousepad::MousePad;
 use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
 use std::path::PathBuf;
@@ -33,6 +34,8 @@ pub struct Shell {
     dock: Option<Dock>,
     /// The system keyboard (None when its X connection could not be opened or died).
     kbd: Option<SysKeyboard>,
+    /// The mouse pad (None when its X connection could not be opened or died).
+    pad: Option<MousePad>,
     core: CoreClient,
     canvas: Canvas,
     fonts: Fonts,
@@ -88,6 +91,13 @@ impl Shell {
                 None
             }
         };
+        let pad = match MousePad::open(&sock, win.win, (w, h)) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("walpad-shell: mouse pad disabled: {}", e.0);
+                None
+            }
+        };
         let canvas =
             Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
         let clock_24h = read_clock_24h(&opts.root);
@@ -101,6 +111,7 @@ impl Shell {
             win,
             dock,
             kbd,
+            pad,
             core,
             canvas,
             fonts,
@@ -135,6 +146,18 @@ impl Shell {
                 self.set_keyboard(on, true);
                 continue;
             }
+            // so is the mouse pad (no core command)
+            match c {
+                Cmd::MousePadShow => {
+                    self.set_pad(true);
+                    continue;
+                }
+                Cmd::MousePadHide => {
+                    self.set_pad(false);
+                    continue;
+                }
+                _ => {}
+            }
             let (name, args) = c.request();
             if let Some(id) = self.core.send(name, args) {
                 self.app.note_sent(id, &c);
@@ -150,27 +173,50 @@ impl Shell {
     /// its `keyboard toggle` (hardware keys, walpad-ctl) knows the real state. Requests that came
     /// from the core are not reported back.
     fn set_keyboard(&mut self, on: bool, report: bool) {
+        // the keyboard and the mouse pad share the bottom of the screen: one replaces the other
+        if on {
+            self.set_pad(false);
+        }
         let Some(mut k) = self.kbd.take() else {
             return;
         };
         match k.set_visible(on, &mut self.fonts) {
-            Ok(()) => {
-                let h = if on { k.height() } else { 0 };
-                self.kbd = Some(k);
-                self.keyboard_changed(h);
-            }
-            Err(e) => {
-                eprintln!("walpad-shell: system keyboard disabled: {}", e.0);
-                self.keyboard_changed(0);
-            }
+            Ok(()) => self.kbd = Some(k),
+            Err(e) => eprintln!("walpad-shell: system keyboard disabled: {}", e.0),
         }
+        self.bottom_changed();
         if report {
             self.report_keyboard();
         }
     }
 
-    /// The keyboard's height changed (shown, hidden, rotated): the dock sits directly above it.
-    fn keyboard_changed(&mut self, kbd_h: i32) {
+    pub fn mouse_pad_visible(&self) -> bool {
+        self.pad.as_ref().is_some_and(|p| p.visible())
+    }
+
+    /// Show/hide the mouse pad; showing it puts the keyboard away (and tells the core).
+    fn set_pad(&mut self, on: bool) {
+        if on && self.keyboard_visible() {
+            self.set_keyboard(false, true);
+        }
+        let Some(mut p) = self.pad.take() else {
+            return;
+        };
+        match p.set_visible(on, &mut self.fonts) {
+            Ok(()) => self.pad = Some(p),
+            Err(e) => eprintln!("walpad-shell: mouse pad disabled: {}", e.0),
+        }
+        self.bottom_changed();
+    }
+
+    /// The keyboard or the mouse pad was shown, hidden or rotated: the dock sits directly above
+    /// whichever is up.
+    fn bottom_changed(&mut self) {
+        let kbd_h = match (&self.kbd, &self.pad) {
+            (Some(k), _) if k.visible() => k.height(),
+            (_, Some(p)) if p.visible() => p.height(),
+            _ => 0,
+        };
         if let Some(d) = &mut self.dock {
             if let Err(e) = d.set_keyboard_height(kbd_h) {
                 eprintln!("walpad-shell: system dock: {}", e.0);
@@ -223,14 +269,17 @@ impl Shell {
             self.dirty = true;
             if let Some(mut k) = self.kbd.take() {
                 match k.set_shell_size(w, h, &mut self.fonts) {
-                    Ok(()) => {
-                        let kh = if k.visible() { k.height() } else { 0 };
-                        self.kbd = Some(k);
-                        self.keyboard_changed(kh);
-                    }
+                    Ok(()) => self.kbd = Some(k),
                     Err(e) => eprintln!("walpad-shell: system keyboard disabled: {}", e.0),
                 }
             }
+            if let Some(mut p) = self.pad.take() {
+                match p.set_shell_size(w, h, &mut self.fonts) {
+                    Ok(()) => self.pad = Some(p),
+                    Err(e) => eprintln!("walpad-shell: mouse pad disabled: {}", e.0),
+                }
+            }
+            self.bottom_changed();
             if let Some(d) = &mut self.dock {
                 if let Err(e) = d.set_shell_size(w, h) {
                     eprintln!("walpad-shell: system dock: {}", e.0);
@@ -290,13 +339,28 @@ impl Shell {
                     self.kbd = Some(k);
                     if hid {
                         // minimise key, or the user went Home
-                        self.keyboard_changed(0);
+                        self.bottom_changed();
                         self.report_keyboard();
                     }
                 }
                 Err(e) => {
                     eprintln!("walpad-shell: system keyboard disabled: {}", e.0);
-                    self.keyboard_changed(0);
+                    self.bottom_changed();
+                }
+            }
+        }
+        if let Some(mut p) = self.pad.take() {
+            match p.poll(&mut self.fonts) {
+                Ok(hid) => {
+                    self.pad = Some(p);
+                    if hid {
+                        // Close button, or the user went Home
+                        self.bottom_changed();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("walpad-shell: mouse pad disabled: {}", e.0);
+                    self.bottom_changed();
                 }
             }
         }
@@ -360,6 +424,7 @@ impl Shell {
         fds.extend(self.core.fd());
         fds.extend(self.dock.as_ref().map(|d| d.wait_fd()));
         fds.extend(self.kbd.as_ref().map(|k| k.wait_fd()));
+        fds.extend(self.pad.as_ref().map(|p| p.wait_fd()));
         walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }
