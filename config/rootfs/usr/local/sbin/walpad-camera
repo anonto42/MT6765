@@ -1,0 +1,191 @@
+#!/bin/sh
+# walpad-camera: still photos from the built-in cameras through MediaTek's ACDK (libacdk.so), without
+# the Android camera HAL.  See docs/31-camera-acdk.md.
+#
+#   walpad-camera start                       prepare the Android environment (idempotent)
+#   walpad-camera stop                        stop what start launched (mounts stay)
+#   walpad-camera capture <main|sub> <file>   one JPEG
+#   walpad-camera preview <main|sub> <dir> <n> n preview frames (YUY2 + PPM)
+#   walpad-camera list                        camera_info + probe of both sensors
+#   walpad-camera status
+#
+# The environment, all verified for /vendor/bin/factory on the tablet:
+#   * bootstrap linker /system/system/bin/bootstrap/linker64, started through a symlink named like
+#     the program under /run/walpad/android-bin (kernel drivers look at comm)
+#   * LD_PRELOAD=libwpdprops.so + the Android build props in /tmp/wpd-props
+#   * LD_LIBRARY_PATH with the VNDK apex payload (mounted like walpad-gps does)
+#   * binderfs (/dev/vndbinder) + vndservicemanager, selinuxfs mounted (NEVER load a policy)
+#   * boot mode: the factory binary insists on atag,boot == 4.  libacdk itself does not read it, but
+#     other camera libraries read boot_mode files, so the helper runs in a private mount namespace
+#     (unshare -m) with a fake atag,boot bind-mounted over the sysfs one.  Nothing outside the
+#     namespace sees the fake file.
+# Nothing here writes to a partition.  The camera libraries may create calibration files under
+# /mnt/vendor/nvdata or nvcfg if those are mounted: see the risk section of the doc.
+#
+# WALPAD_ROOT prefixes every path (host tests run against a fake root with fake commands in PATH).
+R=${WALPAD_ROOT:-}
+SYS=$R/system/system
+LINKER=$SYS/bin/bootstrap/linker64
+SHIM=${WALPAD_CAM_SHIM:-$R/usr/local/lib/libwpdprops.so}
+HELPER=${WALPAD_CAM_HELPER:-$R/usr/local/bin/camacdk}
+RUN=$R/run/walpad
+LDIR=$RUN/android-bin
+APEX=$RUN/apex/vndk
+PROPS=${WALPAD_CAM_PROPS:-$R/tmp/wpd-props}
+ATAG_FILE=$RUN/fake-atag-boot
+ATAG_TARGET=$R/sys/firmware/devicetree/base/chosen/atag,boot
+LOG=$R/var/log/walpad-camera.log
+ALOG=$R/var/log/walpad-android.log
+LOCK=$RUN/camera.lock
+LIBPATH=$SYS/lib64/bootstrap:$R/vendor/lib64:$APEX/lib64:$SYS/lib64
+VSM_PATTERN="^$LDIR/vndservicemanager $R/vendor/bin/vndservicemanager"
+HELPER_TIMEOUT=${WALPAD_CAM_TIMEOUT:-120}
+SETTLE_WAIT=${WALPAD_CAM_VSM_WAIT:-3}
+
+say() { echo "[camera] $*"; [ -z "$R" ] && echo "WALPAD-CAMERA: $*" > /dev/kmsg 2>/dev/null; return 0; }
+die() { say "FAILED: $*"; exit "${2:-1}"; }
+vsm_running() { pgrep -f "$VSM_PATTERN" > /dev/null 2>&1; }
+
+mount_vndk() {
+  mountpoint -q "$APEX" && return 0
+  mkdir -p "$APEX" "$RUN/apex/tmp"
+  ( cd "$RUN/apex/tmp" && [ -f apex_payload.img ] || timeout 60 unzip -o -q "$SYS/apex/com.android.vndk.current.apex" apex_payload.img ) || return 1
+  mount -o loop,ro "$RUN/apex/tmp/apex_payload.img" "$APEX"
+}
+
+mount_binderfs() {
+  if ! mountpoint -q "$R/dev/binderfs"; then
+    mkdir -p "$R/dev/binderfs"
+    mount -t binder binder "$R/dev/binderfs" || return 1
+  fi
+  for n in binder hwbinder vndbinder; do
+    [ -e "$R/dev/$n" ] || ln -s "binderfs/$n" "$R/dev/$n"
+  done
+  [ -e "$R/dev/vndbinder" ]
+}
+
+mount_selinuxfs() {
+  mountpoint -q "$R/sys/fs/selinux" && return 0
+  mount -t selinuxfs selinuxfs "$R/sys/fs/selinux"
+}
+
+# Android build props as init would load them, plus what the camera path needs
+build_props() {
+  mkdir -p "$(dirname "$PROPS")"
+  : > "$PROPS"
+  for f in "$SYS/build.prop" "$SYS/product/build.prop" "$R/vendor/build.prop" "$R/vendor/default.prop" "$R/vendor/odm/etc/build.prop"; do
+    [ -r "$f" ] && grep -E '^[A-Za-z0-9_.-]+=' "$f" >> "$PROPS"
+  done
+  {
+    echo "init.svc.vndservicemanager=running"
+    echo "vendor.camera.acdkdump.enable=0"
+    echo "vendor.camera.acdkdump.raw=0"
+    echo "vendor.camera.acdk.debug=0"
+  } >> "$PROPS"
+}
+
+# boot-mode struct the factory reads: {u32 size, u32 tag, u32 mode}; mode 4 = factory mode
+make_fake_atag() {
+  mkdir -p "$RUN"
+  printf '\014\000\000\000\001\010\000\101\004\000\000\000' > "$ATAG_FILE"
+}
+
+start_logger() {
+  command -v socat > /dev/null 2>&1 || return 0
+  pgrep -f 'UNIX-RECV:/dev/socket/logdw' > /dev/null 2>&1 && return 0
+  mkdir -p "$R/dev/socket"
+  ( setsid socat -u UNIX-RECV:/dev/socket/logdw "OPEN:$ALOG,creat,append" >> "$LOG" 2>&1 < /dev/null & )
+}
+
+check_files() {
+  [ -x "$LINKER" ] || die "bootstrap linker missing ($LINKER): /system is not mounted"
+  [ -f "$R/vendor/lib64/libacdk.so" ] || die "libacdk.so missing: /vendor is not mounted"
+  [ -f "$SHIM" ] || die "property shim missing ($SHIM)"
+  [ -x "$HELPER" ] || die "camacdk helper not installed ($HELPER)"
+}
+
+start() {
+  check_files
+  mkdir -p "$LDIR" "$R/data/vendor" "$R/var/log" "$R/dev/socket"
+  mount_binderfs || die "binderfs not available (no /dev/vndbinder)"
+  mount_selinuxfs || die "cannot mount selinuxfs"
+  mount_vndk || die "cannot mount the VNDK apex"
+  build_props
+  make_fake_atag
+  start_logger
+  if ! vsm_running; then
+    ln -sfn "$LINKER" "$LDIR/vndservicemanager"
+    ( export LD_LIBRARY_PATH=$LIBPATH LD_PRELOAD=$SHIM
+      setsid "$LDIR/vndservicemanager" "$R/vendor/bin/vndservicemanager" "$R/dev/vndbinder" >> "$LOG" 2>&1 < /dev/null & )
+    i=0; while ! vsm_running && [ $i -lt "$SETTLE_WAIT" ]; do sleep 1; i=$((i+1)); done
+    vsm_running || die "vndservicemanager did not start (see $LOG)"
+  fi
+  say "environment ready"
+}
+
+stop() {
+  for p in $(pgrep -f "$VSM_PATTERN"); do kill "$p"; done
+  for p in $(pgrep -f 'UNIX-RECV:/dev/socket/logdw'); do kill "$p"; done
+  say "stopped (mounts stay)"
+}
+
+# run camacdk through the linker with a timeout, in a private mount namespace with the fake boot mode
+run_helper() {
+  ln -sfn "$LINKER" "$LDIR/camacdk"
+  cd "$R/data" 2>/dev/null || cd "$R/"
+  export LD_LIBRARY_PATH=$LIBPATH LD_PRELOAD=$SHIM CAMACDK_PROPS=$PROPS
+  if [ "${WALPAD_CAM_FAKE_ATAG:-1}" = 1 ] && [ -e "$ATAG_TARGET" ]; then
+    unshare -m sh -c 'mount --bind "$1" "$2" && shift 2 && exec "$@"' sh "$ATAG_FILE" "$ATAG_TARGET" \
+      timeout -k 5 "$HELPER_TIMEOUT" "$LDIR/camacdk" "$HELPER" "$@"
+  else
+    [ "${WALPAD_CAM_FAKE_ATAG:-1}" = 1 ] && say "no $ATAG_TARGET: running without the fake boot mode"
+    timeout -k 5 "$HELPER_TIMEOUT" "$LDIR/camacdk" "$HELPER" "$@"
+  fi
+}
+
+locked() {  # locked <cmd...>: one camera session at a time
+  mkdir -p "$RUN"
+  if ! mkdir "$LOCK" 2> /dev/null; then
+    if [ -f "$LOCK/pid" ] && kill -0 "$(cat "$LOCK/pid")" 2> /dev/null; then die "another camera session is running (pid $(cat "$LOCK/pid"))" 3; fi
+    rm -rf "$LOCK"; mkdir "$LOCK" || die "cannot take the camera lock" 3
+  fi
+  echo $$ > "$LOCK/pid"
+  "$@"; rc=$?
+  rm -rf "$LOCK"
+  return $rc
+}
+
+check_sensor() { case $1 in main|sub) ;; *) echo "sensor must be main or sub" >&2; exit 2 ;; esac; }
+
+case ${1:-status} in
+  start) start ;;
+  stop) stop ;;
+  capture)
+    [ $# -eq 3 ] || { echo "usage: $0 capture <main|sub> <file>" >&2; exit 2; }
+    check_sensor "$2"
+    start
+    locked run_helper capture "$2" "$3"; rc=$?
+    if [ $rc -eq 0 ] && [ -s "$3" ]; then say "saved $3 ($(wc -c < "$3") bytes)"
+    else rm -f "$3.tmp"; say "capture failed (exit $rc); see $LOG and $ALOG"; [ $rc -eq 0 ] && rc=1; fi
+    exit $rc ;;
+  preview)
+    [ $# -eq 4 ] || { echo "usage: $0 preview <main|sub> <dir> <n>" >&2; exit 2; }
+    check_sensor "$2"
+    start
+    locked run_helper preview "$2" "$3" "$4"; exit $? ;;
+  list)
+    start
+    locked run_helper list; exit $? ;;
+  status)
+    printf 'binderfs: %s\n' "$(mountpoint -q "$R/dev/binderfs" && echo mounted || echo no)"
+    printf 'vndbinder: %s\n' "$([ -e "$R/dev/vndbinder" ] && echo present || echo missing)"
+    printf 'selinuxfs: %s\n' "$(mountpoint -q "$R/sys/fs/selinux" && echo mounted || echo no)"
+    printf 'vndk apex: %s\n' "$(mountpoint -q "$APEX" && echo mounted || echo no)"
+    printf 'vndservicemanager: %s\n' "$(vsm_running && echo running || echo stopped)"
+    printf 'props: %s\n' "$([ -s "$PROPS" ] && echo "$(wc -l < "$PROPS") lines" || echo missing)"
+    printf 'shim: %s\n' "$([ -f "$SHIM" ] && echo present || echo missing)"
+    printf 'helper: %s\n' "$([ -x "$HELPER" ] && echo installed || echo missing)"
+    for n in camera-isp kd_camera_hw ion; do printf 'dev %s: %s\n' "$n" "$([ -e "$R/dev/$n" ] && echo present || echo missing)"; done
+    ;;
+  *) echo "usage: $0 start|stop|capture <main|sub> <file>|preview <main|sub> <dir> <n>|list|status" >&2; exit 2 ;;
+esac

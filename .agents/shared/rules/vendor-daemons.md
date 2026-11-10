@@ -13,4 +13,5 @@
   read with `strings`.
 - Find Android init args in `/vendor/etc/init/*.rc`; debug with `strace -f -e trace=openat,connect`.
 - Kernel modules from `/vendor/lib/modules` follow `modules.dep`; never rmmod CONNSYS modules.
-- Scripts: `walpad-wifi` (CONNSYS: do not edit stack_up), `walpad-modem`, `walpad-gps`.
+- Scripts: `walpad-wifi` (CONNSYS: do not edit stack_up), `walpad-modem`, `walpad-gps`, `walpad-bluetooth`, `walpad-camera`
+  (needs binderfs + `vndservicemanager /dev/vndbinder`, selinuxfs mounted without a policy, VNDK apex; docs/31-camera-acdk.md).

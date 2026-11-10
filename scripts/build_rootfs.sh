@@ -48,15 +48,17 @@ if [ "$NO_PY" = 1 ]; then
 fi
 PKGS="$BASE_PKGS"; [ "${WALPAD_GUI:-1}" = "1" ] && PKGS="$BASE_PKGS $GUI_PKGS"
 [ -z "${WALPAD_PRINT_PKGS:-}" ] || { echo "$PKGS"; exit 0; }   # dry run for tests/shell/run.sh
-mkdir -p "$OUT" build/bt   # build/bt/hci_vhci.ko comes from scripts/build_bt_module.sh (optional)
+mkdir -p "$OUT" build/bt data/camera   # build/bt/hci_vhci.ko comes from scripts/build_bt_module.sh (optional)
 # host-built static tools that go into the image (gitignored binaries): build them if missing
 for t in dmlinear padui fbmirror; do
   [ -x "tools/$t/$t" ] || { echo "building tools/$t"; bash "tools/$t/build.sh" >&2; }
 done
+# camacdk (bionic helper for walpad-camera) is optional: the image still builds without it
+[ -x data/camera/camacdk ] || bash tools/camacdk/build.sh >&2 || echo "camacdk not built: walpad-camera will report the helper as missing" >&2
 ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || true)
 [ -n "$ALPINE_DIGEST" ] || { docker pull -q "alpine:$ALPINE_REL" >/dev/null; ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || echo unknown); }
 AUTH=""; [ -f "$HOME/.ssh/id_ed25519.pub" ] && AUTH="$(cat "$HOME/.ssh/id_ed25519.pub")"
-docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro -v "$PWD/build/bt":/bt:ro \
+docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro -v "$PWD/build/bt":/bt:ro -v "$PWD/data/camera":/camera:ro \
   -e ALPINE_REL="$ALPINE_REL" -e ALPINE_DIGEST="$ALPINE_DIGEST" -e SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}" -e NO_PY="$NO_PY" -e SIZE_MIB="$SIZE_MIB" -e PKGS="$PKGS" -e WALPAD_GUI="${WALPAD_GUI:-1}" -e AUTH="$AUTH" -e UID_="$(id -u)" -e GID_="$(id -g)" \
   "alpine:$ALPINE_REL" sh -euc '
   REL=$(cut -d. -f1,2 /etc/alpine-release)
@@ -92,6 +94,8 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
       ln -sfn ../lib/walpad/current/walpad-btbridge /out/root/usr/local/bin/walpad-btbridge
     fi
   fi
+  # camera: the ACDK helper, run through the Android linker by walpad-camera
+  [ -f /camera/camacdk ] && install -m 755 /camera/camacdk /out/root/usr/local/bin/camacdk
   # Bluetooth: our hci_vhci.ko for the running 4.19.127 kernel (scripts/build_bt_module.sh), and the
   # D-Bus system user (apk runs with --no-scripts, so the dbus package did not create it)
   if [ -f /bt/hci_vhci.ko ]; then mkdir -p /out/root/usr/local/lib/modules && install -m 644 /bt/hci_vhci.ko /out/root/usr/local/lib/modules/; fi
@@ -120,7 +124,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   { (cd /cfg && find . -type f); [ "$NO_PY" = 1 ] && (cd /cfg-np/files && find . -type f)
     echo ./usr/local/bin/dmlinear; echo ./usr/local/bin/padui; echo ./usr/local/bin/fbmirror
     [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl walpad-btbridge; do echo ./usr/local/lib/walpad/image/$b; done
-    echo ./usr/local/lib/modules/hci_vhci.ko
+    echo ./usr/local/lib/modules/hci_vhci.ko; echo ./usr/local/bin/camacdk
     true; } | LC_ALL=C sort -u | while read -r f; do
       [ -f "/out/root/$f" ] || continue
       echo "$(sha256sum "/out/root/$f" | cut -d" " -f1) $(stat -c %a "/out/root/$f") $f"

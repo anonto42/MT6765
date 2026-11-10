@@ -52,3 +52,6 @@ core.[0-9]*
 /.agents/shared/history/
 /graphify-out/cache/
 /graphify-out/graph.html
+
+# built binaries (rebuild with tools/*/build.sh)
+/data/camera/camacdk

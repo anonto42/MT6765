@@ -646,5 +646,134 @@ grep -q "udev" config/rootfs/etc/pulse/system.pa && bad "pulse: no udev module" 
 grep -q "autospawn = no" config/rootfs/etc/pulse/client.conf && ok "pulse: clients never autospawn" || bad "pulse: autospawn" missing present
 for f in config/rootfs/usr/lib/firefox-esr/distribution/policies.json; do python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>/dev/null && ok "firefox policies.json is valid JSON" || bad "firefox policies.json" invalid valid; done
 grep -q 'media.cubeb.backend", "pulse"' config/rootfs/usr/lib/firefox-esr/defaults/pref/walpad-audio.js && ok "firefox: pulse cubeb backend" || bad "firefox: pulse backend" missing present
+# --- walpad-camera (fake root, fake mount/unshare/unzip; the "linker" is a copy of sh, so the
+# process cmdline looks like the real one: <android-bin>/<name> <program> <args>)
+CAM=$T/cam; CR=$CAM/root; CAMS=$S/walpad-camera
+sh -n "$CAMS" && ok "syntax walpad-camera" || bad "syntax walpad-camera" error ok
+mkdir -p "$CAM/bin" "$CR/system/system/bin/bootstrap" "$CR/system/system/apex" "$CR/vendor/lib64" "$CR/vendor/bin" \
+  "$CR/usr/local/lib" "$CR/usr/local/bin" "$CR/sys/firmware/devicetree/base/chosen" "$CR/sys/fs/selinux" "$CR/data" "$CR/dev" "$CR/tmp"
+mkdir -p "$CR/var/log" "$CR/run/walpad"
+cam_env() { WALPAD_ROOT=$CR PATH=$CAM/bin:$PATH WALPAD_CAM_VSM_WAIT=3 "$@"; }
+cam() { cam_env sh "$CAMS" "$@" 2>&1; }
+camrc() { cam_env sh "$CAMS" "$@" > "$CAM/out" 2>&1; echo $?; }
+cp "$(command -v sh)" "$CR/system/system/bin/bootstrap/linker64"
+printf '# comment\nro.build.version.sdk=30\nro.product.model=WalPad 8G\n' > "$CR/system/system/build.prop"
+printf 'ro.vendor.build.id=ABC\nnot a prop line\nro.boot.dynamic_partitions=true\n' > "$CR/vendor/build.prop"
+echo "vendor.camera.acdkdump.enable=3" > "$CR/vendor/default.prop"
+: > "$CR/vendor/lib64/libacdk.so"; : > "$CR/system/system/apex/com.android.vndk.current.apex"
+printf 'real\n' > "$CR/sys/firmware/devicetree/base/chosen/atag,boot"
+printf '#!/bin/sh\nwhile :; do sleep 1; done\n' > "$CR/vendor/bin/vndservicemanager"
+cat > "$CR/usr/local/bin/camacdk" <<EOF
+#!/bin/sh
+# fake helper: records how it was started
+{ echo "args: \$*"; echo "preload=\$LD_PRELOAD"; echo "libpath=\$LD_LIBRARY_PATH"; echo "props=\$CAMACDK_PROPS"; echo "cwd=\$(pwd)"
+  echo "atag=\$(od -An -tx1 "$CR/sys/firmware/devicetree/base/chosen/atag,boot" | tr -s ' ' | sed 's/^ //')"; } > $CAM/helper.log
+[ -e $CAM/helper-sleep ] && sleep 30
+[ -e $CAM/helper-fail ] && exit 7
+if [ "\$1" = capture ]; then printf '\377\330\377\331' > "\$3"; fi
+exit 0
+EOF
+cat > "$CAM/bin/mount" <<'EOF'
+#!/bin/sh
+echo "mount $*" >> "$CAM_LOG"
+case "$*" in
+  "-t binder binder "*) mkdir -p "$4"; : > "$4/binder"; : > "$4/hwbinder"; : > "$4/vndbinder" ;;
+  "--bind "*) cp "$2" "$3" ;;
+esac
+exit 0
+EOF
+cat > "$CAM/bin/unshare" <<'EOF'
+#!/bin/sh
+echo "unshare $*" >> "$CAM_LOG"
+shift
+exec "$@"
+EOF
+printf '#!/bin/sh\necho "unzip $*" >> "$CAM_LOG"\n: > apex_payload.img\n' > "$CAM/bin/unzip"
+chmod +x "$CAM/bin/"* "$CR/vendor/bin/vndservicemanager" "$CR/usr/local/bin/camacdk"
+export CAM_LOG=$CAM/calls; : > "$CAM_LOG"
+
+OUT=$(cam start); eq "camera: start without the property shim fails" "$?" 1
+case $OUT in *"property shim missing"*) ok "camera:   says why (shim)";; *) bad "camera:   says why (shim)" "$OUT" "property shim missing";; esac
+: > "$CR/usr/local/lib/libwpdprops.so"
+mv "$CR/system/system/bin/bootstrap/linker64" "$CAM/linker64.keep"
+OUT=$(cam start); eq "camera: start without /system fails" "$?" 1
+case $OUT in *"/system is not mounted"*) ok "camera:   says why (system)";; *) bad "camera:   says why (system)" "$OUT" "/system is not mounted";; esac
+mv "$CAM/linker64.keep" "$CR/system/system/bin/bootstrap/linker64"
+
+OUT=$(cam start); eq "camera: start succeeds" "$?" 0
+VSM="$CR/run/walpad/android-bin/vndservicemanager $CR/vendor/bin/vndservicemanager"
+pgrep -f "^$VSM" > /dev/null && ok "camera:   vndservicemanager runs under its own name (symlink, program)" || bad "camera:   vndservicemanager running" "$(pgrep -fl vndservicemanager)" "running"
+eq "camera:   symlink points at the 64-bit bootstrap linker" "$(readlink "$CR/run/walpad/android-bin/vndservicemanager")" "$CR/system/system/bin/bootstrap/linker64"
+pgrep -f "^$VSM $CR/dev/vndbinder" > /dev/null && ok "camera:   vndservicemanager gets /dev/vndbinder" || bad "camera:   vndservicemanager argument" "$(pgrep -fa vndservicemanager)" "/dev/vndbinder"
+grep -q "^mount -t binder binder $CR/dev/binderfs" "$CAM_LOG" && ok "camera:   binderfs mounted" || bad "camera:   binderfs mounted" "$(cat "$CAM_LOG")" "mount -t binder"
+[ -e "$CR/dev/vndbinder" ] && ok "camera:   /dev/vndbinder exists" || bad "camera:   /dev/vndbinder exists" missing present
+grep -q "^mount -t selinuxfs selinuxfs $CR/sys/fs/selinux" "$CAM_LOG" && ok "camera:   selinuxfs mounted" || bad "camera:   selinuxfs mounted" "$(cat "$CAM_LOG")" selinuxfs
+grep -q "^mount -o loop,ro $CR/run/walpad/apex/tmp/apex_payload.img $CR/run/walpad/apex/vndk" "$CAM_LOG" && ok "camera:   VNDK apex payload mounted" || bad "camera:   VNDK apex payload mounted" "$(cat "$CAM_LOG")" "loop,ro"
+grep -q 'policy' "$CAM_LOG" && bad "camera:   never loads a SELinux policy" found absent || ok "camera:   never loads a SELinux policy"
+P=$CR/tmp/wpd-props
+grep -qx 'ro.build.version.sdk=30' "$P" && grep -qx 'ro.vendor.build.id=ABC' "$P" && grep -qx 'ro.boot.dynamic_partitions=true' "$P" && ok "camera:   build props loaded from the build.prop files" || bad "camera:   build props loaded" "$(cat "$P")" "system+vendor props"
+grep -q 'comment\|not a prop' "$P" && bad "camera:   comments and junk skipped" found absent || ok "camera:   comments and junk skipped"
+grep -qx 'init.svc.vndservicemanager=running' "$P" && ok "camera:   init.svc.vndservicemanager=running" || bad "camera:   init.svc.vndservicemanager" missing present
+eq "camera:   last vendor.camera.acdkdump.enable is 0" "$(sed -n 's/^vendor.camera.acdkdump.enable=//p' "$P" | tail -n 1)" 0
+eq "camera:   fake atag,boot = size 12, tag 0x41000801, mode 4" "$(od -An -tx1 "$CR/run/walpad/fake-atag-boot" | tr -s ' ' | sed 's/^ //')" "0c 00 00 00 01 08 00 41 04 00 00 00"
+VP=$(pgrep -f "^$VSM" | head -n 1)
+cam start > /dev/null; eq "camera: second start keeps the same vndservicemanager" "$(pgrep -f "^$VSM" | head -n 1)" "$VP"
+OUT=$(cam status); case $OUT in *"vndservicemanager: running"*"helper: installed"*) ok "camera: status";; *) bad "camera: status" "$OUT" "running + installed";; esac
+
+: > "$CAM_LOG"
+eq "camera: capture main exits 0" "$(camrc capture main "$CAM/x.jpg")" 0
+[ -s "$CAM/x.jpg" ] && ok "camera:   the file arrived" || bad "camera:   the file arrived" missing present
+eq "camera:   helper arguments" "$(sed -n 's/^args: //p' "$CAM/helper.log")" "capture main $CAM/x.jpg"
+eq "camera:   LD_PRELOAD is the property shim" "$(sed -n 's/^preload=//p' "$CAM/helper.log")" "$CR/usr/local/lib/libwpdprops.so"
+eq "camera:   LD_LIBRARY_PATH: bootstrap, vendor, VNDK apex, system" "$(sed -n 's/^libpath=//p' "$CAM/helper.log")" "$CR/system/system/lib64/bootstrap:$CR/vendor/lib64:$CR/run/walpad/apex/vndk/lib64:$CR/system/system/lib64"
+eq "camera:   helper told where the property file is" "$(sed -n 's/^props=//p' "$CAM/helper.log")" "$CR/tmp/wpd-props"
+eq "camera:   helper runs in /data" "$(sed -n 's/^cwd=//p' "$CAM/helper.log")" "$CR/data"
+grep -q '^unshare -m ' "$CAM_LOG" && ok "camera:   private mount namespace (unshare -m)" || bad "camera:   unshare -m" "$(cat "$CAM_LOG")" "unshare -m"
+grep -q "^mount --bind $CR/run/walpad/fake-atag-boot $CR/sys/firmware/devicetree/base/chosen/atag,boot" "$CAM_LOG" && ok "camera:   fake atag,boot bind-mounted over the sysfs one" || bad "camera:   atag bind mount" "$(cat "$CAM_LOG")" "mount --bind"
+eq "camera:   the helper sees boot mode 4" "$(sed -n 's/^atag=//p' "$CAM/helper.log")" "0c 00 00 00 01 08 00 41 04 00 00 00"
+[ -e "$CR/run/walpad/camera.lock" ] && bad "camera:   lock released" held free || ok "camera:   lock released"
+
+eq "camera: capture sub exits 0" "$(camrc capture sub "$CAM/y.jpg")" 0
+eq "camera:   sub passed through" "$(sed -n 's/^args: //p' "$CAM/helper.log" | cut -d' ' -f1-2)" "capture sub"
+eq "camera: bad sensor name -> 2" "$(camrc capture rear "$CAM/z.jpg")" 2
+eq "camera: missing file argument -> 2" "$(camrc capture main)" 2
+eq "camera: unknown verb -> 2" "$(camrc frobnicate)" 2
+eq "camera: preview arguments" "$(camrc preview main "$CAM/frames" 3):$(sed -n 's/^args: //p' "$CAM/helper.log")" "0:preview main $CAM/frames 3"
+eq "camera: list" "$(camrc list):$(sed -n 's/^args: //p' "$CAM/helper.log")" "0:list"
+
+: > "$CAM/helper-fail"; rm -f "$CAM/w.jpg"
+eq "camera: helper failure exit code is passed on" "$(camrc capture main "$CAM/w.jpg")" 7
+[ -e "$CAM/w.jpg" ] && bad "camera:   no output file after a failure" present absent || ok "camera:   no output file after a failure"
+grep -q 'capture failed (exit 7)' "$CAM/out" && ok "camera:   says what happened" || bad "camera:   says what happened" "$(cat "$CAM/out")" "capture failed (exit 7)"
+rm -f "$CAM/helper-fail"
+if command -v timeout >/dev/null 2>&1; then
+  : > "$CAM/helper-sleep"; t0=$(date +%s)
+  rc=$(WALPAD_CAM_TIMEOUT=1 camrc capture main "$CAM/v.jpg"); t1=$(date +%s)
+  eq "camera: a hanging helper is cut off (exit 124)" "$rc" 124
+  [ $((t1 - t0)) -le 10 ] && ok "camera:   after about WALPAD_CAM_TIMEOUT seconds" || bad "camera:   timeout duration" "$((t1 - t0)) s" "<=10"
+  [ -e "$CR/run/walpad/camera.lock" ] && bad "camera:   lock released after a timeout" held free || ok "camera:   lock released after a timeout"
+  rm -f "$CAM/helper-sleep"
+fi
+mkdir "$CR/run/walpad/camera.lock"; echo $$ > "$CR/run/walpad/camera.lock/pid"
+eq "camera: a live session blocks a second one (exit 3)" "$(camrc capture main "$CAM/u.jpg")" 3
+echo 999999 > "$CR/run/walpad/camera.lock/pid"
+eq "camera: a stale lock is taken over" "$(camrc capture main "$CAM/u.jpg")" 0
+
+: > "$CAM_LOG"
+printf 'real\n' > "$CR/sys/firmware/devicetree/base/chosen/atag,boot"   # the fake mount copies, so put the original back
+eq "camera: without the fake boot mode" "$(WALPAD_CAM_FAKE_ATAG=0 camrc capture main "$CAM/t.jpg")" 0
+grep -q '^unshare' "$CAM_LOG" && bad "camera:   no namespace when disabled" used unused || ok "camera:   no namespace when disabled"
+eq "camera:   the helper then sees the real atag,boot" "$(sed -n 's/^atag=//p' "$CAM/helper.log")" "72 65 61 6c 0a"
+
+cam stop > /dev/null
+sleep 0.3
+pgrep -f "^$VSM" > /dev/null && bad "camera: stop ends vndservicemanager" running stopped || ok "camera: stop ends vndservicemanager"
+# repo wiring
+grep -q 'usr/local/bin/camacdk' scripts/build_rootfs.sh && ok "camera: build_rootfs.sh installs camacdk" || bad "camera: build_rootfs.sh installs camacdk" missing present
+[ -x tools/camacdk/build.sh ] && ok "camera: tools/camacdk/build.sh executable" || bad "camera: tools/camacdk/build.sh executable" no yes
+for c in 1001:PREVIEW_START 1002:PREVIEW_STOP 1003:CAPTURE 1006:SET_SRC_DEV; do
+  grep -q "ACDK_CMD_${c#*:} 0x8000${c%%:*}u" tools/camacdk/camacdk.c && ok "camacdk: ACDK_CMD_${c#*:} = 0x8000${c%%:*}" || bad "camacdk: ACDK_CMD_${c#*:}" missing "0x8000${c%%:*}"
+done
+grep -q 'SENSOR_DEV_MAIN 1' tools/camacdk/camacdk.c && grep -q 'SENSOR_DEV_SUB 2' tools/camacdk/camacdk.c && ok "camacdk: main=1 sub=2" || bad "camacdk: main=1 sub=2" missing present
 
 exit $FAIL
