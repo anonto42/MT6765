@@ -1,0 +1,25 @@
+schema: spec-driven
+
+# Project constraints every proposal, spec, design and task list must respect.
+# Codebase facts an agent can read for itself stay out of here.
+context: |
+  WalPad 8G: a Walton MT6765 tablet turned into a standalone Alpine Linux tablet with a Rust
+  core/shell. The owner flashes; agents never flash or write partitions without explicit
+  approval, and every write is read back and hash-compared.
+  The stock vendor kernel 4.19.127 cannot change; missing features come from out-of-tree modules
+  built for it (MODVERSIONS) or from Android vendor daemons run through the bionic linker.
+  config/boot/*, tools/propshim and the CONNSYS section of walpad-wifi are frozen.
+  Secrets (Wi-Fi/hotspot passphrases, SIM PIN, IMEI) never appear in logs, argv, fixtures or commits.
+  Every hardware read is Option/Result; every blocking call has a timeout; apps launch by id only.
+  Anything that can hang or brick the tablet is tested with a timeout and a rollback path.
+
+rules:
+  proposal:
+    - Say who asked (owner request + date) and what is out of scope.
+    - Name the device risk (partitions written, kernel modules loaded, reboot needed) even when none.
+    - Say how it is verified on the tablet (exact SSH commands or UI steps).
+  specs:
+    - Every requirement uses SHALL and has at least one scenario with observable outcomes.
+    - Hardware behaviour not yet seen on the device is an open question, not a SHALL.
+  tasks:
+    - Host checks (scripts/check.sh) and device checks are separate tasks.

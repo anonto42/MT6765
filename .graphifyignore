@@ -1,0 +1,13 @@
+# keep the graph to our code and docs
+tools/kernel-mt6765-4.19/
+tools/mtk/
+firmware/
+build/
+target/
+data/
+.claude/worktrees/
+.agents/shared/history/
+**/*.img
+**/*.png
+**/*.so
+**/*.ko
