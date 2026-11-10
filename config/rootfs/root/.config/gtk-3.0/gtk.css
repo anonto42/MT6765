@@ -1,0 +1,8 @@
+/* touch-friendly file manager: tall rows, wide scrollbars, big toolbar buttons */
+treeview.view, iconview.view { min-height: 56px; }
+treeview.view row, treeview.view cell { padding: 10px 8px; }
+scrollbar slider { min-width: 28px; min-height: 28px; }
+scrollbar { min-width: 28px; }
+button, toolbutton button { min-height: 56px; min-width: 56px; padding: 6px 10px; }
+entry { min-height: 52px; }
+menu menuitem, .menuitem { min-height: 56px; padding: 4px 16px; }

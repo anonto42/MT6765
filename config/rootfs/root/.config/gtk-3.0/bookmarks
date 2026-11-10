@@ -1,3 +1,7 @@
+file:/// Root filesystem
+file:///root Home
 file:///mnt/sd SD card
 file:///mnt/usb USB drives
-file:///root Home
+file:///mnt Mounts
+file:///var/log Logs
+file:///tmp Temp

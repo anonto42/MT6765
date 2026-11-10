@@ -1,0 +1,88 @@
+#!/bin/sh
+# walpad-kali: a Kali Linux (NetHunter rootfs) userland as a chroot, for learning and for security
+# testing of your own equipment and lab networks.  Everything lives under /opt/kali (userdata has
+# tens of GB); nothing outside it is modified.
+#   walpad-kali install [FILE] [SHA256]   unpack the NetHunter rootfs tarball (default: download the
+#                                         official minimal arm64 image) and verify its checksum
+#   walpad-kali shell                      interactive shell in the chroot (what the terminal profile runs)
+#   walpad-kali run CMD...                 run one command in the chroot
+#   walpad-kali mount | umount | status
+#   walpad-kali setup                      first-time apt update + baseline packages (needs network)
+# Bind mounts: /dev /dev/pts /proc /sys /tmp-less /run/walpad, X11 socket + DISPLAY (GUI tools show in
+# the session), and the SD card / USB drives under /mnt.
+KALI=${KALI_ROOT:-/opt/kali}
+ROOTFS=$KALI/rootfs
+URL=https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz
+SUMS=https://kali.download/nethunter-images/current/rootfs/SHA256SUMS
+say() { echo "[kali] $*"; }
+
+is_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
+
+do_mount() {
+  [ -d "$ROOTFS/bin" ] || { say "not installed (run: walpad-kali install)"; return 1; }
+  for d in dev proc sys tmp run mnt root; do mkdir -p "$ROOTFS/$d"; done
+  is_mounted "$ROOTFS/dev" || mount --bind /dev "$ROOTFS/dev"
+  is_mounted "$ROOTFS/dev/pts" || { mkdir -p "$ROOTFS/dev/pts"; mount -t devpts devpts "$ROOTFS/dev/pts" -o gid=5,mode=620,ptmxmode=666 2>/dev/null || true; }
+  is_mounted "$ROOTFS/proc" || mount -t proc proc "$ROOTFS/proc"
+  is_mounted "$ROOTFS/sys" || mount --bind /sys "$ROOTFS/sys"
+  is_mounted "$ROOTFS/tmp" || { mkdir -p /tmp/.X11-unix; mount --bind /tmp "$ROOTFS/tmp"; }
+  is_mounted "$ROOTFS/mnt" || mount --bind /mnt "$ROOTFS/mnt" 2>/dev/null || true
+  # DNS and host name
+  cp /etc/resolv.conf "$ROOTFS/etc/resolv.conf" 2>/dev/null || true
+  echo walpad-kali > "$ROOTFS/etc/hostname" 2>/dev/null || true
+  grep -q "127.0.0.1" "$ROOTFS/etc/hosts" 2>/dev/null || echo "127.0.0.1 localhost walpad-kali" >> "$ROOTFS/etc/hosts"
+  # Android-style network groups are not needed; allow the _apt user to reach the network anyway
+  mkdir -p "$ROOTFS/etc/apt/apt.conf.d"
+  echo 'APT::Sandbox::User "root";' > "$ROOTFS/etc/apt/apt.conf.d/99walpad-nosandbox"
+}
+
+do_umount() {
+  for d in mnt tmp sys proc dev/pts dev; do
+    is_mounted "$ROOTFS/$d" && umount -l "$ROOTFS/$d" 2>/dev/null
+  done
+  say "unmounted"
+}
+
+chroot_run() {
+  do_mount || return 1
+  exec chroot "$ROOTFS" /usr/bin/env -i HOME=/root TERM="${TERM:-xterm-256color}" DISPLAY="${DISPLAY:-:0}" \
+    LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$@"
+}
+
+case ${1:-status} in
+  install)
+    [ -d "$ROOTFS/bin" ] && { say "already installed at $ROOTFS"; exit 0; }
+    mkdir -p "$KALI"; TAR=${2:-$KALI/kali-minimal.tar.xz}
+    if [ -z "$2" ] && [ ! -s "$TAR" ]; then
+      say "downloading the official NetHunter minimal rootfs (about 126 MB)"
+      curl -fL -o "$TAR" "$URL" || { say "download failed"; exit 1; }
+    fi
+    WANT=${3:-$(curl -fsL "$SUMS" 2>/dev/null | grep "$(basename "$URL")" | cut -d' ' -f1)}
+    GOT=$(sha256sum "$TAR" | cut -d' ' -f1)
+    [ -n "$WANT" ] || { say "no published checksum to compare: refusing"; exit 1; }
+    [ "$GOT" = "$WANT" ] || { say "CHECKSUM MISMATCH ($GOT != $WANT): refusing"; exit 1; }
+    say "checksum ok, unpacking (a few minutes)"
+    mkdir -p "$KALI/unpack.tmp" && tar -xJf "$TAR" -C "$KALI/unpack.tmp" || { say "unpack failed"; rm -rf "$KALI/unpack.tmp"; exit 1; }
+    inner=$(ls -d "$KALI"/unpack.tmp/*/ 2>/dev/null | head -1)
+    if [ -d "$inner/bin" ] || [ -L "$inner/bin" ]; then mv "$inner" "$ROOTFS"; else mv "$KALI/unpack.tmp" "$ROOTFS"; fi
+    rm -rf "$KALI/unpack.tmp"
+    say "installed: $(du -sh "$ROOTFS" 2>/dev/null | cut -f1)"
+    ;;
+  mount) do_mount && say "mounted" ;;
+  umount) do_umount ;;
+  shell) shift; chroot_run /bin/bash -l ;;
+  run) shift; [ $# -gt 0 ] || { echo "usage: walpad-kali run CMD..." >&2; exit 2; }; chroot_run "$@" ;;
+  setup)
+    do_mount || exit 1
+    chroot "$ROOTFS" /usr/bin/env -i HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin DEBIAN_FRONTEND=noninteractive \
+      /bin/sh -c 'apt-get update && apt-get install -y --no-install-recommends kali-defaults ca-certificates curl iproute2 iputils-ping nmap' ;;
+  status)
+    if [ -d "$ROOTFS/bin" ]; then
+      printf 'installed: yes (%s)\n' "$(du -sh "$ROOTFS" 2>/dev/null | cut -f1)"
+      sed -n 's/^PRETTY_NAME=//p' "$ROOTFS/etc/os-release" 2>/dev/null
+      printf 'mounted: %s\n' "$(is_mounted "$ROOTFS/proc" && echo yes || echo no)"
+    else
+      echo "installed: no"
+    fi ;;
+  *) echo "usage: $0 install|shell|run|mount|umount|setup|status" >&2; exit 2 ;;
+esac
