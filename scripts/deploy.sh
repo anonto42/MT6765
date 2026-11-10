@@ -69,18 +69,26 @@ for f in "$@"; do rput "$f" "$REL/$(basename "$f").new"; done
 # verify hashes on the tablet before anything becomes live
 # (a here-document, not a pipe: `exit` inside a piped loop would only leave the subshell)
 while read -r h n; do
-  got=$(rsh "sha256sum '$REL/$n.new'" | cut -d' ' -f1)
+  got=$(rsh "sha256sum '$REL/$n.new'" < /dev/null | cut -d' ' -f1)   # ssh must not eat the list
   [ "$got" = "$h" ] || { echo "HASH MISMATCH for $n: nothing made live" >&2; exit 1; }
 done <<EOF
 $(printf '%s\n' "$SUMS" | sed 's/  / /')
 EOF
 rsh "set -e; cd '$REL'; for n in *.new; do chmod 755 \"\$n\"; mv \"\$n\" \"\${n%.new}\"; done
-     # a partial deploy (one FILE) keeps the other binaries of the live release
-     if [ -d '$BASE/current' ] && [ \"\$(readlink '$BASE/current')\" != '$REL' ]; then for b in '$BASE'/current/walpad-*; do
-       [ -f \"\$b\" ] && [ ! -e \"'$REL'/\$(basename \"\$b\")\" ] && cp -p \"\$b\" '$REL'/; done; fi
+     # a partial deploy (one FILE) keeps the other binaries of the live release (never overwrites new ones)
+     if [ -d '$BASE/current' ] && [ \"\$(readlink '$BASE/current')\" != '$REL' ]; then
+       for b in '$BASE'/current/walpad-*; do n=\${b##*/}; [ -f \"\$b\" ] && [ ! -e '$REL'/\"\$n\" ] && cp -p \"\$b\" '$REL'/; done; fi
      cd '$BASE'
      if [ -L current ] && [ \"\$(readlink current)\" != '$REL' ]; then ln -sfn \"\$(readlink current)\" previous; fi
      ln -sfn '$REL' current
      for n in \$(ls '$REL'); do ln -sfn '$BASE/current/'\"\$n\" '$BIN/'\"\$n\"; done
      echo deployed $SHA"
+# final check: what is live now must be exactly what was sent
+while read -r h n; do
+  got=$(rsh "sha256sum '$BASE/current/$n'" < /dev/null | cut -d' ' -f1)
+  [ "$got" = "$h" ] || { echo "LIVE FILE DIFFERS for $n (expected ${h%"${h#????????????}"}...)" >&2; exit 1; }
+done <<EOF
+$(printf '%s\n' "$SUMS" | sed 's/  / /')
+EOF
+echo "verified live: $(printf '%s\n' "$SUMS" | awk '{print $2}' | tr '\n' ' ')"
 do_restart
