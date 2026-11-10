@@ -25,6 +25,10 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   hotspot on|off                  start/stop the hotspot (needs a password: hotspot-config)
   hotspot-config [--name N] [--password]   set name and/or password (password read from stdin)
   lock-now                        lock the screen at once (needs a lock to be set)
+  lock-set pin|password|pattern  set or change the screen lock; the new secret is read from stdin
+                                  (line 1; pattern = dots 0-8 as digits), the current one, when a
+                                  lock is set, from line 2 (never argv)
+  lock-remove                     remove the lock; the current secret is read from stdin
   lock_clear                      RESCUE: remove the screen lock (needs no PIN; run it over SSH or
                                   the USB recovery shell; also works while the core is down)
   power poweroff|reboot --yes     refuses without --yes
@@ -279,6 +283,26 @@ pub fn run_with_stdin(
                 ))
             };
         }
+        Some("lock-set") => {
+            let kind = args.get(1).ok_or_else(|| USAGE.to_string())?;
+            if !matches!(kind.as_str(), "pin" | "password" | "pattern") {
+                return Err(USAGE.to_string());
+            }
+            let mut req = json!({"kind": kind, "secret": read_secret(stdin, "the new secret")?});
+            let mut cur = String::new();
+            let n = stdin.read_line(&mut cur).map_err(|e| e.to_string())?;
+            let cur = cur.trim_end_matches(['\n', '\r']);
+            if n > 0 && !cur.is_empty() {
+                req["current"] = Value::String(cur.to_string());
+            }
+            rpc(&sock, "lock_set", req)?;
+            return Ok("screen lock set".into());
+        }
+        Some("lock-remove") => {
+            let cur = read_secret(stdin, "the current secret")?;
+            rpc(&sock, "lock_remove", json!({"current": cur}))?;
+            return Ok("screen lock removed".into());
+        }
         Some("hotspot-config") => {
             let mut req = serde_json::Map::new();
             let mut it = args.iter().skip(1);
@@ -338,6 +362,18 @@ fn lock_clear(root: &Root) -> Result<String, String> {
     } else {
         "no screen lock was set".into()
     })
+}
+
+fn read_secret(stdin: &mut dyn BufRead, what: &str) -> Result<String, String> {
+    let mut line = String::new();
+    stdin
+        .read_line(&mut line)
+        .map_err(|e| format!("reading {what}: {e}"))?;
+    let s = line.trim_end_matches(['\n', '\r']).to_string();
+    if s.is_empty() {
+        return Err(format!("no {what} on stdin"));
+    }
+    Ok(s)
 }
 
 fn walpad_hex(b: &[u8]) -> String {

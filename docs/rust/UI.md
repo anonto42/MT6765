@@ -228,6 +228,9 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   its minimise button, by going Home (dock Home, or the shell becoming active), or by the keyboard
   opening. Only the mini-map is repainted while the cursor moves.
 
+## Lock screen (owner request 2026-11-10, `lock_screen.rs` / `lock_window.rs`)
+Own window above everything (see CONTRACTS "Screen lock"), charcoal BG. Clock 88 px with the date under it, a prompt line ("Enter PIN", "Wrong PIN. 2 tries left", "Try again in 27 s" in danger). PIN: dots row (at least 4 slots, filled per digit) and a 3x4 pad of 128x96 keys with backspace and a check mark (portrait: stacked, landscape: clock left, pad right); the pad is dimmed and dead during a countdown. Password: field with show/hide above the shell's on-screen keyboard and an Unlock button. Pattern: 3x3 dots, drag, release submits (at least 4 dots; a jumped-over dot is included). Goldens `lock_*`. Settings > Security: Screen lock state, Set a PIN / Set a password (type twice), Change / Remove (current secret first), Lock now, Lock after screen off (cycles Immediately, 30 s, 1 min, 5 min, 15 min, 30 min), and a note that the USB recovery shell is not protected. A pattern lock is changed with `walpad-ctl lock-set` over SSH.
+
 ## Components and states
 Outline box / icon box / round button (rest, active, pressed); Button primary (2 px white outline),
 secondary (60 % outline), danger (danger outline + faint danger fill) x (default, pressed, disabled,

@@ -9,6 +9,7 @@ use walpad_ui::{Canvas, Fonts};
 
 mod bluetooth;
 mod hotspot;
+mod lock;
 mod mobile;
 mod volume;
 

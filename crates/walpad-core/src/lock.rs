@@ -143,7 +143,9 @@ fn dec(s: &str) -> Option<Vec<u8>> {
         .bytes()
         .map(|c| (b'a'..=b'p').contains(&c).then(|| c - b'a'))
         .collect::<Option<_>>()?;
-    n.len().is_multiple_of(2).then(|| n.chunks(2).map(|p| p[0] << 4 | p[1]).collect())
+    n.len()
+        .is_multiple_of(2)
+        .then(|| n.chunks(2).map(|p| p[0] << 4 | p[1]).collect())
 }
 
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {

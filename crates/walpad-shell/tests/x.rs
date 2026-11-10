@@ -1703,6 +1703,44 @@ fn edge_swipe_goes_home_or_opens_recents_and_cards_focus_and_close() {
     use walpad_core::{daemon::Daemon, fake};
     use walpad_shell::edge::{zone_rect, EDGE_ZONE_PX};
     use walpad_shell::recents::{geometry, GAP, PAD};
+// ---------------------------------------------------------------------------- lock screen
+
+fn override_redirect(c: &XConn, w: Window) -> bool {
+    c.conn
+        .get_window_attributes(w)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .override_redirect
+}
+
+/// Can another client take the pointer right now? (false while the lock window holds the grab)
+fn can_grab_pointer(c: &XConn) -> bool {
+    let r = c
+        .conn
+        .grab_pointer(
+            true,
+            c.root,
+            xproto::EventMask::BUTTON_PRESS,
+            xproto::GrabMode::ASYNC,
+            xproto::GrabMode::ASYNC,
+            0u32,
+            0u32,
+            x11rb::CURRENT_TIME,
+        )
+        .unwrap()
+        .reply()
+        .unwrap();
+    let ok = r.status == xproto::GrabStatus::SUCCESS;
+    if ok {
+        c.conn.ungrab_pointer(x11rb::CURRENT_TIME).unwrap();
+    }
+    c.conn.flush().unwrap();
+    ok
+}
+
+#[test]
+fn a_shell_started_locked_covers_everything_grabs_and_takes_input() {
     let n = display_num();
     let Some(x) = xvfb(n) else {
         eprintln!("Xvfb not available: skipping");
@@ -1858,4 +1896,101 @@ fn edge_swipe_goes_home_or_opens_recents_and_cards_focus_and_close() {
 
     stop.store(true, Ordering::Relaxed);
     core_thread.join().unwrap();
+    let root = std::env::temp_dir().join(format!("walpad-shell-lock-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+    // the core's marker: the tablet is locked (boot, or the shell restarted while locked)
+    std::fs::write(root.join("run/walpad/locked"), "1\n").unwrap();
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let p = &probe.0;
+    wait_for("lock window mapped", || {
+        find_by_class(p, b"walpad-lock\0").is_some_and(|w| is_mapped(p, w))
+    });
+    let lock = find_by_class(p, b"walpad-lock\0").unwrap();
+    // override-redirect, as big as the whole root, on top of the shell's window
+    assert!(override_redirect(p, lock));
+    assert_eq!(geom(p, lock), (0, 0, 1280, 1280));
+    let shell = probe.find_shell().unwrap();
+    assert!(stack_pos(p, lock) > stack_pos(p, shell));
+    // it holds the pointer grab
+    wait_for("grab", || !can_grab_pointer(p));
+
+    // a window mapped above it is put below again
+    let w = p.conn.generate_id().unwrap();
+    p.conn
+        .create_window(
+            0,
+            w,
+            p.root,
+            0,
+            0,
+            100,
+            100,
+            0,
+            xproto::WindowClass::INPUT_OUTPUT,
+            0,
+            &xproto::CreateWindowAux::new().override_redirect(1),
+        )
+        .unwrap();
+    p.conn.map_window(w).unwrap();
+    p.conn.flush().unwrap();
+    wait_for("lock back on top", || stack_pos(p, lock) > stack_pos(p, w));
+
+    // it takes input: Done with nothing typed is answered on the lock screen itself
+    let l = walpad_shell::lock_screen::layout((800, 1280), walpad_proto::LockKind::Pin);
+    let submit = l
+        .pad
+        .iter()
+        .find(|(_, h)| *h == walpad_shell::lock_screen::Hit::Submit)
+        .unwrap()
+        .0;
+    let (cx, cy) = submit.center();
+    let danger = |img: &[u8]| count(img, 1280, 0, 800, 270, 310, DANGER);
+    assert_eq!(danger(&probe.image(lock, 1280, 1280)), 0);
+    probe.click(cx as i16, cy as i16);
+    wait_for("the lock screen answered the tap", || {
+        danger(&probe.image(lock, 1280, 1280)) > 50
+    });
+}
+
+#[test]
+fn lock_window_grabs_when_shown_and_lets_go_when_hidden() {
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    let mut fonts = walpad_ui::Fonts::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../walpad-ui/assets/fonts"),
+    )
+    .unwrap();
+    let wall = walpad_shell::app::WallTime::new(9, 41, "Tuesday", true);
+    let mut w = walpad_shell::lock_window::LockWindow::open(&x.1, (800, 1280), wall).unwrap();
+    assert!(!w.server_mapped());
+    assert!(can_grab_pointer(&probe.0));
+    w.show(walpad_proto::LockKind::Password, None, 0, &mut fonts)
+        .unwrap();
+    assert!(w.visible() && w.grabbed() && w.server_mapped());
+    assert!(!can_grab_pointer(&probe.0), "pointer is grabbed");
+    // a second client cannot take the keyboard either
+    let kb = probe
+        .0
+        .conn
+        .grab_keyboard(
+            true,
+            probe.0.root,
+            x11rb::CURRENT_TIME,
+            xproto::GrabMode::ASYNC,
+            xproto::GrabMode::ASYNC,
+        )
+        .unwrap()
+        .reply()
+        .unwrap();
+    assert_ne!(kb.status, xproto::GrabStatus::SUCCESS);
+    w.hide().unwrap();
+    assert!(!w.server_mapped() && !w.grabbed());
+    assert!(can_grab_pointer(&probe.0), "the grab is released");
 }
