@@ -33,6 +33,8 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
       wpa_supplicant iw wireless-regdb e2fsprogs e2fsprogs-extra util-linux-misc ca-certificates-bundle tzdata \
       iproute2 procps curl nano htop kbd fuse-exfat ntfs-3g alsa-utils hostapd iptables \
       bluez bluez-deprecated dbus pulseaudio pulseaudio-utils"
+      bluez bluez-deprecated dbus \
+      iptables-legacy wireguard-go wireguard-tools-wg openvpn"
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji \

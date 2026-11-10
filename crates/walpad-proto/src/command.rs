@@ -29,6 +29,12 @@ pub const COMMAND_NAMES: &[&str] = &[
     "bluetooth_disconnect",
     "bluetooth_forget",
     "bluetooth_confirm",
+    "vpn",
+    "vpn_config",
+    "vpn_confirm",
+    "vpn_import",
+    "vpn_remove",
+    "vpn_files",
     "launch",
     "close_app",
     "home",
@@ -68,6 +74,8 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "volume_test",
     "lock_now",
     "pkg_catalogue",
+    "vpn_confirm",
+    "vpn_files",
 ];
 
 /// Roles of the default apps (`default_app`; /etc/walpad/defaults.json).
@@ -248,6 +256,36 @@ pub enum Command {
         address: String,
         accept: bool,
     },
+    /// VPN on/off (owner request 2026-11-10): runs /usr/local/sbin/walpad-vpn with the profile
+    /// selected by `vpn_config`.
+    Vpn {
+        on: bool,
+    },
+    /// Selected profile, kill switch, DNS servers (empty list clears) and HTTP proxy (empty string
+    /// clears). Profile and kill switch cannot change while the tunnel is up.
+    VpnConfig {
+        #[serde(default)]
+        profile: Option<String>,
+        #[serde(default)]
+        kill_switch: Option<bool>,
+        #[serde(default)]
+        dns: Option<Vec<String>>,
+        #[serde(default)]
+        proxy: Option<String>,
+    },
+    /// Keep the kill switch after turning the VPN on (otherwise it reverts after the timeout).
+    VpnConfirm,
+    /// Import a WireGuard `.conf` or OpenVPN `.ovpn` file from a user folder into the 0600 store.
+    VpnImport {
+        path: String,
+        #[serde(default)]
+        name: Option<String>,
+    },
+    VpnRemove {
+        name: String,
+    },
+    /// Importable files found in the user folders (names and paths, never content).
+    VpnFiles,
     Launch {
         app: String,
     },
@@ -443,6 +481,43 @@ impl Command {
             Command::VolumeDelta { delta } if !(-100..=100).contains(delta) => {
                 Err("delta must be -100..100".into())
             }
+            Command::VpnConfig {
+                profile,
+                kill_switch,
+                dns,
+                proxy,
+            } => {
+                if profile.is_none() && kill_switch.is_none() && dns.is_none() && proxy.is_none() {
+                    return Err("give profile, kill_switch, dns and/or proxy".into());
+                }
+                if profile.as_deref().is_some_and(|n| !valid_vpn_name(n)) {
+                    return Err("profile must be 1-24 characters of A-Z a-z 0-9 . - _".into());
+                }
+                if let Some(d) = dns {
+                    if d.len() > 3 || d.iter().any(|s| !valid_dns_server(s)) {
+                        return Err("dns must be up to 3 IPv4 or IPv6 addresses".into());
+                    }
+                }
+                if proxy
+                    .as_deref()
+                    .is_some_and(|p| !p.is_empty() && !valid_proxy(p))
+                {
+                    return Err("proxy must look like http://host:port".into());
+                }
+                Ok(())
+            }
+            Command::VpnImport { path, name } => {
+                if !valid_vpn_import_path(path) {
+                    return Err("path must be a .conf or .ovpn file in a user folder".into());
+                }
+                if name.as_deref().is_some_and(|n| !valid_vpn_name(n)) {
+                    return Err("name must be 1-24 characters of A-Z a-z 0-9 . - _".into());
+                }
+                Ok(())
+            }
+            Command::VpnRemove { name } if !valid_vpn_name(name) => {
+                Err("name must be 1-24 characters of A-Z a-z 0-9 . - _".into())
+            }
             Command::MobileApn { apn } if !valid_apn(apn) => {
                 Err("apn must be 1-62 characters of A-Z a-z 0-9 . - _".into())
             }
@@ -519,6 +594,58 @@ pub fn valid_hotspot_ssid(s: &str) -> bool {
 /// Hotspot WPA2 passphrase: 8-63 printable ASCII characters (what hostapd's wpa_passphrase takes).
 pub fn valid_hotspot_secret(s: &str) -> bool {
     (8..=63).contains(&s.len()) && s.bytes().all(|b| (0x20..=0x7e).contains(&b))
+}
+
+/// VPN profile name: 1-24 of A-Z a-z 0-9 . - _, not starting with a dot (it is a file name).
+pub fn valid_vpn_name(s: &str) -> bool {
+    (1..=24).contains(&s.len())
+        && !s.starts_with('.')
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+/// A DNS server: an IPv4 or IPv6 address literal (no names: resolv.conf takes addresses).
+pub fn valid_dns_server(s: &str) -> bool {
+    s.parse::<std::net::IpAddr>().is_ok()
+}
+
+/// HTTP proxy `http://host:port`: no credentials (they would sit in a file and in every app's
+/// environment), host of letters, digits, `.`, `-` or an IPv6 literal in brackets, port 1-65535.
+pub fn valid_proxy(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("http://") else {
+        return false;
+    };
+    let Some((host, port)) = rest.rsplit_once(':') else {
+        return false;
+    };
+    let host_ok = if let Some(v6) = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+        v6.parse::<std::net::Ipv6Addr>().is_ok()
+    } else {
+        !host.is_empty()
+            && host.len() <= 253
+            && host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+    };
+    host_ok && port.bytes().all(|b| b.is_ascii_digit()) && port.parse::<u16>().is_ok_and(|p| p > 0)
+}
+
+/// Where `vpn_import` may read from: user folders and removable media, a `.conf` or `.ovpn` file,
+/// no `..` component.
+pub fn valid_vpn_import_path(s: &str) -> bool {
+    const ROOTS: &[&str] = &[
+        "/root/",
+        "/home/",
+        "/media/",
+        "/mnt/",
+        "/tmp/",
+        "/var/lib/walpad/import/",
+    ];
+    s.len() <= 255
+        && ROOTS.iter().any(|r| s.starts_with(r))
+        && (s.ends_with(".conf") || s.ends_with(".ovpn"))
+        && !s.split('/').any(|c| c == "..")
+        && !s.chars().any(char::is_control)
 }
 
 /// Access point name: 1-62 characters of A-Z a-z 0-9 . - _ (safe in an AT command and a file).

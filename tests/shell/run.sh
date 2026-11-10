@@ -777,5 +777,8 @@ done
 grep -q 'SENSOR_DEV_MAIN 1' tools/camacdk/camacdk.c && grep -q 'SENSOR_DEV_SUB 2' tools/camacdk/camacdk.c && ok "camacdk: main=1 sub=2" || bad "camacdk: main=1 sub=2" missing present
 # --- walpad-pkg and the app catalogue (change app-catalogue-manager)
 . tests/shell/pkg_test.sh
+# ===== walpad-vpn (owner request 2026-11-10, change vpn-and-dns): its own file =====
+VPNOUT=$(sh tests/shell/vpn.sh); echo "$VPNOUT"
+case $VPNOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 
 exit $FAIL

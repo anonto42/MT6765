@@ -4,6 +4,7 @@ use crate::apps::{terminate_pid, Apps, Exit, LaunchError};
 use crate::bluetooth::{Bluetooth, BluetoothError};
 use crate::brain::{Brain, Effect};
 use crate::hotspot::{Hotspot, HotspotError};
+use crate::vpn::{Vpn, VpnError};
 use crate::inputs::Inputs;
 use crate::lock::{Lock, LockError, Unlock};
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
@@ -110,6 +111,7 @@ pub struct Daemon {
     hotspot: Hotspot,
     bluetooth: Bluetooth,
     pkg: Pkg,
+    vpn: Vpn,
     modem: Modem,
     volume: Volume,
     lock: Lock,
@@ -228,6 +230,14 @@ fn hotspot_err(e: HotspotError) -> (ErrorCode, String) {
     }
 }
 
+fn vpn_err(e: VpnError) -> (ErrorCode, String) {
+    match e {
+        VpnError::Busy => (ErrorCode::Busy, "the VPN is starting or stopping".into()),
+        VpnError::Invalid(m) => (ErrorCode::InvalidArgs, m),
+        VpnError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
 /// The owner's Wi-Fi switch (owner request 2026-11-10); read by walpad-wifi's loop.
 pub const WIFI_ENABLED_FILE: &str = "/var/lib/walpad/wifi-enabled";
 
@@ -288,6 +298,7 @@ impl Daemon {
             hotspot: Hotspot::new(&root),
             bluetooth: Bluetooth::new(&root),
             pkg: Pkg::new(&root),
+            vpn: Vpn::new(&root),
             modem: Modem::new(&root),
             volume: Volume::new(&root, now),
             lock: Lock::new(&root, wall_ms()),
@@ -311,6 +322,10 @@ impl Daemon {
         let _ = d.pkg.apply_defaults();
         // a hotspot can outlive a core restart: pick up its real state
         d.hotspot.probe(now);
+        // VPN: pick up a running tunnel, apply the stored DNS and proxy (owner request 2026-11-10)
+        d.vpn.startup(now);
+        let px = d.vpn.proxy().map(str::to_string);
+        d.apps.set_proxy(px.as_deref());
         // the modem: pick up a running one, or boot it once per boot (owner request 2026-11-10)
         d.modem.startup(now);
         Ok(d)
@@ -525,6 +540,26 @@ impl Daemon {
     /// Test hook: cheaper PBKDF2 for the screen lock's new secrets.
     pub fn lock_mut(&mut self) -> &mut Lock {
         &mut self.lock
+    }
+
+    /// Test hook: shorter VPN script timeouts.
+    pub fn vpn_mut(&mut self) -> &mut Vpn {
+        &mut self.vpn
+    }
+
+    /// `wifi` event `vpn` with the current VPN status (state changes, failures, reverts).
+    fn publish_vpn(&mut self) {
+        let data = match serde_json::to_value(self.vpn.status()) {
+            Ok(Value::Object(mut m)) => {
+                // `kind` names the event; the tunnel type moves to `tunnel`
+                let t = m.remove("kind").unwrap_or(Value::Null);
+                m.insert("tunnel".into(), t);
+                m.insert("kind".into(), json!("vpn"));
+                Value::Object(m)
+            }
+            _ => return,
+        };
+        self.publish(Topic::Wifi, "wifi", data);
     }
 
     /// Test hook: shorter hotspot script timeouts.
@@ -960,6 +995,7 @@ impl Daemon {
             lid_closed: self.brain.screen.lid_closed(),
             wifi,
             hotspot: self.hotspot.status().clone(),
+            vpn: self.vpn.status().clone(),
             mobile: self.modem.status().clone(),
             bluetooth: bt.clone(),
             audio: self.volume.status(),
@@ -1167,6 +1203,42 @@ impl Daemon {
                     self.publish_hotspot();
                 }
                 Ok(reply)
+            }
+            Command::Vpn { on } => {
+                let st = self.vpn.set_on(on, Instant::now()).map_err(vpn_err)?;
+                self.publish_vpn();
+                Ok(json!({"state": st}))
+            }
+            Command::VpnConfig { profile, kill_switch, dns, proxy } => {
+                self.vpn
+                    .configure(profile.as_deref(), kill_switch, dns.as_deref(), proxy.as_deref(), Instant::now())
+                    .map_err(vpn_err)?;
+                let px = self.vpn.proxy().map(str::to_string);
+                self.apps.set_proxy(px.as_deref());
+                let v = self.vpn.status();
+                Ok(json!({"profile": v.profile, "kill_switch": v.kill_switch, "dns": v.dns, "proxy": v.proxy}))
+            }
+            Command::VpnConfirm => {
+                self.vpn.confirm(Instant::now()).map_err(vpn_err)?;
+                Ok(json!({}))
+            }
+            Command::VpnImport { path, name } => {
+                let p = self.vpn.import(&path, name.as_deref()).map_err(vpn_err)?;
+                eprintln!("walpad-core: VPN profile imported");
+                Ok(json!({"name": p.name, "kind": p.kind}))
+            }
+            Command::VpnRemove { name } => {
+                self.vpn.remove(&name).map_err(vpn_err)?;
+                Ok(json!({}))
+            }
+            Command::VpnFiles => {
+                let files: Vec<Value> = self
+                    .vpn
+                    .candidates()
+                    .into_iter()
+                    .map(|(name, path, kind)| json!({"name": name, "path": path, "kind": kind}))
+                    .collect();
+                Ok(json!({"files": files}))
             }
             Command::MobileRadio { on } => self.modem.set_radio(on, Instant::now()).map_err(mobile_err),
             Command::MobileData { on } => self.modem.set_data(on, Instant::now()).map_err(mobile_err),
@@ -1525,6 +1597,10 @@ impl Daemon {
         }
         for n in self.pkg.take_notices() {
             self.publish(Topic::Notice, "notice", n);
+            did = true;
+        }
+        if self.vpn.tick(Instant::now()) {
+            self.publish_vpn();
             did = true;
         }
         did |= self.modem.tick(Instant::now());

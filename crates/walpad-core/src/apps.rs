@@ -109,6 +109,8 @@ pub struct Apps {
     /// Apps with a window on screen that we did not start (from the X scan).
     ext: HashSet<String>,
     grace: Option<Duration>,
+    /// System HTTP proxy for launched apps (vpn-and-dns; never carries credentials).
+    proxy: Option<String>,
 }
 
 impl Apps {
@@ -130,6 +132,24 @@ impl Apps {
             children: HashMap::new(),
             ext: HashSet::new(),
             grace: None,
+            proxy: None,
+        }
+    }
+
+    /// Set (or clear) the system proxy exported to apps started from now on.
+    pub fn set_proxy(&mut self, proxy: Option<&str>) {
+        self.proxy = proxy.map(str::to_string);
+    }
+
+    /// The proxy variables an app gets (lower and upper case, as tools differ).
+    fn proxy_env(&self) -> Vec<(&'static str, String)> {
+        match &self.proxy {
+            None => Vec::new(),
+            Some(p) => ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]
+                .into_iter()
+                .map(|k| (k, p.clone()))
+                .chain(["no_proxy", "NO_PROXY"].map(|k| (k, "localhost,127.0.0.1,::1".to_string())))
+                .collect(),
         }
     }
 
@@ -294,6 +314,7 @@ impl Apps {
         let child = Command::new(&d.exec[0])
             .args(&d.exec[1..])
             .envs(CONTRACT_ENV.iter().copied())
+            .envs(self.proxy_env())
             .envs(d.env.iter())
             .stdin(Stdio::null())
             .stdout(errlog())
@@ -420,6 +441,26 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         gone
+    }
+
+    #[test]
+    fn apps_get_the_system_proxy_in_their_environment() {
+        let r = root_with("[]", &["sh"]);
+        let out = r.p("/proxy-seen");
+        let json = serde_json::json!([{
+            "id": "envdump",
+            "exec": ["sh", "-c", "echo $http_proxy $HTTPS_PROXY $no_proxy > \"$OUT\""],
+            "env": {"OUT": out.to_string_lossy()}
+        }]);
+        std::fs::write(r.p("/etc/walpad/apps.json"), json.to_string()).unwrap();
+        let mut a = Apps::load(&r);
+        a.set_proxy(Some("http://10.0.0.2:3128"));
+        a.spawn("envdump", &r).unwrap();
+        reap_all(&mut a, 1);
+        assert_eq!(
+            std::fs::read_to_string(&out).unwrap().trim(),
+            "http://10.0.0.2:3128 http://10.0.0.2:3128 localhost,127.0.0.1,::1"
+        );
     }
 
     #[test]

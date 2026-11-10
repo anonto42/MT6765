@@ -15,5 +15,6 @@ pub mod pkg;
 pub mod shadow;
 pub mod shadow_live;
 pub mod volume;
+pub mod vpn;
 pub mod wpa;
 pub mod xbridge;

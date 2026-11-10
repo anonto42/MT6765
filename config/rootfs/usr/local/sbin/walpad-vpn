@@ -1,0 +1,438 @@
+#!/bin/sh
+# walpad-vpn up|down|status|apply|confirm   VPN, DNS and proxy (owner request 2026-11-10, change
+# vpn-and-dns).  Called by walpad-core with a timeout; prints key=value lines (state, reason, profile,
+# kind, iface, handshake_age, rx, tx, kill_switch, revert_in) and exits 0 when the requested state was
+# reached, 1 otherwise.
+#
+#   up       bring the selected profile up (WireGuard: wireguard-go over /dev/net/tun + wg setconf;
+#            OpenVPN: openvpn --daemon), optional kill switch, DNS override, then a background watcher
+#   down     tear everything down and restore routes, DNS and iptables to the state before `up`
+#   status   what is running now
+#   apply    write the DNS servers and the proxy from /etc/walpad/vpn.conf (works without a tunnel)
+#   confirm  keep the kill switch (otherwise the watcher reverts it after REVERT_S seconds)
+#
+# Secrets: profiles live in /var/lib/walpad/vpn (0700 dir, 0600 files), written by walpad-core.  Keys and
+# passwords are only ever read by wg/openvpn from those files (the WireGuard config is filtered file to
+# file into a 0600 file under /run that is deleted right after `wg setconf`): never in argv, a variable,
+# a log or the status output.  Configs with script hooks (PreUp, up, plugin, ...) are refused.
+#
+# Safety: the kill switch is a dedicated iptables chain (legacy iptables, no nftables on this kernel)
+# jumped to first in OUTPUT; it lets loopback, the tunnel, DHCP, the hotspot interface, the VPN endpoints
+# and replies of the LAN SSH server through.  A background watcher reverts the tunnel AND the kill switch
+# when `confirm` has not arrived within REVERT_S seconds, so a bad config can never strand the tablet.
+# Nothing here touches Wi-Fi/modem hardware.
+#
+# Test hooks: WALPAD_VPN_ROOT prefixes every file path; WALPAD_VPN_REVERT_S, WALPAD_VPN_HS_WAIT,
+# WALPAD_VPN_WATCH_EVERY shorten the timers.
+R=${WALPAD_VPN_ROOT:-}
+CONF=$R/etc/walpad/vpn.conf
+STORE=$R/var/lib/walpad/vpn
+RUN=$R/run/walpad/vpn
+LOG=$R/var/log/walpad-vpn.log
+OLOG=$R/var/log/walpad-vpn-openvpn.log
+RESOLV=$R/etc/resolv.conf
+PROFD=$R/etc/profile.d/walpad-proxy.sh
+FFPOL=$R/usr/lib/firefox-esr/distribution/policies.json
+SYS=$R/sys/class/net
+CHAIN=WALPAD_VPN_KS
+WGIF=wg0
+OVIF=walpad-tun
+REVERT_S=${WALPAD_VPN_REVERT_S:-60}
+HS_WAIT=${WALPAD_VPN_HS_WAIT:-20}
+WATCH_EVERY=${WALPAD_VPN_WATCH_EVERY:-3}
+umask 077
+mkdir -p "$RUN" "${LOG%/*}" 2>/dev/null
+chmod 700 "$RUN" 2>/dev/null
+
+log() { echo "$(date '+%F %T' 2>/dev/null) $*" >> "$LOG" 2>/dev/null; }
+now() { date +%s; }
+cfg() { sed -n "s/^$1=//p" "$CONF" 2>/dev/null | head -n 1; }
+get() { sed -n "s/^$1=//p" "$RUN/state" 2>/dev/null | head -n 1; }
+# the kernel has legacy iptables only (no NF_TABLES): Alpine's plain `iptables` is the nft front end
+ipt() { if command -v iptables-legacy >/dev/null 2>&1; then iptables-legacy "$@"; else iptables "$@"; fi; }
+ipt6() {
+  if command -v ip6tables-legacy >/dev/null 2>&1; then ip6tables-legacy "$@"
+  elif command -v ip6tables >/dev/null 2>&1; then ip6tables "$@"
+  else return 1; fi
+}
+
+# the state file: the last result, read by `status`
+put_state() { # state reason
+  {
+    printf 'state=%s\nreason=%s\nprofile=%s\nkind=%s\niface=%s\n' "$1" "$2" \
+      "$(cat "$RUN/profile" 2>/dev/null)" "$(cat "$RUN/kind" 2>/dev/null)" "$(cat "$RUN/iface" 2>/dev/null)"
+  } > "$RUN/state.tmp" && mv "$RUN/state.tmp" "$RUN/state"
+}
+
+alive() { # pidfile
+  p=$(cat "$1" 2>/dev/null) || return 1
+  [ -n "$p" ] && kill -0 "$p" 2>/dev/null
+}
+
+kill_pidfile() { # pidfile
+  p=$(cat "$1" 2>/dev/null)
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+    kill "$p" 2>/dev/null
+    for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$p" 2>/dev/null || break; sleep 1; done
+    kill -9 "$p" 2>/dev/null
+  fi
+  rm -f "$1"
+}
+
+# is_ip: only characters an IPv4/IPv6 literal can have (no shell or resolv.conf surprises)
+is_ip() { case $1 in ''|*[!0-9a-fA-F:.]*) return 1;; esac; return 0; }
+
+# ---------------------------------------------------------------- profiles
+profile_file() { # name -> path of the stored config
+  case $1 in ''|.*|*[!A-Za-z0-9._-]*) return 1;; esac
+  if [ -f "$STORE/$1.conf" ]; then echo "$STORE/$1.conf"
+  elif [ -f "$STORE/$1.ovpn" ]; then echo "$STORE/$1.ovpn"
+  else return 1; fi
+}
+kind_of() { case $1 in *.ovpn) echo openvpn;; *) echo wireguard;; esac; }
+
+# resolve a host to one IPv4 address (or pass an address through)
+resolve() { # host
+  case $1 in
+    *[!0-9.]*)
+      r=$(getent ahostsv4 "$1" 2>/dev/null | sed -n 's/^\([0-9.]*\) .*/\1/p' | head -n 1)
+      [ -n "$r" ] || r=$(getent hosts "$1" 2>/dev/null | awk '$1 ~ /^[0-9.]+$/ { print $1; exit }')
+      echo "$r" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# endpoints of a profile -> $RUN/endpoints, one IPv4 per line
+find_endpoints() { # file kind
+  : > "$RUN/endpoints"
+  if [ "$2" = wireguard ]; then
+    sed -n 's/^[[:space:]]*[Ee]ndpoint[[:space:]]*=[[:space:]]*//p' "$1" | while read -r v; do
+      h=${v%:*}; h=${h#\[}; h=${h%\]}
+      ip=$(resolve "$h"); [ -n "$ip" ] && echo "$ip" >> "$RUN/endpoints"
+    done
+  else
+    sed -n 's/^[[:space:]]*remote[[:space:]][[:space:]]*\([^[:space:]]*\).*/\1/p' "$1" | head -n 5 | while read -r h; do
+      ip=$(resolve "$h"); [ -n "$ip" ] && echo "$ip" >> "$RUN/endpoints"
+    done
+  fi
+  [ -s "$RUN/endpoints" ]
+}
+
+# ---------------------------------------------------------------- DNS and proxy
+dns_apply() { # [vpn]: user servers win over the tunnel's, none = restore the original
+  want=$(cfg dns | tr ',' ' ')
+  if [ -z "$want" ] && [ "$1" = vpn ]; then want=$(cat "$RUN/vpn.dns" 2>/dev/null); fi
+  ok=""
+  for s in $want; do is_ip "$s" && ok="$ok $s"; done
+  if [ -n "$ok" ]; then
+    if [ ! -e "$RUN/resolv.orig" ] && [ ! -e "$RUN/resolv.none" ]; then
+      if [ -f "$RESOLV" ]; then cp "$RESOLV" "$RUN/resolv.orig"; else : > "$RUN/resolv.none"; fi
+    fi
+    {
+      for s in $ok; do echo "nameserver $s"; done
+      grep '^search' "$RUN/resolv.orig" 2>/dev/null
+    } > "$RESOLV.walpad" && mv "$RESOLV.walpad" "$RESOLV" && chmod 644 "$RESOLV"
+    log "dns override active"
+  elif [ -e "$RUN/resolv.orig" ]; then
+    cp "$RUN/resolv.orig" "$RESOLV" && chmod 644 "$RESOLV"
+    rm -f "$RUN/resolv.orig"
+    log "dns restored"
+  elif [ -e "$RUN/resolv.none" ]; then
+    rm -f "$RESOLV" "$RUN/resolv.none"
+  fi
+}
+
+proxy_apply() {
+  p=$(cfg proxy)
+  case $p in http://*:*) ;; *) p="" ;; esac
+  case $p in *[!A-Za-z0-9.:/_\[\]-]*) p="" ;; esac
+  mkdir -p "${PROFD%/*}" 2>/dev/null
+  if [ -n "$p" ]; then
+    hp=${p#http://}
+    {
+      echo "# walpad-vpn: system proxy (owner request 2026-11-10); managed, do not edit"
+      for v in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; do echo "export $v=$p"; done
+      echo "export no_proxy=localhost,127.0.0.1,::1"
+      echo "export NO_PROXY=localhost,127.0.0.1,::1"
+    } > "$PROFD.tmp" && mv "$PROFD.tmp" "$PROFD" && chmod 644 "$PROFD"
+    if [ -d "${FFPOL%/*}" ] && { [ ! -f "$FFPOL" ] || grep -q walpad-managed "$FFPOL"; }; then
+      printf '{"walpad-managed":true,"policies":{"Proxy":{"Mode":"manual","HTTPProxy":"%s","SSLProxy":"%s","UseHTTPProxyForAllProtocols":true,"Passthrough":"localhost,127.0.0.1"}}}\n' \
+        "$hp" "$hp" > "$FFPOL.tmp" && mv "$FFPOL.tmp" "$FFPOL" && chmod 644 "$FFPOL"
+    fi
+  else
+    rm -f "$PROFD"
+    [ -f "$FFPOL" ] && grep -q walpad-managed "$FFPOL" && rm -f "$FFPOL"
+  fi
+}
+
+# ---------------------------------------------------------------- kill switch
+ks_on() { # iface
+  ks_off
+  ipt -N $CHAIN || return 1
+  ipt -A $CHAIN -o lo -j ACCEPT
+  ipt -A $CHAIN -o "$1" -j ACCEPT
+  ipt -A $CHAIN -o ap0 -j ACCEPT
+  ipt -A $CHAIN -p udp --sport 68 --dport 67 -j ACCEPT
+  ipt -A $CHAIN -p udp --sport 67 --dport 68 -j ACCEPT
+  while read -r e; do [ -n "$e" ] && ipt -A $CHAIN -d "$e" -j ACCEPT; done < "$RUN/endpoints"
+  # replies of the LAN SSH server (a bad config must not cut a debugging session)
+  for n in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16; do
+    ipt -A $CHAIN -p tcp --sport 22 -d $n -j ACCEPT
+  done
+  ipt -A $CHAIN -j REJECT || return 1
+  ipt -I OUTPUT 1 -j $CHAIN || return 1
+  if ipt6 -N $CHAIN; then
+    ipt6 -A $CHAIN -o lo -j ACCEPT
+    ipt6 -A $CHAIN -o "$1" -j ACCEPT
+    ipt6 -A $CHAIN -j REJECT
+    ipt6 -I OUTPUT 1 -j $CHAIN
+  fi
+  echo 1 > "$RUN/ks"
+  return 0
+}
+
+ks_off() {
+  for _ in 1 2 3 4 5; do ipt -D OUTPUT -j $CHAIN 2>/dev/null || break; done
+  ipt -F $CHAIN 2>/dev/null; ipt -X $CHAIN 2>/dev/null
+  for _ in 1 2 3 4 5; do ipt6 -D OUTPUT -j $CHAIN 2>/dev/null || break; done
+  ipt6 -F $CHAIN 2>/dev/null; ipt6 -X $CHAIN 2>/dev/null
+  rm -f "$RUN/ks"
+  return 0
+}
+
+# ---------------------------------------------------------------- tunnels
+wg_start() { # file
+  f=$1
+  if grep -q -i -E '^[[:space:]]*(PreUp|PostUp|PreDown|PostDown)[[:space:]]*=' "$f"; then
+    REASON="the profile runs scripts (PreUp/PostUp): not allowed"; return 1
+  fi
+  grep -v -i -E '^[[:space:]]*(Address|DNS|MTU|Table|SaveConfig|FwMark)[[:space:]]*=' "$f" > "$RUN/wg.conf"
+  WG_PROCESS_FOREGROUND=1 wireguard-go $WGIF >> "$LOG" 2>&1 &
+  echo $! > "$RUN/tun.pid"
+  i=0
+  while [ $i -lt 10 ]; do ip link show $WGIF >/dev/null 2>&1 && break; i=$((i+1)); sleep 1; done
+  if ! ip link show $WGIF >/dev/null 2>&1; then
+    rm -f "$RUN/wg.conf"; REASON="wireguard-go did not create the interface (is /dev/net/tun there?)"; return 1
+  fi
+  if ! wg setconf $WGIF "$RUN/wg.conf" >/dev/null 2>&1; then
+    rm -f "$RUN/wg.conf"; REASON="the WireGuard config was rejected"; return 1
+  fi
+  rm -f "$RUN/wg.conf"
+  for a in $(sed -n 's/^[[:space:]]*[Aa]ddress[[:space:]]*=[[:space:]]*//p' "$f" | tr ',' ' '); do
+    ip addr add "$a" dev $WGIF 2>/dev/null
+  done
+  mtu=$(sed -n 's/^[[:space:]]*[Mm][Tt][Uu][[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' "$f" | head -n 1)
+  ip link set $WGIF mtu "${mtu:-1420}" up || { REASON="cannot bring the interface up"; return 1; }
+  : > "$RUN/vpn.dns"
+  for d in $(sed -n 's/^[[:space:]]*[Dd][Nn][Ss][[:space:]]*=[[:space:]]*//p' "$f" | tr ',' ' '); do
+    is_ip "$d" && echo "$d" >> "$RUN/vpn.dns"
+  done
+  for a in $(sed -n 's/^[[:space:]]*[Aa]llowed[Ii][Pp]s[[:space:]]*=[[:space:]]*//p' "$f" | tr ',' ' '); do
+    case $a in
+      0.0.0.0/0) ip route add 0.0.0.0/1 dev $WGIF; ip route add 128.0.0.0/1 dev $WGIF ;;
+      ::/0) ip -6 route add ::/1 dev $WGIF 2>/dev/null; ip -6 route add 8000::/1 dev $WGIF 2>/dev/null ;;
+      *:*) ip -6 route add "$a" dev $WGIF 2>/dev/null ;;
+      *[!0-9./]*|'') ;;
+      *) ip route add "$a" dev $WGIF ;;
+    esac
+  done
+  i=0
+  while [ $i -lt "$HS_WAIT" ]; do
+    hs=$(wg show $WGIF latest-handshakes 2>/dev/null | awk '{ if ($2 > m) m = $2 } END { print m + 0 }')
+    [ "${hs:-0}" -gt 0 ] && return 0
+    alive "$RUN/tun.pid" || { REASON="wireguard-go stopped"; return 1; }
+    i=$((i+1)); sleep 1
+  done
+  REASON="no handshake with the server (check the endpoint and the keys)"
+  return 1
+}
+
+ovpn_start() { # file
+  f=$1
+  if grep -q -i -E '^[[:space:]]*(up|down|route-up|route-pre-down|tls-verify|auth-user-pass-verify|client-connect|client-disconnect|learn-address|ipchange|plugin|script-security|setenv-safe)([[:space:]]|$)' "$f"; then
+    REASON="the profile runs scripts: not allowed"; return 1
+  fi
+  : > "$OLOG"
+  openvpn --config "$f" --cd "$STORE" --dev $OVIF --dev-type tun --script-security 1 \
+    --daemon walpad-ovpn --writepid "$RUN/tun.pid" --log-append "$OLOG" --auth-nocache \
+    >/dev/null 2>&1 || { REASON="openvpn did not start"; return 1; }
+  : > "$RUN/vpn.dns"
+  sed -n 's/^[[:space:]]*dhcp-option[[:space:]][[:space:]]*DNS[[:space:]][[:space:]]*\([0-9a-fA-F:.]*\).*/\1/p' "$f" | while read -r d; do
+    is_ip "$d" && echo "$d" >> "$RUN/vpn.dns"
+  done
+  i=0
+  while [ $i -lt "$HS_WAIT" ]; do
+    grep -q 'Initialization Sequence Completed' "$OLOG" 2>/dev/null && return 0
+    grep -q -E 'AUTH_FAILED|Exiting due to fatal error' "$OLOG" 2>/dev/null && { REASON="the server refused the login or the config"; return 1; }
+    alive "$RUN/tun.pid" || { REASON="openvpn stopped"; return 1; }
+    i=$((i+1)); sleep 1
+  done
+  REASON="openvpn did not connect in time"
+  return 1
+}
+
+tun_start() { # file kind
+  if [ "$2" = wireguard ]; then wg_start "$1"; else ovpn_start "$1"; fi
+}
+
+tun_stop() {
+  kill_pidfile "$RUN/tun.pid"
+  for i in $WGIF $OVIF; do ip link del "$i" 2>/dev/null; done
+  return 0
+}
+
+# the original routes come back: delete what is new, re-add what vanished
+routes_restore() {
+  [ -f "$RUN/pre.routes" ] || return 0
+  ip route show > "$RUN/cur.routes" 2>/dev/null
+  while read -r l; do
+    [ -n "$l" ] && ! grep -qxF -- "$l" "$RUN/pre.routes" && ip route del $l 2>/dev/null
+  done < "$RUN/cur.routes"
+  while read -r l; do
+    [ -n "$l" ] && ! grep -qxF -- "$l" "$RUN/cur.routes" && ip route add $l 2>/dev/null
+  done < "$RUN/pre.routes"
+  rm -f "$RUN/cur.routes"
+  return 0
+}
+
+# ---------------------------------------------------------------- verbs
+do_down() { # [from-watcher]
+  [ "$1" = watch ] || kill_pidfile "$RUN/watch.pid"
+  tun_stop
+  ks_off
+  routes_restore
+  rm -f "$RUN/active" "$RUN/vpn.dns"
+  dns_apply novpn
+  if [ -f "$RUN/pre.iptables" ] && [ "$(ipt -S 2>/dev/null)" != "$(cat "$RUN/pre.iptables")" ]; then
+    log "warning: iptables differs from the saved pre-tunnel state after down"
+  fi
+  rm -f "$RUN/pre.routes" "$RUN/pre.iptables" "$RUN/endpoints" "$RUN/armed" "$RUN/confirmed" "$RUN/ks"
+}
+
+fail() { # reason: tear down, record the failure
+  log "failed: $1"
+  do_down
+  put_state failed "$1"
+  echo state=failed; echo "reason=$1"
+  exit 1
+}
+
+up() {
+  if [ -f "$RUN/active" ] && alive "$RUN/tun.pid"; then status; exit $?; fi
+  [ -f "$RUN/active" ] && do_down
+  name=$(cfg profile)
+  [ -n "$name" ] || fail "no VPN profile selected"
+  f=$(profile_file "$name") || fail "profile not found"
+  KIND=$(kind_of "$f")
+  echo "$name" > "$RUN/profile"; echo "$KIND" > "$RUN/kind"
+  if [ "$KIND" = wireguard ]; then echo $WGIF > "$RUN/iface"; else echo $OVIF > "$RUN/iface"; fi
+  put_state starting ""
+  command -v ip >/dev/null 2>&1 || fail "ip is not installed"
+  if [ "$KIND" = wireguard ]; then
+    command -v wireguard-go >/dev/null 2>&1 && command -v wg >/dev/null 2>&1 || fail "wireguard-tools / wireguard-go are not installed"
+  else
+    command -v openvpn >/dev/null 2>&1 || fail "openvpn is not installed"
+  fi
+  if [ -z "$R" ] && [ ! -c /dev/net/tun ]; then
+    mkdir -p /dev/net && mknod /dev/net/tun c 10 200 2>/dev/null
+    [ -c /dev/net/tun ] || fail "/dev/net/tun is missing"
+  fi
+  ip route show > "$RUN/pre.routes" 2>/dev/null
+  ipt -S > "$RUN/pre.iptables" 2>/dev/null
+  gw=$(sed -n 's/^default via \([0-9.]*\) dev \([^ ]*\).*/\1 \2/p' "$RUN/pre.routes" | head -n 1)
+  [ -n "$gw" ] || fail "no network: there is no default route"
+  find_endpoints "$f" "$KIND" || fail "cannot find or resolve the server address"
+  : > "$RUN/active"
+  # host routes for the servers stay on the real network
+  while read -r e; do
+    ip route add "$e/32" via "${gw% *}" dev "${gw#* }" 2>/dev/null
+  done < "$RUN/endpoints"
+  if [ "$(cfg kill_switch)" = 1 ]; then
+    ks_on "$(cat "$RUN/iface")" || fail "cannot set up the kill switch (iptables)"
+    now > "$RUN/armed"
+    rm -f "$RUN/confirmed"
+  fi
+  REASON=""
+  tun_start "$f" "$KIND" || fail "${REASON:-the tunnel did not come up}"
+  dns_apply vpn
+  put_state on ""
+  setsid sh "$0" watch >/dev/null 2>&1 < /dev/null &
+  log "up: $KIND profile $name"
+  status
+}
+
+down() {
+  log "down"
+  do_down
+  put_state off ""
+  rm -f "$RUN/profile" "$RUN/kind" "$RUN/iface"
+  echo state=off
+}
+
+# a tunnel that died is restarted by the watcher; the kill switch keeps blocking meanwhile
+watch() {
+  echo $$ > "$RUN/watch.pid"
+  last=0
+  while sleep "$WATCH_EVERY"; do
+    [ -f "$RUN/active" ] || break
+    if [ -f "$RUN/ks" ] && [ ! -f "$RUN/confirmed" ] && [ -f "$RUN/armed" ]; then
+      el=$(( $(now) - $(cat "$RUN/armed") ))
+      if [ "$el" -ge "$REVERT_S" ]; then
+        log "kill switch not confirmed in ${REVERT_S}s: reverting"
+        do_down watch
+        put_state failed "reverted: the kill switch was not confirmed in ${REVERT_S} s"
+        break
+      fi
+    fi
+    if ! alive "$RUN/tun.pid" && [ $(( $(now) - last )) -ge 10 ]; then
+      last=$(now)
+      log "tunnel process is gone: restarting"
+      name=$(cat "$RUN/profile" 2>/dev/null); f=$(profile_file "$name") || continue
+      KIND=$(kind_of "$f")
+      tun_stop
+      REASON=""
+      tun_start "$f" "$KIND" || { log "restart failed: $REASON"; tun_stop; }
+    fi
+  done
+  rm -f "$RUN/watch.pid"
+}
+
+status() {
+  st=$(get state); [ -n "$st" ] || st=off
+  reason=$(get reason)
+  iface=$(cat "$RUN/iface" 2>/dev/null)
+  if [ "$st" = on ] && [ -f "$RUN/active" ] && ! alive "$RUN/tun.pid"; then
+    st=starting; reason="tunnel is down, reconnecting"
+  fi
+  echo "state=$st"; echo "reason=$reason"
+  if [ "$st" = on ] || [ "$st" = starting ]; then
+    echo "profile=$(cat "$RUN/profile" 2>/dev/null)"; echo "kind=$(cat "$RUN/kind" 2>/dev/null)"; echo "iface=$iface"
+    if [ "$st" = on ] && [ "$(cat "$RUN/kind" 2>/dev/null)" = wireguard ]; then
+      hs=$(wg show "$iface" latest-handshakes 2>/dev/null | awk '{ if ($2 > m) m = $2 } END { print m + 0 }')
+      [ "${hs:-0}" -gt 0 ] && echo "handshake_age=$(( $(now) - hs ))"
+    fi
+    [ -n "$iface" ] && [ -r "$SYS/$iface/statistics/rx_bytes" ] && {
+      echo "rx=$(cat "$SYS/$iface/statistics/rx_bytes")"; echo "tx=$(cat "$SYS/$iface/statistics/tx_bytes")"; }
+  fi
+  if [ -f "$RUN/ks" ]; then
+    echo kill_switch=1
+    if [ ! -f "$RUN/confirmed" ] && [ -f "$RUN/armed" ]; then
+      left=$(( REVERT_S - ( $(now) - $(cat "$RUN/armed") ) ))
+      [ "$left" -lt 0 ] && left=0
+      echo "revert_in=$left"
+    fi
+  fi
+  [ "$st" != failed ]
+}
+
+case $1 in
+  up) up ;;
+  down) down; exit 0 ;;
+  status) status ;;
+  apply) dns_apply "$([ -f "$RUN/active" ] && echo vpn)"; proxy_apply; echo state=applied ;;
+  confirm)
+    if [ -f "$RUN/ks" ] && [ -f "$RUN/active" ]; then : > "$RUN/confirmed"; log "kill switch confirmed"; echo confirmed=1
+    else echo "reason=nothing to confirm"; exit 1; fi ;;
+  watch) watch ;;
+  *) echo "usage: walpad-vpn up|down|status|apply|confirm" >&2; exit 2 ;;
+esac

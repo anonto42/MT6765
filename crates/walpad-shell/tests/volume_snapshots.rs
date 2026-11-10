@@ -45,6 +45,7 @@ fn status(volume: u8, muted: bool, available: bool) -> Status {
         mobile: Default::default(),
         bluetooth: Default::default(),
         lock: Default::default(),
+        vpn: Default::default(),
         audio: AudioStatus {
             volume,
             muted,

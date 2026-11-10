@@ -380,6 +380,7 @@ fn sample_status() -> Status {
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),
+        vpn: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,
@@ -693,4 +694,49 @@ fn lock_status_defaults_and_never_carries_a_secret() {
     );
     let back: LockStatus = serde_json::from_value(serde_json::json!({})).unwrap();
     assert_eq!(back, l);
+}
+
+#[test]
+fn vpn_commands_are_validated() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"vpn","args":{"on":true}}"#)
+            .unwrap()
+            .1,
+        Command::Vpn { on: true }
+    );
+    assert!(req(r#"{"v":1,"id":1,"cmd":"vpn","args":{}}"#).is_err());
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"vpn_confirm"}"#).unwrap().1,
+        Command::VpnConfirm
+    );
+    assert!(req(r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"profile":"home","kill_switch":true,"dns":["1.1.1.1","2606:4700::1111"],"proxy":"http://10.0.0.2:3128"}}"#).is_ok());
+    assert!(req(r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"dns":[],"proxy":""}}"#).is_ok());
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"profile":"../x"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"profile":".hidden"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"dns":["dns.example"]}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"dns":["1.1.1.1","1.0.0.1","8.8.8.8","9.9.9.9"]}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"proxy":"http://user:pw@h:80"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"proxy":"socks5://h:80"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"proxy":"http://h:0"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_config","args":{"proxy":"http://h:80;rm"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_import","args":{"path":"/etc/shadow"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_import","args":{"path":"/root/../etc/x.conf"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_import","args":{"path":"/root/a.txt"}}"#,
+        r#"{"v":1,"id":1,"cmd":"vpn_remove","args":{"name":"a/b"}}"#,
+    ] {
+        assert!(req(bad).is_err(), "{bad}");
+    }
+    assert!(req(r#"{"v":1,"id":1,"cmd":"vpn_import","args":{"path":"/root/Downloads/wg0.conf","name":"home"}}"#).is_ok());
+}
+
+#[test]
+fn vpn_status_defaults_and_has_no_secret_fields() {
+    let json = serde_json::to_string(&VpnStatus::default()).unwrap();
+    for k in ["key", "secret", "password", "private"] {
+        assert!(!json.contains(k), "{k}");
+    }
+    let s: VpnStatus = serde_json::from_str("{}").unwrap();
+    assert_eq!(s.state, VpnState::Off);
 }

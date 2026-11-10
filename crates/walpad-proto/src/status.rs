@@ -146,6 +146,55 @@ impl Default for BluetoothStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VpnState {
+    #[default]
+    Off,
+    Starting,
+    On,
+    Stopping,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VpnKind {
+    Wireguard,
+    Openvpn,
+}
+
+/// An imported profile: the name only (keys and passwords never leave the 0600 file).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VpnProfile {
+    pub name: String,
+    pub kind: VpnKind,
+}
+
+/// VPN tunnel, kill switch, DNS and proxy. Contains no key, password or config content.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VpnStatus {
+    pub state: VpnState,
+    /// Why it failed or was reverted; never contains secrets.
+    pub reason: Option<String>,
+    /// The profile selected (or running).
+    pub profile: Option<String>,
+    pub kind: Option<VpnKind>,
+    pub profiles: Vec<VpnProfile>,
+    pub kill_switch: bool,
+    /// User DNS servers (empty = from the tunnel or the network).
+    pub dns: Vec<String>,
+    /// HTTP proxy `http://host:port` (None = none).
+    pub proxy: Option<String>,
+    /// Seconds since the last WireGuard handshake (None: no handshake yet or not WireGuard).
+    pub handshake_age_s: Option<u64>,
+    pub rx_bytes: Option<u64>,
+    pub tx_bytes: Option<u64>,
+    /// Kill switch armed and not yet confirmed: seconds until the automatic revert.
+    pub revert_in_s: Option<u32>,
+}
+
 /// The cellular modem (owner request 2026-11-10).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -296,6 +345,9 @@ pub struct Status {
     #[serde(default)]
     pub audio: AudioStatus,
     pub lock: LockStatus,
+    /// VPN, DNS and proxy (owner request 2026-11-10, change vpn-and-dns).
+    #[serde(default)]
+    pub vpn: VpnStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
 }
