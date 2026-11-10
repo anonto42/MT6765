@@ -2,13 +2,16 @@
 //! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
 //! after the first frame is on screen (the boot ramdisk health check).
 use crate::app::{load_catalog, read_clock_24h, read_pinned, App, Cmd, WallTime};
+use crate::clipboard::{ClipEvent, Keeper};
 use crate::config::read_devd;
 use crate::core_client::{CoreClient, CoreEvent};
+use crate::cursor::CursorHider;
 use crate::dock::{load_wm_classes, Dock};
 use crate::gesture::{Gesture, Recogniser};
 use crate::ime::{FocusKbd, ImEvent, ImServer, KbdAction};
 use crate::keyboard::SysKeyboard;
 use crate::mousepad::MousePad;
+use crate::seltools::{BarState, EditBar, EditOut};
 use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
 use std::path::PathBuf;
@@ -42,6 +45,14 @@ pub struct Shell {
     ime: Option<ImServer>,
     /// Text-input focus -> keyboard visibility.
     focus: FocusKbd,
+    /// The selection toolbar and the clipboard list (None when their X connection died).
+    edit: Option<EditBar>,
+    /// The clipboard keeper (None when XFixes or its connection is not available).
+    keeper: Option<Keeper>,
+    /// When the selection toolbar shows.
+    bar: BarState,
+    /// Keeps the X cursor hidden (cursor.rs); None when XFixes is not available.
+    _cursor: Option<CursorHider>,
     core: CoreClient,
     canvas: Canvas,
     fonts: Fonts,
@@ -111,6 +122,27 @@ impl Shell {
                 None
             }
         };
+        let cursor = match crate::cursor::hide(&sock) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                eprintln!("walpad-shell: cannot hide the X cursor: {}", e.0);
+                None
+            }
+        };
+        let edit = match EditBar::open(&sock, win.win, (w, h)) {
+            Ok(e) => Some(e),
+            Err(e) => {
+                eprintln!("walpad-shell: selection toolbar disabled: {}", e.0);
+                None
+            }
+        };
+        let keeper = match Keeper::open(&sock) {
+            Ok(k) => Some(k),
+            Err(e) => {
+                eprintln!("walpad-shell: clipboard keeper disabled: {}", e.0);
+                None
+            }
+        };
         let canvas =
             Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
         let clock_24h = read_clock_24h(&opts.root);
@@ -127,6 +159,10 @@ impl Shell {
             pad,
             ime,
             focus: FocusKbd::new(),
+            edit,
+            keeper,
+            bar: BarState::default(),
+            _cursor: cursor,
             core,
             canvas,
             fonts,
@@ -169,6 +205,10 @@ impl Shell {
                 }
                 Cmd::MousePadHide => {
                     self.set_pad(false);
+                    continue;
+                }
+                Cmd::ClipboardShow => {
+                    self.show_clipboard_list();
                     continue;
                 }
                 _ => {}
@@ -252,6 +292,109 @@ impl Shell {
                 eprintln!("walpad-shell: system dock: {}", e.0);
             }
         }
+        if let Some(mut e) = self.edit.take() {
+            match e.set_bottom(kbd_h, &mut self.fonts) {
+                Ok(()) => self.edit = Some(e),
+                Err(err) => eprintln!("walpad-shell: selection toolbar disabled: {}", err.0),
+            }
+        }
+    }
+
+    fn show_clipboard_list(&mut self) {
+        let entries: Vec<String> = self
+            .keeper
+            .as_ref()
+            .map(|k| k.history().iter().cloned().collect())
+            .unwrap_or_default();
+        if let Some(mut e) = self.edit.take() {
+            match e.show_list(&entries, &mut self.fonts) {
+                Ok(()) => self.edit = Some(e),
+                Err(err) => eprintln!("walpad-shell: selection toolbar disabled: {}", err.0),
+            }
+        }
+    }
+
+    /// Keeper and toolbar traffic; then the toolbar's visibility follows the rule.
+    fn step_edit(&mut self) {
+        let now = self.now_ms();
+        let mut history_changed = false;
+        if let Some(mut k) = self.keeper.take() {
+            match k.poll() {
+                Ok(evs) => {
+                    for ev in evs {
+                        match ev {
+                            ClipEvent::PrimaryChanged(true) => self.bar.selection(now),
+                            ClipEvent::PrimaryChanged(false) => self.bar.clear_selection(),
+                            ClipEvent::HistoryChanged => history_changed = true,
+                        }
+                    }
+                    self.keeper = Some(k);
+                }
+                Err(e) => eprintln!("walpad-shell: clipboard keeper disabled: {}", e.0),
+            }
+        }
+        let Some(mut e) = self.edit.take() else {
+            return;
+        };
+        let mut ok = true;
+        match e.poll(&mut self.fonts) {
+            Ok(outs) => {
+                for o in outs {
+                    match o {
+                        EditOut::CopyPrimary => {
+                            if let Some(k) = &mut self.keeper {
+                                if let Err(err) = k.copy_primary() {
+                                    eprintln!("walpad-shell: clipboard: {}", err.0);
+                                }
+                            }
+                        }
+                        EditOut::Paste(i) => {
+                            let pasted = match &mut self.keeper {
+                                Some(k) => k.paste(i).unwrap_or(false),
+                                None => false,
+                            };
+                            if pasted {
+                                if let Err(err) = e.send_paste() {
+                                    eprintln!("walpad-shell: paste: {}", err.0);
+                                }
+                            }
+                        }
+                        EditOut::ClearHistory => {
+                            if let Some(k) = &mut self.keeper {
+                                if let Err(err) = k.clear() {
+                                    eprintln!("walpad-shell: clipboard: {}", err.0);
+                                }
+                            }
+                        }
+                        EditOut::Acted => self.bar.clear_selection(),
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("walpad-shell: selection toolbar disabled: {}", err.0);
+                ok = false;
+            }
+        }
+        if ok {
+            if history_changed {
+                let entries: Vec<String> = self
+                    .keeper
+                    .as_ref()
+                    .map(|k| k.history().iter().cloned().collect())
+                    .unwrap_or_default();
+                ok = e.update_list(&entries, &mut self.fonts).is_ok();
+            }
+            self.bar.text_focus = self.focus.has_focus();
+            self.bar.home = e.home();
+            self.bar.dock_out = self.dock.as_ref().is_some_and(|d| d.expanded());
+            let want = self.bar.visible(now);
+            ok = ok && e.set_wanted(want, &mut self.fonts).is_ok();
+        }
+        if ok {
+            self.edit = Some(e);
+        } else {
+            eprintln!("walpad-shell: selection toolbar disabled");
+        }
     }
 
     fn report_keyboard(&mut self) {
@@ -307,6 +450,12 @@ impl Shell {
                 match p.set_shell_size(w, h, &mut self.fonts) {
                     Ok(()) => self.pad = Some(p),
                     Err(e) => eprintln!("walpad-shell: mouse pad disabled: {}", e.0),
+                }
+            }
+            if let Some(mut e) = self.edit.take() {
+                match e.set_shell_size(w, h, &mut self.fonts) {
+                    Ok(()) => self.edit = Some(e),
+                    Err(err) => eprintln!("walpad-shell: selection toolbar disabled: {}", err.0),
                 }
             }
             self.bottom_changed();
@@ -428,6 +577,7 @@ impl Shell {
         let now = self.now_ms();
         let a = self.focus.tick(now);
         self.apply_focus(a);
+        self.step_edit();
 
         let now = self.now_ms();
         for ev in self.core.tick(Instant::now()) {
@@ -480,6 +630,18 @@ impl Shell {
         if let Some(d) = self.focus.next_deadline() {
             wait = wait.min(d.saturating_sub(self.now_ms()));
         }
+        if let Some(d) = self.bar.deadline() {
+            wait = wait.min(d.saturating_sub(self.now_ms()));
+        }
+        for d in [
+            self.keeper.as_ref().and_then(|k| k.next_deadline()),
+            self.edit.as_ref().and_then(|e| e.next_deadline()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            wait = wait.min(d.saturating_duration_since(Instant::now()).as_millis() as u64);
+        }
         if let Some(d) = self.dock.as_ref().and_then(|d| d.next_deadline()) {
             wait = wait.min(d.as_millis() as u64);
         }
@@ -498,6 +660,8 @@ impl Shell {
         fds.extend(self.kbd.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.pad.as_ref().map(|p| p.wait_fd()));
         fds.extend(self.ime.as_ref().map(|s| s.wait_fd()));
+        fds.extend(self.keeper.as_ref().map(|k| k.wait_fd()));
+        fds.extend(self.edit.as_ref().map(|e| e.wait_fd()));
         walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }

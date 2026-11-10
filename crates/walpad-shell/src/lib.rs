@@ -5,8 +5,10 @@
 pub mod app;
 pub mod bluetooth;
 pub mod chrome;
+pub mod clipboard;
 pub mod config;
 pub mod core_client;
+pub mod cursor;
 pub mod device_screen;
 pub mod dock;
 pub mod gesture;
@@ -19,6 +21,7 @@ pub mod network;
 pub mod overlay;
 pub mod panels;
 pub mod present;
+pub mod seltools;
 pub mod settings_screen;
 pub mod shell;
 pub mod volume_ui;

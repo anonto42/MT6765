@@ -5,6 +5,7 @@
 pub mod art;
 pub mod canvas;
 pub mod components;
+pub mod edit_bar;
 pub mod icons;
 pub mod layout;
 pub mod snapshot;

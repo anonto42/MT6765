@@ -74,12 +74,17 @@
 - Accelerometer: /dev/gsensor, ioctl 0x80048503, 128-byte buffer, NUL-terminated ASCII "x y z" (hex, signed 32-bit).
 - Battery: /sys/class/power_supply/battery/{capacity,status,voltage_now,temp}; capacity reads -1; voltage_now in uV (/1000 when >100000); temp in tenths of C.
 
+## Touch gestures, clipboard (owner request 2026-11-10, no new IPC)
+- The core classifies each touch once, at its start (one X query: top window under the finger, its WM_CLASS). Scroll touches: the pointer is moved to the touch point only when a click, scroll or selection happens; the 150 ms lift delay is unchanged (a tap clicks when the lift is detected).
+- Shell-local (no socket command): the selection toolbar `walpad-seltools` and the clipboard list `walpad-clipboard` (override-redirect, WM_HINTS input=false), the clipboard keeper (XFixes on CLIPBOARD/PRIMARY, shell owns CLIPBOARD after a copy), XFixes HideCursor on the root (shell connection lifetime), keyboard keys Alt and Paste.
+- walpad-session blanks the root cursor with `xsetroot -cursor /usr/share/walpad/blank.xbm` (after openbox started).
+
 ## Config files (keep formats, add keys only)
 - /etc/walpad/devd.json: auto_rotate, rotate_flip, tilt_min 3000, tilt_ratio 1.35, rotate_samples 3, dim_after_s 90, dim_level 20, off_after_s 240, lid_off, low_batt_mv 3550, critical_batt_mv 3350, default_brightness 120.
 - /etc/walpad/keys.json: tap_window_ms 350, long_ms 600, chord_ms 160, repeat_ms 140; per button single/double/triple/quad/long/hold_repeat, both.press. Actions: key:<keysym>, ctl:<cmd>, home, keyboard, screenshot, volume:+-N, powermenu, none. New `launch:<app-id>`; `run:` accepted only while Python is the runtime.
-- /etc/walpad/touch.json: swap, flipx, flipy, xmin, xmax, ymin, ymax.
+- /etc/walpad/touch.json: swap, flipx, flipy, xmin, xmax, ymin, ymax; optional `multitouch` (bool, default true: protocol A frames with two contacts, SYN_MT_REPORT, become a pinch once two consecutive frames agree) and `gestures` {enabled (false = every touch is a mouse touch, the old behaviour), slop_px 12, long_press_ms 500, long_press_px 10, double_tap_ms 450, double_tap_px 40, px_per_click 48, fling_min 0.25 / fling_max 3.0 (px per ms), fling_ms 400, fling_tau_ms 150, max_clicks 8, pinch_px_per_click 40}.
 - New /etc/walpad/runtime.conf: WALPAD_DEVICE|INPUT|SHELL=python|rust, WALPAD_SHADOW=0|1.
-- New /etc/walpad/apps.json: [{id, name, icon, exec[], env{}, single_instance, wm_class}].
+- New /etc/walpad/apps.json: [{id, name, icon, exec[], env{}, single_instance, wm_class, touch}]. `touch` (optional, owner request 2026-11-10): what a finger drag does in windows whose WM_CLASS matches `wm_class`: `"scroll"` (default when absent/unknown: tap = click, drag = wheel buttons 4-7 + fling, hold 500 ms = right click, hold then drag = button-1 drag) or `"mouse"` (finger = mouse: button 1 at touch, moves, release). Shipped: browser, files = scroll; terminal, wifi = mouse. Windows of walpad-shell (WM_CLASS starting `walpad`: shell, dock, keyboard, mouse pad, selection toolbar, clipboard list) and touches on nothing are always mouse.
 
 ## App environment (every launched app)
 DISPLAY=:0 HOME=/root XDG_RUNTIME_DIR=/run/walpad LIBGL_ALWAYS_SOFTWARE=1 MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_WEBRENDER=0 MOZ_ACCELERATED=0 GTK_A11Y=none NO_AT_BRIDGE=1 PULSE_SERVER=unix:/run/pulse/native XMODIFIERS=@im=walpad GTK_IM_MODULE=xim QT_IM_MODULE=xim (PULSE_SERVER: owner request 2026-11-10, sound server; the last three: the shell is the input method)

@@ -239,6 +239,8 @@ pub enum Cmd {
     /// sent to the core (the core has no mouse pad command).
     MousePadShow,
     MousePadHide,
+    /// Show the clipboard history list (seltools.rs). Shell-local like the mouse pad.
+    ClipboardShow,
     ScreenOff,
     Launch(String),
     CloseApp(String),
@@ -323,6 +325,7 @@ impl Cmd {
             // shell-local: `Shell::send` applies these and never puts them on the socket
             Cmd::MousePadShow => ("mouse_pad", json!({"mode": "show"})),
             Cmd::MousePadHide => ("mouse_pad", json!({"mode": "hide"})),
+            Cmd::ClipboardShow => ("clipboard", json!({"mode": "show"})),
             Cmd::ScreenOff => ("screen", json!({"mode": "off"})),
             Cmd::Launch(id) => ("launch", json!({"app": id})),
             Cmd::CloseApp(id) => ("close_app", json!({"app": id})),
@@ -1388,6 +1391,7 @@ impl App {
                     self.model.overlay = None;
                     match tool.action {
                         panels::ToolAction::MousePad => out.cmd(Cmd::MousePadShow),
+                        panels::ToolAction::Clipboard => out.cmd(Cmd::ClipboardShow),
                     }
                 }
             }

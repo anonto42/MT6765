@@ -393,7 +393,8 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
         [
             Target::PanelActive(1),
             Target::PanelClose(1),
-            Target::PanelTool(0)
+            Target::PanelTool(0),
+            Target::PanelTool(1)
         ]
     );
     // tapping the running app focuses it (launch = focus when it runs) and closes the panel
@@ -419,6 +420,13 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
     assert_eq!(
         tap(&mut app, Target::PanelTool(0)).cmds,
         vec![Cmd::MousePadShow]
+    );
+    assert!(app.model.overlay.is_none());
+    // the Clipboard tool shows the history list (also shell-local)
+    tap(&mut app, Target::Nav(1));
+    assert_eq!(
+        tap(&mut app, Target::PanelTool(1)).cmds,
+        vec![Cmd::ClipboardShow]
     );
     assert!(app.model.overlay.is_none());
 }

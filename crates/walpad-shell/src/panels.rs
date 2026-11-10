@@ -416,6 +416,8 @@ pub const BADGE_HIT: i32 = 40;
 pub enum ToolAction {
     /// Open the mouse pad (a touchpad over the apps: mousepad.rs).
     MousePad,
+    /// Show the clipboard history (seltools.rs).
+    Clipboard,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -426,11 +428,18 @@ pub struct Tool {
 }
 
 /// The TOOLS section, in grid order. Add a tool here (and its action in `App::on_tap`).
-pub const TOOLS: [Tool; 1] = [Tool {
-    icon: Icon::Mouse,
-    label: "Mouse pad",
-    action: ToolAction::MousePad,
-}];
+pub const TOOLS: [Tool; 2] = [
+    Tool {
+        icon: Icon::Mouse,
+        label: "Mouse pad",
+        action: ToolAction::MousePad,
+    },
+    Tool {
+        icon: Icon::Clipboard,
+        label: "Clipboard",
+        action: ToolAction::Clipboard,
+    },
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelGeom {

@@ -41,6 +41,10 @@ xsetroot -solid '#0b0e16' 2>/dev/null
 [ -s /usr/lib/gtk-3.0/3.0.0/immodules.cache ] || gtk-query-immodules-3.0 --update-cache >/dev/null 2>&1 || klog "GTK immodules cache not built"
 openbox --config-file /etc/walpad/openbox-rc.xml >> /var/log/openbox.log 2>&1 &
 sleep 1
+# No X cursor on a touch screen (Xvfb draws it into the framebuffer: a second pointer next to the
+# mouse pad's own).  openbox has just set its arrow as the root cursor: blank it.  walpad-shell
+# hides the cursor for good with XFixes (it also wins over cursors apps set themselves).
+xsetroot -cursor /usr/share/walpad/blank.xbm /usr/share/walpad/blank.xbm 2>/dev/null
 # The shell runs in its own restart loop: a shell crash does not restart X or close apps.  3 exits
 # within 10 s in a row stop the loop and call walpad-rescue.
 walpad-supervise shell --require Xvfb --on-fallback "walpad-rescue walpad-shell exited 3 times within 10 s" -- walpad-shell >> /var/log/walpad-shell.log 2>&1

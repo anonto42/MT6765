@@ -1412,6 +1412,10 @@ pub enum SysKey {
     Tab,
     /// Sticky one-shot Control.
     Ctrl,
+    /// Sticky one-shot Alt.
+    Alt,
+    /// The paste shortcut (Ctrl+V; Ctrl+Shift+V in a terminal).
+    Paste,
     /// Sticky one-shot Shift (letters are drawn upper case while it is on).
     Shift,
     /// Letters <-> symbols.
@@ -1439,6 +1443,7 @@ pub struct SysKbdState {
     pub symbols: bool,
     pub shift: bool,
     pub ctrl: bool,
+    pub alt: bool,
 }
 
 /// Rows are measured in half key units; every row is 24 half units (12 keys) wide, so the arrow
@@ -1469,7 +1474,9 @@ fn sys_rows(symbols: bool) -> [Vec<(SysKey, i32)>; 5] {
     let r4 = vec![
         (Layer, 3),
         (Hide, 3),
-        (Space, 12),
+        (Alt, 3),
+        (Space, 6),
+        (Paste, 3),
         (Left, 2),
         (Down, 2),
         (Right, 2),
@@ -1536,6 +1543,7 @@ impl Painter<'_> {
             let latched = match k.key {
                 SysKey::Shift => st.shift,
                 SysKey::Ctrl => st.ctrl,
+                SysKey::Alt => st.alt,
                 _ => false,
             };
             let down = pressed == Some(i);
@@ -1548,6 +1556,8 @@ impl Painter<'_> {
                 SysKey::Esc => Some(label("Esc")),
                 SysKey::Tab => Some(label("Tab")),
                 SysKey::Ctrl => Some(label("Ctrl")),
+                SysKey::Alt => Some(label("Alt")),
+                SysKey::Paste => Some(label("Paste")),
                 SysKey::Layer => Some(label(if st.symbols { "ABC" } else { "?123" })),
                 SysKey::Enter => Some(label("Enter")),
                 SysKey::Space => Some(("space", Face::Regular, SIZE_SECONDARY)),

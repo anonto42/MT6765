@@ -14,11 +14,11 @@ walpad-x = { path = "../walpad-x" }
 walpad-proto = { path = "../walpad-proto" }
 serde_json = "1"
 jiff = "0.2"
-x11rb = { version = "0.13", default-features = false, features = ["xtest", "shape"] }
+x11rb = { version = "0.13", default-features = false, features = ["xtest", "shape", "xfixes"] }
 # XIM server (focus of text inputs drives the system keyboard); pure Rust, the x11rb 0.13 line
 xim = { version = "=0.5.0", default-features = false, features = ["x11rb-server"] }
 
 [dev-dependencies]
 walpad-core = { path = "../walpad-core" }
-x11rb = { version = "0.13", default-features = false, features = ["xtest", "shape"] }
+x11rb = { version = "0.13", default-features = false, features = ["xtest", "shape", "xfixes"] }
 xim = { version = "=0.5.0", default-features = false, features = ["x11rb-server", "x11rb-client"] }

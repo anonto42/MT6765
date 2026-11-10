@@ -40,10 +40,12 @@ pub enum Icon {
     /// Speaker with sound waves / crossed out (volume, owner request 2026-11-10).
     Volume,
     VolumeOff,
+    /// Clipboard (Apps panel > Tools).
+    Clipboard,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 32] = [
+    pub const ALL: [Icon; 33] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -76,6 +78,7 @@ impl Icon {
         Icon::Sim,
         Icon::Volume,
         Icon::VolumeOff,
+        Icon::Clipboard,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -94,6 +97,7 @@ impl Icon {
             "mouse" => Icon::Mouse,
             "sim" => Icon::Sim,
             "volume" => Icon::Volume,
+            "clipboard" => Icon::Clipboard,
             _ => return None,
         })
     }
@@ -358,6 +362,13 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((16.0, 9.0), (22.0, 15.0));
             p.line((22.0, 9.0), (16.0, 15.0));
         }
+        Icon::Clipboard => {
+            // board with the clip on top and two text lines
+            p.rrect(5.0, 4.5, 14.0, 17.0, 2.0);
+            p.rrect(9.0, 2.5, 6.0, 4.0, 1.5);
+            p.line((8.5, 12.0), (15.5, 12.0));
+            p.line((8.5, 16.0), (13.0, 16.0));
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -467,7 +478,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 32);
+        assert_eq!(Icon::ALL.len(), 33);
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }

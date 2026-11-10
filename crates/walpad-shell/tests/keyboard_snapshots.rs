@@ -57,12 +57,13 @@ fn keyboard_states() {
         Some(SysKey::Char('|')),
     );
     shot(
-        "keyboard_landscape_shift_ctrl",
+        "keyboard_landscape_shift_ctrl_alt",
         (1280, 800),
         SysKbdState {
             symbols: false,
             shift: true,
             ctrl: true,
+            alt: true,
         },
         Some(SysKey::Up),
     );

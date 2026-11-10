@@ -633,6 +633,8 @@ mod tests {
         }
     }
     fn xvfb(n: u32) -> Option<Xvfb> {
+        // a killed Xvfb leaves its socket behind: do not mistake it for the new server
+        let _ = std::fs::remove_file(format!("/tmp/.X11-unix/X{n}"));
         let child = Command::new("Xvfb")
             .args([
                 &format!(":{n}"),

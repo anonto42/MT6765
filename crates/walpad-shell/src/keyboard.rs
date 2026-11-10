@@ -34,6 +34,7 @@ pub const HEIGHT_PCT: i32 = 30;
 // keysyms
 pub const XK_SHIFT_L: u32 = 0xffe1;
 pub const XK_CONTROL_L: u32 = 0xffe3;
+pub const XK_ALT_L: u32 = 0xffe9;
 pub const XK_RETURN: u32 = 0xff0d;
 pub const XK_TAB: u32 = 0xff09;
 pub const XK_ESCAPE: u32 = 0xff1b;
@@ -85,6 +86,19 @@ pub struct Stroke {
     pub keysym: u32,
     pub ctrl: bool,
     pub shift: bool,
+    pub alt: bool,
+}
+
+impl Stroke {
+    /// Ctrl + a character key (the edit shortcuts).
+    pub const fn ctrl(keysym: u32) -> Stroke {
+        Stroke {
+            keysym,
+            ctrl: true,
+            shift: false,
+            alt: false,
+        }
+    }
 }
 
 /// What a tap on a key does.
@@ -93,6 +107,8 @@ pub enum Tap {
     /// Only the keyboard's own state changed (modifier latch, layer): redraw.
     State,
     Send(Stroke),
+    /// The paste shortcut: the keyboard picks Ctrl+V or (terminal in front) Ctrl+Shift+V.
+    Paste,
     Hide,
 }
 
@@ -108,6 +124,16 @@ pub fn tap(st: &mut SysKbdState, key: SysKey) -> Tap {
         SysKey::Ctrl => {
             st.ctrl = !st.ctrl;
             return Tap::State;
+        }
+        SysKey::Alt => {
+            st.alt = !st.alt;
+            return Tap::State;
+        }
+        SysKey::Paste => {
+            st.ctrl = false;
+            st.alt = false;
+            st.shift = false;
+            return Tap::Paste;
         }
         SysKey::Layer => {
             st.symbols = !st.symbols;
@@ -134,9 +160,11 @@ pub fn tap(st: &mut SysKbdState, key: SysKey) -> Tap {
         ctrl: st.ctrl,
         // Shift+Tab, Shift+arrows; letters already carry it in their keysym
         shift: st.shift && named_key,
+        alt: st.alt,
     };
     st.shift = false;
     st.ctrl = false;
+    st.alt = false;
     Tap::Send(s)
 }
 
@@ -169,12 +197,44 @@ impl KeyMap {
         if s.ctrl {
             codes.push(self.lookup(XK_CONTROL_L)?.0);
         }
+        if s.alt {
+            codes.push(self.lookup(XK_ALT_L)?.0);
+        }
         if s.shift || shifted {
             codes.push(self.lookup(XK_SHIFT_L)?.0);
         }
         codes.push(kc);
         Some(codes)
     }
+}
+
+/// The server's current keyboard mapping.
+pub fn load_keymap(xc: &XConn) -> Result<KeyMap, XError> {
+    let setup = xc.conn.setup();
+    let (min, max) = (setup.min_keycode, setup.max_keycode);
+    let km = xc.conn.get_keyboard_mapping(min, max - min + 1)?.reply()?;
+    Ok(KeyMap {
+        min_keycode: min,
+        per: km.keysyms_per_keycode as usize,
+        syms: km.keysyms,
+    })
+}
+
+/// Inject one stroke into the focused window through XTEST (modifiers pressed first, released
+/// in reverse).
+pub fn inject(xc: &XConn, keymap: &KeyMap, s: Stroke) -> Result<(), XError> {
+    let codes = keymap
+        .plan(s)
+        .ok_or_else(|| XError(format!("no keycode for keysym {:#x}", s.keysym)))?;
+    let c = &xc.conn;
+    for kc in &codes {
+        c.xtest_fake_input(xproto::KEY_PRESS_EVENT, *kc, 0, xc.root, 0, 0, 0)?;
+    }
+    for kc in codes.iter().rev() {
+        c.xtest_fake_input(xproto::KEY_RELEASE_EVENT, *kc, 0, xc.root, 0, 0, 0)?;
+    }
+    c.flush()?;
+    Ok(())
 }
 
 pub(crate) struct Atoms {
@@ -439,14 +499,7 @@ pub struct SysKeyboard {
 impl SysKeyboard {
     pub fn open(socket: &Path, shell: XWindow, shell_size: (i32, i32)) -> Result<Self, XError> {
         let xc = walpad_x::connect(socket)?;
-        let setup = xc.conn.setup();
-        let (min, max) = (setup.min_keycode, setup.max_keycode);
-        let km = xc.conn.get_keyboard_mapping(min, max - min + 1)?.reply()?;
-        let keymap = KeyMap {
-            min_keycode: min,
-            per: km.keysyms_per_keycode as usize,
-            syms: km.keysyms,
-        };
+        let keymap = load_keymap(&xc)?;
         let area = visible_area(shell_size.0, shell_size.1);
         let r = keyboard_rect(area);
         let bw = create_bottom_windows(
@@ -552,20 +605,7 @@ impl SysKeyboard {
 
     /// Inject one stroke into the focused window through XTEST.
     pub fn send(&self, s: Stroke) -> Result<(), XError> {
-        let codes = self
-            .keymap
-            .plan(s)
-            .ok_or_else(|| XError(format!("no keycode for keysym {:#x}", s.keysym)))?;
-        let c = &self.xc.conn;
-        let root = self.xc.root;
-        for kc in &codes {
-            c.xtest_fake_input(xproto::KEY_PRESS_EVENT, *kc, 0, root, 0, 0, 0)?;
-        }
-        for kc in codes.iter().rev() {
-            c.xtest_fake_input(xproto::KEY_RELEASE_EVENT, *kc, 0, root, 0, 0, 0)?;
-        }
-        c.flush()?;
-        Ok(())
+        inject(&self.xc, &self.keymap, s)
     }
 
     /// Handle everything the server has sent (non-blocking). Returns true when the keyboard hid
@@ -608,6 +648,16 @@ impl SysKeyboard {
                             hid = true;
                         }
                         Some(Tap::Send(s)) => {
+                            if let Err(e) = self.send(s) {
+                                eprintln!("walpad-shell: keyboard: {}", e.0);
+                            }
+                            self.redraw(fonts)?;
+                        }
+                        Some(Tap::Paste) => {
+                            let class =
+                                crate::seltools::active_class(&self.xc, self.bw.atoms.active);
+                            let s =
+                                crate::seltools::paste_stroke(crate::seltools::is_terminal(&class));
                             if let Err(e) = self.send(s) {
                                 eprintln!("walpad-shell: keyboard: {}", e.0);
                             }
@@ -675,6 +725,8 @@ mod tests {
                     SysKey::Esc,
                     SysKey::Tab,
                     SysKey::Ctrl,
+                    SysKey::Alt,
+                    SysKey::Paste,
                     SysKey::Layer,
                     SysKey::Space,
                     SysKey::Backspace,
@@ -723,6 +775,7 @@ mod tests {
             keysym,
             ctrl,
             shift,
+            alt: false,
         })
     }
 
@@ -783,6 +836,24 @@ mod tests {
         tap(&mut st, SysKey::Ctrl);
         tap(&mut st, SysKey::Shift);
         assert_eq!(tap(&mut st, SysKey::Left), stroke(XK_LEFT, true, true));
+        // Alt is one-shot too: Alt+Tab
+        assert_eq!(tap(&mut st, SysKey::Alt), Tap::State);
+        assert!(st.alt);
+        assert_eq!(
+            tap(&mut st, SysKey::Tab),
+            Tap::Send(Stroke {
+                keysym: XK_TAB,
+                ctrl: false,
+                shift: false,
+                alt: true
+            })
+        );
+        assert!(!st.alt);
+        // the paste key clears every latched modifier (the stroke is chosen by the keyboard)
+        tap(&mut st, SysKey::Ctrl);
+        tap(&mut st, SysKey::Alt);
+        assert_eq!(tap(&mut st, SysKey::Paste), Tap::Paste);
+        assert_eq!(st, SysKbdState::default());
         // layer toggle clears shift, hide resets everything
         tap(&mut st, SysKey::Shift);
         assert_eq!(tap(&mut st, SysKey::Layer), Tap::State);
@@ -811,6 +882,8 @@ mod tests {
                 0,
                 XK_LEFT,
                 0,
+                XK_ALT_L,
+                0,
             ],
         }
     }
@@ -822,6 +895,7 @@ mod tests {
             keysym,
             ctrl,
             shift,
+            alt: false,
         };
         assert_eq!(m.lookup('a' as u32), Some((10, false)));
         assert_eq!(m.lookup('A' as u32), Some((10, true)));
@@ -832,5 +906,13 @@ mod tests {
         assert_eq!(m.plan(s(XK_TAB, false, true)), Some(vec![13, 12]));
         assert_eq!(m.plan(s(XK_LEFT, true, true)), Some(vec![14, 13, 15]));
         assert_eq!(m.plan(s('z' as u32, false, false)), None, "not in the map");
+        let alt_tab = Stroke {
+            keysym: XK_TAB,
+            ctrl: false,
+            shift: false,
+            alt: true,
+        };
+        assert_eq!(m.plan(alt_tab), Some(vec![16, 12]));
+        assert_eq!(m.plan(Stroke::ctrl('a' as u32)), Some(vec![14, 10]));
     }
 }
