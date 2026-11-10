@@ -1,7 +1,6 @@
 [
-  {"id": "browser",  "name": "Browser",  "icon": "globe",    "exec": ["firefox-esr", "--new-instance", "about:blank"], "env": {}, "single_instance": true,  "wm_class": "firefox-esr"},
-  {"id": "terminal", "name": "Terminal", "icon": "terminal", "exec": ["st", "-f", "DejaVu Sans Mono:size=14"],          "env": {}, "single_instance": false, "wm_class": "st"},
-  {"id": "wifi",     "name": "Wi-Fi",    "icon": "wifi",     "exec": ["walpad-wifi-ui.py"],                              "env": {}, "single_instance": true,  "wm_class": "walpad-wifi"},
-  {"id": "files",    "name": "Files",    "icon": "folder",   "exec": ["pcmanfm", "/"]       ,                                "env": {}, "single_instance": true,  "wm_class": "pcmanfm"},
-  {"id": "kali",     "name": "Kali",     "icon": "terminal", "exec": ["st", "-f", "DejaVu Sans Mono:size=13", "-e", "/usr/local/sbin/walpad-kali", "shell"], "env": {}, "single_instance": false, "wm_class": "st"}
+  {"id": "browser", "name": "Browser", "icon": "globe", "exec": ["firefox-esr", "--new-instance", "about:blank"], "env": {}, "single_instance": true, "wm_class": "firefox-esr", "touch": "scroll"},
+  {"id": "terminal", "name": "Terminal", "icon": "terminal", "exec": ["st", "-f", "DejaVu Sans Mono:size=14"], "env": {}, "single_instance": false, "wm_class": "st", "touch": "mouse"},
+  {"id": "files", "name": "Files", "icon": "folder", "exec": ["pcmanfm", "/"], "env": {}, "single_instance": true, "wm_class": "pcmanfm", "touch": "scroll"},
+  {"id": "kali", "name": "Kali", "icon": "terminal", "exec": ["st", "-f", "DejaVu Sans Mono:size=13", "-e", "/usr/local/sbin/walpad-kali", "shell"], "env": {}, "single_instance": false, "wm_class": "st", "touch": "mouse"}
 ]

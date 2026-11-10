@@ -7,6 +7,8 @@ pub const EV_KEY: u16 = 1;
 pub const EV_ABS: u16 = 3;
 pub const EV_SW: u16 = 5;
 pub const SYN_REPORT: u16 = 0;
+/// Multitouch protocol A: ends one contact inside a frame.
+pub const SYN_MT_REPORT: u16 = 2;
 pub const BTN_TOUCH: u16 = 0x14a;
 pub const KEY_VOLUMEDOWN: u16 = 114;
 pub const KEY_VOLUMEUP: u16 = 115;

@@ -1,8 +1,8 @@
 //! The decision engine shared by shadow mode (effects are printed) and live mode (effects are
 //! executed). Pure: time and sensor readings are passed in; nothing here touches the system.
 use crate::logic::{
-    battery, key_gestures as kg, power_key as pk, rotation, screen_timeout as st, touch_map as tm,
-    Ms,
+    battery, gesture, key_gestures as kg, power_key as pk, rotation, screen_timeout as st,
+    touch_map as tm, Ms,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -33,7 +33,15 @@ pub enum Effect {
     LowBattery(bool),
     CriticalPoweroff(u32),
     // input subsystem
+    /// Pointer motion and button 1 (what the touch bridge always did).
     Pointer(tm::Act),
+    /// Another X button (the right click of a long press).
+    Button(u8, bool),
+    /// One wheel click (scroll gestures), Control held for a pinch.
+    Wheel {
+        button: u8,
+        ctrl: bool,
+    },
     Action(kg::Action),
     /// A volume key while the shell's power menu is open: goes to the shell, not to the gestures.
     ShellKey(ShellInput),
@@ -43,7 +51,11 @@ impl Effect {
     pub fn is_device(&self) -> bool {
         !matches!(
             self,
-            Effect::Pointer(_) | Effect::Action(_) | Effect::ShellKey(_)
+            Effect::Pointer(_)
+                | Effect::Button(..)
+                | Effect::Wheel { .. }
+                | Effect::Action(_)
+                | Effect::ShellKey(_)
         )
     }
 }
@@ -65,6 +77,19 @@ impl fmt::Display for Effect {
             Effect::Pointer(tm::Act::Move(x, y)) => write!(f, "WOULD pointer move {x} {y}"),
             Effect::Pointer(tm::Act::Press) => write!(f, "WOULD pointer press"),
             Effect::Pointer(tm::Act::Release) => write!(f, "WOULD pointer release"),
+            Effect::Pointer(tm::Act::Pair(..)) => Ok(()),
+            Effect::Button(n, d) => write!(
+                f,
+                "WOULD pointer button {n} {}",
+                if *d { "press" } else { "release" }
+            ),
+            Effect::Wheel { button, ctrl } => {
+                write!(
+                    f,
+                    "WOULD pointer wheel {button}{}",
+                    if *ctrl { " ctrl" } else { "" }
+                )
+            }
             Effect::Action(a) => match a {
                 kg::Action::None => Ok(()),
                 kg::Action::Key(k) => write!(f, "WOULD action key:{k}"),
@@ -85,6 +110,8 @@ impl fmt::Display for Effect {
 const GSENSOR_EVERY: Ms = 400;
 const BATTERY_EVERY: Ms = 10_000;
 const GESTURE_TICK: Ms = 40;
+/// A finger is down or a fling runs: tick faster (long press, fling smoothness).
+const TOUCH_TICK: Ms = 16;
 
 pub struct Brain {
     pub screen: st::Screen,
@@ -92,6 +119,7 @@ pub struct Brain {
     power: pk::PowerKey,
     gestures: kg::Gestures,
     touch: tm::TouchMap,
+    gest: gesture::Gestures,
     pub guard: battery::Guard,
     pub batt_cfg: battery::Cfg,
     last_g: Option<Ms>,
@@ -111,12 +139,14 @@ fn cfg<T: DeserializeOwned + Default>(json: &str) -> T {
 impl Brain {
     /// `devd`, `keys`, `touch` are the contents of the three config files (empty = defaults).
     pub fn new(devd: &str, keys: &str, touch: &str, backlight: Option<u32>, now: Ms) -> Self {
+        let tcfg: tm::Cfg = cfg(touch);
         Brain {
+            gest: gesture::Gestures::new(tcfg.gestures.clone()),
             screen: st::Screen::new(cfg(devd), backlight, now),
             rotation: rotation::Rotation::new(cfg(devd)),
             power: pk::PowerKey::default(),
             gestures: kg::Gestures::new(cfg(keys)),
-            touch: tm::TouchMap::new(cfg(touch)),
+            touch: tm::TouchMap::new(tcfg),
             guard: battery::Guard::default(),
             batt_cfg: cfg(devd),
             last_g: None,
@@ -132,7 +162,9 @@ impl Brain {
         self.rotation.set_cfg(cfg(devd));
         self.batt_cfg = cfg(devd);
         self.gestures.set_cfg(cfg(keys));
-        self.touch = tm::TouchMap::new(cfg(touch));
+        let tcfg: tm::Cfg = cfg(touch);
+        self.gest = gesture::Gestures::new(tcfg.gestures.clone());
+        self.touch = tm::TouchMap::new(tcfg);
     }
 
     pub fn orientation(&self) -> u16 {
@@ -161,8 +193,27 @@ impl Brain {
                 .map(Effect::Action),
         );
     }
-    fn touch_effects(a: Vec<tm::Act>, out: &mut Vec<Effect>) {
-        out.extend(a.into_iter().map(Effect::Pointer));
+    /// Finger actions -> gestures -> pointer effects. `probe` classifies a touch at its start.
+    fn touch_effects(
+        &mut self,
+        a: Vec<tm::Act>,
+        now: Ms,
+        probe: &mut dyn FnMut(i32, i32) -> gesture::Mode,
+        out: &mut Vec<Effect>,
+    ) {
+        for act in a {
+            let g = self.gest.on_act(act, now, probe);
+            Self::gesture_effects(g, out);
+        }
+    }
+    fn gesture_effects(g: Vec<gesture::Out>, out: &mut Vec<Effect>) {
+        out.extend(g.into_iter().map(|o| match o {
+            gesture::Out::Move(x, y) => Effect::Pointer(tm::Act::Move(x, y)),
+            gesture::Out::Button(1, true) => Effect::Pointer(tm::Act::Press),
+            gesture::Out::Button(1, false) => Effect::Pointer(tm::Act::Release),
+            gesture::Out::Button(n, d) => Effect::Button(n, d),
+            gesture::Out::Wheel { button, ctrl } => Effect::Wheel { button, ctrl },
+        }));
     }
     fn power_effects(&mut self, a: Vec<pk::Act>, now: Ms, out: &mut Vec<Effect>) {
         for x in a {
@@ -181,6 +232,19 @@ impl Brain {
 
     /// Route one input event exactly as walpad-devd/-keys/-touchd do.
     pub fn on_event(&mut self, role: Role, ev: &InputEvent, now: Ms) -> Vec<Effect> {
+        self.on_event_probe(role, ev, now, &mut |_, _| gesture::Mode::Mouse)
+    }
+
+    /// `on_event` with the touch classifier: `probe(x, y)` says whether the touch that starts at
+    /// this logical point is a mouse touch (shell windows, apps with `touch: mouse`) or a
+    /// touchscreen touch (scroll, long press).
+    pub fn on_event_probe(
+        &mut self,
+        role: Role,
+        ev: &InputEvent,
+        now: Ms,
+        probe: &mut dyn FnMut(i32, i32) -> gesture::Mode,
+    ) -> Vec<Effect> {
         let mut out = Vec::new();
         match role {
             Role::Hall if ev.kind == EV_SW => {
@@ -222,12 +286,14 @@ impl Brain {
                     }
                 } else {
                     let o = self.rotation.orientation();
-                    Self::touch_effects(self.touch.on_event(ev, now, o), &mut out);
+                    let a = self.touch.on_event(ev, now, o);
+                    self.touch_effects(a, now, probe, &mut out);
                 }
             }
             Role::Touch => {
                 let o = self.rotation.orientation();
-                Self::touch_effects(self.touch.on_event(ev, now, o), &mut out);
+                let a = self.touch.on_event(ev, now, o);
+                self.touch_effects(a, now, probe, &mut out);
             }
             _ => {}
         }
@@ -246,7 +312,11 @@ impl Brain {
             .power
             .tick(now, self.menu_open, self.screen.state() == ScreenState::On);
         self.power_effects(a, now, &mut out);
-        Self::touch_effects(self.touch.tick(now), &mut out);
+        // the lift first (a tap clicks), then the long-press and fling timers
+        let lift = self.touch.tick(now);
+        self.touch_effects(lift, now, &mut |_, _| gesture::Mode::Mouse, &mut out);
+        let g = self.gest.tick(now);
+        Self::gesture_effects(g, &mut out);
         if now.saturating_sub(self.last_gest) >= GESTURE_TICK {
             self.last_gest = now;
             Self::actions(self.gestures.tick(now), &mut out);
@@ -282,7 +352,12 @@ impl Brain {
 
     /// How long the caller may sleep before the next tick is needed (power key down = faster).
     pub fn poll_interval_ms(&self) -> Ms {
-        self.power.poll_interval_ms().min(GESTURE_TICK)
+        let t = self.power.poll_interval_ms().min(GESTURE_TICK);
+        if self.gest.active() {
+            t.min(TOUCH_TICK)
+        } else {
+            t
+        }
     }
 }
 

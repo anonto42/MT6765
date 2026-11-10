@@ -2,6 +2,7 @@
 //! Modules take monotonic milliseconds (`Ms`) as a parameter and return actions.
 
 pub mod battery;
+pub mod gesture;
 pub mod key_gestures;
 pub mod power_key;
 pub mod rotation;

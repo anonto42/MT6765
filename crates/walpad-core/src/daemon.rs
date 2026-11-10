@@ -835,6 +835,13 @@ impl Daemon {
                 Effect::Pointer(tm::Act::Release) => {
                     self.x_try(|b| b.button(false));
                 }
+                Effect::Pointer(tm::Act::Pair(..)) => {}
+                Effect::Button(n, d) => {
+                    self.x_try(|b| b.button_n(n, d));
+                }
+                Effect::Wheel { button, ctrl } => {
+                    self.x_try(|b| b.wheel(button, ctrl));
+                }
                 Effect::Action(a) => self.run_action(a),
             }
         }
@@ -1209,8 +1216,18 @@ impl Daemon {
             self.wake_display();
         }
         let mut fx = Vec::new();
-        for (role, ev) in evs {
-            fx.extend(self.brain.on_event(role, &ev, now));
+        {
+            // one X query per touch: shell windows and `touch: mouse` apps keep the mouse
+            // behaviour, everything else gets the touchscreen gestures
+            let xb = self.xb.as_ref();
+            let apps = &self.apps;
+            let mut probe = |x: i32, y: i32| match xb.and_then(|b| b.touch_hit(x, y).ok()) {
+                Some(crate::xbridge::TouchHit::App(class)) => apps.touch_mode(&class),
+                _ => crate::logic::gesture::Mode::Mouse,
+            };
+            for (role, ev) in evs {
+                fx.extend(self.brain.on_event_probe(role, &ev, now, &mut probe));
+            }
         }
         let root = self.root.clone();
         let mut g = || read_gsensor(&root);

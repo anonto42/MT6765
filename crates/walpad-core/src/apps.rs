@@ -56,6 +56,10 @@ pub struct AppDef {
     /// Extra exit codes that count as a normal exit (e.g. a terminal returns its shell's status).
     #[serde(default)]
     pub exit_ok: Vec<i32>,
+    /// What a finger drag does in this app's windows: "scroll" (default: wheel events, long
+    /// press = right click) or "mouse" (a drag stays a mouse drag). Anything else = default.
+    #[serde(default)]
+    pub touch: Option<String>,
 }
 
 /// How a child we started ended (M6.3: only `Crashed` raises a notice).
@@ -122,6 +126,20 @@ impl Apps {
             ext: HashSet::new(),
             grace: None,
         }
+    }
+
+    /// Touch behaviour for a window with this WM_CLASS: the matching app's `touch` field, else
+    /// the default (scroll).
+    pub fn touch_mode(&self, class: &[String]) -> crate::logic::gesture::Mode {
+        self.defs
+            .iter()
+            .filter(|d| !d.wm_class.is_empty() && crate::xbridge::class_matches(class, &d.wm_class))
+            .find_map(|d| {
+                d.touch
+                    .as_deref()
+                    .and_then(crate::logic::gesture::Mode::parse)
+            })
+            .unwrap_or_default()
     }
 
     pub fn def(&self, id: &str) -> Option<&AppDef> {
@@ -324,6 +342,28 @@ mod tests {
         {"id":"","exec":["x"]},
         {"id":"noexec","exec":[]}
     ]"#;
+
+    #[test]
+    fn touch_mode_per_app_with_scroll_as_the_default() {
+        use crate::logic::gesture::Mode;
+        let r = root_with(
+            r#"[
+              {"id":"term","exec":["st"],"wm_class":"st","touch":"mouse"},
+              {"id":"web","exec":["firefox-esr"],"wm_class":"firefox-esr","touch":"scroll"},
+              {"id":"odd","exec":["x"],"wm_class":"oddapp","touch":"bogus"},
+              {"id":"none","exec":["y"],"wm_class":"plain"}
+            ]"#,
+            &[],
+        );
+        let a = Apps::load(&r);
+        let c = |i: &str, k: &str| vec![i.to_string(), k.to_string()];
+        assert_eq!(a.touch_mode(&c("st", "St")), Mode::Mouse);
+        assert_eq!(a.touch_mode(&c("Navigator", "Firefox-esr")), Mode::Scroll);
+        assert_eq!(a.touch_mode(&c("oddapp", "Oddapp")), Mode::Scroll);
+        assert_eq!(a.touch_mode(&c("plain", "Plain")), Mode::Scroll);
+        assert_eq!(a.touch_mode(&c("stranger", "Stranger")), Mode::Scroll);
+        assert_eq!(a.touch_mode(&[]), Mode::Scroll);
+    }
 
     #[test]
     fn loads_filters_and_reports_installed_only() {

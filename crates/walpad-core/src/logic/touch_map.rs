@@ -3,7 +3,7 @@ use super::Ms;
 use serde::Deserialize;
 use walpad_hw::evdev::{
     InputEvent, ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_X, ABS_Y, BTN_TOUCH, EV_ABS, EV_KEY,
-    EV_SYN, SYN_REPORT,
+    EV_SYN, SYN_MT_REPORT, SYN_REPORT,
 };
 
 pub const W: i32 = 800;
@@ -22,6 +22,11 @@ pub struct Cfg {
     pub xmax: i32,
     pub ymin: i32,
     pub ymax: i32,
+    /// Report a second finger (protocol A: two contacts in one frame) as `Act::Pair` once two
+    /// consecutive frames agree. Off = the legacy single pointer.
+    pub multitouch: bool,
+    /// Gesture recogniser settings (touch.json key `gestures`).
+    pub gestures: super::gesture::Cfg,
 }
 impl Default for Cfg {
     fn default() -> Self {
@@ -33,6 +38,8 @@ impl Default for Cfg {
             xmax: W,
             ymin: 0,
             ymax: H,
+            multitouch: true,
+            gestures: super::gesture::Cfg::default(),
         }
     }
 }
@@ -43,6 +50,8 @@ pub enum Act {
     Move(i32, i32),
     Press,
     Release,
+    /// Two fingers, confirmed by two consecutive frames (logical positions). Replaces `Move`.
+    Pair((i32, i32), (i32, i32)),
 }
 
 fn mapv(v: i32, lo: i32, hi: i32, size: i32, flip: bool) -> i32 {
@@ -73,6 +82,13 @@ pub struct TouchMap {
     moved: bool,
     down: bool,
     last: Ms,
+    /// Coordinates of the contact being reported (protocol A), and the finished contacts of the
+    /// frame so far.
+    cx: Option<i32>,
+    cy: Option<i32>,
+    contacts: Vec<(i32, i32)>,
+    /// Consecutive frames with two or more contacts.
+    multi_frames: u8,
 }
 
 impl TouchMap {
@@ -84,6 +100,10 @@ impl TouchMap {
             moved: false,
             down: false,
             last: 0,
+            cx: None,
+            cy: None,
+            contacts: Vec::new(),
+            multi_frames: 0,
         }
     }
     pub fn is_down(&self) -> bool {
@@ -98,30 +118,65 @@ impl TouchMap {
         )
     }
 
+    fn logical(&self, p: (i32, i32), orientation: u16) -> (i32, i32) {
+        let (ox, oy) = self.calibrate(p.0, p.1);
+        to_logical(ox, oy, orientation)
+    }
+
     /// Rules 1-3. `orientation` is the cached value from /run/walpad/orientation.
     pub fn on_event(&mut self, ev: &InputEvent, now: Ms, orientation: u16) -> Vec<Act> {
         let mut out = Vec::new();
         match (ev.kind, ev.code) {
             (EV_ABS, ABS_MT_POSITION_X) | (EV_ABS, ABS_X) => {
                 self.x = Some(ev.value);
+                self.cx = Some(ev.value);
                 self.moved = true;
                 self.last = now;
             }
             (EV_ABS, ABS_MT_POSITION_Y) | (EV_ABS, ABS_Y) => {
                 self.y = Some(ev.value);
+                self.cy = Some(ev.value);
                 self.moved = true;
                 self.last = now;
+            }
+            // protocol A: one contact is complete
+            (EV_SYN, SYN_MT_REPORT) => {
+                if let (Some(x), Some(y)) = (self.cx.take(), self.cy.take()) {
+                    if self.contacts.len() < 4 {
+                        self.contacts.push((x, y));
+                    }
+                }
             }
             (EV_KEY, BTN_TOUCH) if ev.value == 1 => {
                 self.last = now;
                 self.moved = true;
             }
             (EV_SYN, SYN_REPORT) if self.moved => {
-                if let (Some(x), Some(y)) = (self.x, self.y) {
+                let contacts = std::mem::take(&mut self.contacts);
+                self.cx = None;
+                self.cy = None;
+                // the first contact of the frame is the pointer; without contact markers (ABS_X
+                // devices, no SYN_MT_REPORT) the last reported coordinates are the only one
+                let pts: Vec<(i32, i32)> = if !contacts.is_empty() {
+                    contacts
+                } else if let (Some(x), Some(y)) = (self.x, self.y) {
+                    vec![(x, y)]
+                } else {
+                    Vec::new()
+                };
+                if let Some(&(x, y)) = pts.first() {
                     self.moved = false;
-                    let (ox, oy) = self.calibrate(x, y);
-                    let (lx, ly) = to_logical(ox, oy, orientation);
-                    out.push(Act::Move(lx, ly));
+                    let (lx, ly) = self.logical((x, y), orientation);
+                    if self.cfg.multitouch && pts.len() >= 2 {
+                        self.multi_frames = self.multi_frames.saturating_add(1);
+                    } else {
+                        self.multi_frames = 0;
+                    }
+                    let pair = (self.multi_frames >= 2 && self.down).then(|| pts[1]);
+                    match pair {
+                        Some(b) => out.push(Act::Pair((lx, ly), self.logical(b, orientation))),
+                        None => out.push(Act::Move(lx, ly)),
+                    }
                     if !self.down {
                         out.push(Act::Press);
                         self.down = true;
@@ -139,6 +194,7 @@ impl TouchMap {
             self.down = false;
             self.x = None;
             self.y = None;
+            self.multi_frames = 0;
             return vec![Act::Release];
         }
         Vec::new()
@@ -278,6 +334,80 @@ mod tests {
         touch(&mut t, 400, 640, 1000, 0);
         touch(&mut t, 401, 640, 1100, 0);
         assert!(t.tick(1200).is_empty());
+    }
+
+    fn two(t: &mut TouchMap, a: (i32, i32), b: (i32, i32), now: Ms) -> Vec<Act> {
+        let mut out = Vec::new();
+        for e in [
+            ev(EV_ABS, ABS_MT_POSITION_X, a.0),
+            ev(EV_ABS, ABS_MT_POSITION_Y, a.1),
+            ev(EV_SYN, SYN_MT_REPORT, 0),
+            ev(EV_ABS, ABS_MT_POSITION_X, b.0),
+            ev(EV_ABS, ABS_MT_POSITION_Y, b.1),
+            ev(EV_SYN, SYN_MT_REPORT, 0),
+            ev(EV_SYN, SYN_REPORT, 0),
+        ] {
+            out.extend(t.on_event(&e, now, 0));
+        }
+        out
+    }
+
+    #[test]
+    fn protocol_a_single_contact_frames_are_unchanged() {
+        let mut t = TouchMap::new(Cfg::default());
+        let mut out = Vec::new();
+        for e in [
+            ev(EV_ABS, ABS_MT_POSITION_X, 400),
+            ev(EV_ABS, ABS_MT_POSITION_Y, 640),
+            ev(EV_SYN, SYN_MT_REPORT, 0),
+            ev(EV_SYN, SYN_REPORT, 0),
+        ] {
+            out.extend(t.on_event(&e, 10, 0));
+        }
+        assert_eq!(out, vec![Act::Move(399, 639), Act::Press]);
+        // an empty frame (finger up) reports nothing; the lift timer releases
+        let mut out = t.on_event(&ev(EV_SYN, SYN_MT_REPORT, 0), 30, 0);
+        out.extend(t.on_event(&ev(EV_SYN, SYN_REPORT, 0), 30, 0));
+        assert!(out.is_empty());
+        assert_eq!(t.tick(200), vec![Act::Release]);
+    }
+
+    #[test]
+    fn two_contacts_become_a_pair_after_two_agreeing_frames() {
+        let mut t = TouchMap::new(Cfg::default());
+        assert_eq!(
+            two(&mut t, (100, 200), (300, 200), 10),
+            vec![Act::Move(99, 199), Act::Press],
+            "first frame: the first contact is the pointer"
+        );
+        assert_eq!(
+            two(&mut t, (100, 200), (300, 200), 30),
+            vec![Act::Pair((99, 199), (299, 199))],
+            "the second two-finger frame confirms it"
+        );
+        assert_eq!(
+            two(&mut t, (90, 200), (310, 200), 50),
+            vec![Act::Pair((89, 199), (309, 199))]
+        );
+        // back to one finger: the pair count starts over
+        assert_eq!(touch(&mut t, 90, 200, 70, 0), vec![Act::Move(89, 199)]);
+        assert_eq!(
+            two(&mut t, (90, 200), (310, 200), 90),
+            vec![Act::Move(89, 199)],
+            "a single frame in between unconfirms the pair"
+        );
+    }
+
+    #[test]
+    fn multitouch_off_keeps_the_single_pointer() {
+        let mut t = TouchMap::new(Cfg {
+            multitouch: false,
+            ..Cfg::default()
+        });
+        two(&mut t, (100, 200), (300, 200), 10);
+        two(&mut t, (100, 200), (300, 200), 30);
+        let out = two(&mut t, (90, 200), (310, 200), 50);
+        assert!(out.iter().all(|a| matches!(a, Act::Move(..))), "{out:?}");
     }
 
     #[test]
