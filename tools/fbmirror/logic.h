@@ -55,6 +55,9 @@ static long gate_sleep_ms(const fbgate *g) { return g->paused ? GATE_PAUSE_SLEEP
  * instead; the first change brings the normal rate back at once. */
 #define IDLE_AFTER_TICKS 25
 #define IDLE_SLEEP_MS 100
+/* wait for a frame to stop changing before presenting it (no half-painted frames), at most this long */
+#define SETTLE_STEP_MS 12
+#define SETTLE_MAX_MS 72
 static long idle_sleep_ms(long normal, int idle_ticks) { return idle_ticks >= IDLE_AFTER_TICKS && normal < IDLE_SLEEP_MS ? IDLE_SLEEP_MS : normal; }
 
 #endif

@@ -97,6 +97,17 @@ int cmain(long *sp) {
             }
             if (!diff && inited) { idle++; slept = idle_sleep_ms(gate_sleep_ms(&gate), idle); msleep(slept); continue; }
             idle = 0;
+            /* settle: X (Firefox especially) paints a frame in several pieces; showing the first piece makes
+             * scrolling look like the page arrives "part by part".  Keep comparing every SETTLE_STEP_MS
+             * until one pass sees no change (the frame is complete) or SETTLE_MAX_MS passed. */
+            for (long waited = 0; diff && inited && waited < SETTLE_MAX_MS; waited += SETTLE_STEP_MS) {
+                msleep(SETTLE_STEP_MS); diff = 0;
+                for (int y = 0; y < rh; y++) {
+                    const u32 *r = src + (long)y * stride; u32 *p = prevraw + (long)y * rw; int x = 0;
+                    while (x < rw && p[x] == r[x]) x++;
+                    if (x < rw) { diff = 1; for (; x < rw; x++) p[x] = r[x]; }
+                }
+            }
         }
         int changed = 0; u32 *sh = shadow;
         if (ori == 0) {
