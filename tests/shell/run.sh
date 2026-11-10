@@ -269,4 +269,18 @@ else
   echo "SKIP image_set_wifi tests (mke2fs/debugfs/e2fsck/python3 not installed)"
 fi
 
+# --- walpad-storage: SD card and USB disks mounted, removal unmounts (fake root, no real mount)
+SR=$T/storage; mkdir -p "$SR/sys/class/block/mmcblk1/mmcblk1p1" "$SR/proc" "$SR/dev"
+ln -s mmcblk1/mmcblk1p1 "$SR/sys/class/block/mmcblk1p1"; echo 179:97 > "$SR/sys/class/block/mmcblk1p1/dev"
+echo vfat > "$SR/sys/class/block/mmcblk1p1/fstype"; : > "$SR/proc/mounts"
+st() { WALPAD_ROOT=$SR ONCE=1 sh "$S/walpad-storage" 2>/dev/null; }
+eq "sd card mounted" "$(st)" "walpad-storage: mounted mmcblk1p1 (vfat) at /mnt/sd"
+eq "sd card mounted once" "$(st)" ""
+mkdir -p "$SR/sys/class/block/sda"; echo 8:0 > "$SR/sys/class/block/sda/dev"; echo exfat-not > "$SR/sys/class/block/sda/fstype"
+eq "usb disk without partitions, unknown fs read-only" "$(st)" "walpad-storage: mounted sda (exfat-not) at /mnt/usb/sda"
+grep -q " /mnt/usb/sda exfat-not ro " "$SR/proc/mounts"; eq "unknown fs is read-only" "$?" 0
+rm -rf "$SR/sys/class/block/mmcblk1" "$SR/sys/class/block/mmcblk1p1"
+eq "sd removed" "$(st)" "walpad-storage: removed mmcblk1p1 (/mnt/sd)"
+grep -c " /mnt/sd " "$SR/proc/mounts" | grep -q '^0$'; eq "sd gone from mounts" "$?" 0
+
 exit $FAIL

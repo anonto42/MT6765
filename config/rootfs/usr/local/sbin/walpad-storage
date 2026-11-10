@@ -1,0 +1,64 @@
+#!/bin/sh
+# walpad-storage: mount removable storage (SD card, USB sticks on OTG) and keep it mounted.
+#   SD card first partition (or the whole card) -> /mnt/sd ; USB disks (sd[a-z]) -> /mnt/usb/<name>
+# Runs as a loop (every 3 s): mounts what appears, lazily unmounts what disappeared.  There is no
+# udev here; device nodes are created from sysfs when missing.  FAT/vfat is native; exFAT/NTFS use the
+# FUSE helpers when installed.  Env (tests): WALPAD_ROOT (prefix for /sys, /dev, /mnt, /proc), ONCE=1.
+R=${WALPAD_ROOT:-}
+log() { echo "walpad-storage: $*"; }
+
+node() {  # create /dev/<name> from /sys/class/block/<name>/dev when missing
+  n=$1; [ -b "$R/dev/$n" ] && return 0
+  d=$(cat "$R/sys/class/block/$n/dev" 2>/dev/null) || return 1
+  [ -n "$R" ] && return 0   # tests: do not mknod
+  mknod "/dev/$n" b "${d%%:*}" "${d##*:}" 2>/dev/null
+}
+
+fstype() { if [ -n "$R" ]; then cat "$R/sys/class/block/$1/fstype" 2>/dev/null; else blkid "/dev/$1" 2>/dev/null | sed -n 's/.* TYPE="\([^"]*\)".*/\1/p'; fi; }  # busybox blkid has no -o/-s  # tests: fake type file
+
+mounted_at() { grep -q " $1 " "$R/proc/mounts" 2>/dev/null; }
+
+do_mount() {  # dev mountpoint
+  dev=$1 mp=$2; mounted_at "$mp" && return 0
+  node "$dev" || return 1
+  t=$(fstype "$dev")
+  mkdir -p "$R$mp"
+  case $t in
+    vfat|msdos) o="rw,noatime,utf8,umask=022,flush" ;;
+    exfat)      command -v mount.exfat-fuse >/dev/null 2>&1 && { mount.exfat-fuse "$R/dev/$dev" "$R$mp" && log "mounted $dev ($t) at $mp"; return; }; o="rw,noatime" ;;
+    ntfs)       command -v ntfs-3g >/dev/null 2>&1 && { ntfs-3g "$R/dev/$dev" "$R$mp" && log "mounted $dev ($t) at $mp"; return; }; o="ro" ;;
+    ext2|ext3|ext4) o="rw,noatime" ;;
+    "") return 1 ;;
+    *) o="ro" ;;
+  esac
+  if [ -n "$R" ]; then echo "/dev/$dev $mp $t $o 0 0" >> "$R/proc/mounts"; log "mounted $dev ($t) at $mp"; return 0; fi
+  mount -t "$t" -o "$o" "/dev/$dev" "$mp" 2>/dev/null && log "mounted $dev ($t) at $mp"
+}
+
+sweep() {
+  # SD card: mmcblk1 (mmcblk0 is the internal eMMC)
+  if [ -e "$R/sys/class/block/mmcblk1" ]; then
+    if [ -e "$R/sys/class/block/mmcblk1p1" ]; then do_mount mmcblk1p1 /mnt/sd; else do_mount mmcblk1 /mnt/sd; fi
+  fi
+  # USB disks on OTG
+  for s in "$R"/sys/class/block/sd[a-z]; do
+    [ -e "$s" ] || continue
+    b=${s##*/}
+    if [ -e "$R/sys/class/block/${b}1" ]; then do_mount "${b}1" "/mnt/usb/$b"; else do_mount "$b" "/mnt/usb/$b"; fi
+  done
+  # anything mounted under /mnt/sd or /mnt/usb whose device is gone: lazy unmount
+  while read -r dev mp _; do
+    case $mp in /mnt/sd|/mnt/usb/*) ;; *) continue ;; esac
+    n=${dev##*/}
+    [ -e "$R/sys/class/block/$n" ] && continue
+    if [ -n "$R" ]; then grep -v " $mp " "$R/proc/mounts" > "$R/proc/mounts.new"; mv "$R/proc/mounts.new" "$R/proc/mounts"
+    else umount -l "$mp" 2>/dev/null; fi
+    log "removed $n ($mp)"
+  done < "$R/proc/mounts"
+}
+
+while :; do
+  sweep
+  [ "${ONCE:-0}" = 1 ] && exit 0
+  sleep 3
+done

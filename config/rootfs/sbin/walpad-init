@@ -79,6 +79,8 @@ fi
 
 # Wi-Fi: stack bring-up, association and reconnection (own loop, never blocks the session)
 ( walpad-wifi >> /var/log/walpad-wifi.log 2>&1 ) &
+# SD card / USB disks -> /mnt/sd, /mnt/usb/* (own loop: insert and remove while running)
+( walpad-storage >> /var/log/walpad-storage.log 2>&1 ) &
 
 if [ -z "$SAFE" ]; then
 # Rust core (own restart loop, outside the session so a UI/X crash never stops it).  Started only when
