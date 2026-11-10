@@ -82,7 +82,8 @@ pub fn strut(o: u16) -> [u32; 4] {
 pub fn keyboard_geometry(o: u16) -> (u32, u32, u32, u32) {
     let landscape = matches!(o, 90 | 270);
     let (vw, vh) = if landscape { (1280, 800) } else { (800, 1280) };
-    let kh = if landscape { 340 } else { 420 };
+    // the keyboard takes at most 30% of the visible height (owner's request, 2026-11-10)
+    let kh = vh * 30 / 100;
     (0, vh - kh, vw, kh)
 }
 
@@ -292,8 +293,8 @@ mod tests {
         assert_eq!(strut_partial(270), strut_partial(90));
         assert_eq!(strut(0), [0, 480, 0, 0]);
         assert_eq!(strut(90), [0, 0, 0, 480]);
-        assert_eq!(keyboard_geometry(0), (0, 860, 800, 420));
-        assert_eq!(keyboard_geometry(90), (0, 460, 1280, 340));
+        assert_eq!(keyboard_geometry(0), (0, 896, 800, 384));
+        assert_eq!(keyboard_geometry(90), (0, 560, 1280, 240));
     }
 
     #[test]

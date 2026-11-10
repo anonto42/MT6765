@@ -396,6 +396,11 @@ impl Daemon {
             "apps",
             json!({"kind": "started", "app": id, "pid": pid}),
         );
+        // a terminal is useless without keys: open the on-screen keyboard with it (the dock's
+        // Keyboard button minimises it again)
+        if id == "terminal" {
+            self.keyboard(KeyboardMode::Show);
+        }
         Ok("launched")
     }
 

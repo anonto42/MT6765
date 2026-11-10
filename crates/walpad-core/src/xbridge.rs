@@ -582,10 +582,10 @@ mod tests {
         b.conn.map_window(kw).unwrap();
         assert_eq!(b.dock_keyboard(0).unwrap(), 1);
         let g = b.conn.get_geometry(kw).unwrap().reply().unwrap();
-        assert_eq!((g.x, g.y, g.width, g.height), (0, 860, 800, 420));
+        assert_eq!((g.x, g.y, g.width, g.height), (0, 896, 800, 384));
         b.dock_keyboard(90).unwrap();
         let g = b.conn.get_geometry(kw).unwrap().reply().unwrap();
-        assert_eq!((g.x, g.y, g.width, g.height), (0, 460, 1280, 340));
+        assert_eq!((g.x, g.y, g.width, g.height), (0, 560, 1280, 240));
 
         // key injection reaches a window that listens for key presses (pointer is over it)
         let lw = b.conn.generate_id().unwrap();
