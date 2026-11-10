@@ -17,6 +17,11 @@ pub const COMMAND_NAMES: &[&str] = &[
     "wifi_enable",
     "hotspot",
     "hotspot_config",
+    "mobile_radio",
+    "mobile_data",
+    "mobile_apn",
+    "sim_pin",
+    "mobile_info",
     "launch",
     "close_app",
     "home",
@@ -37,6 +42,7 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "home",
     "restart_shell",
     "screenshot",
+    "mobile_info",
 ];
 
 /// Settings accepted by `set_setting` (section 9 of the plan).
@@ -164,6 +170,26 @@ pub enum Command {
         #[serde(default)]
         secret: Option<Secret>,
     },
+    /// Mobile radio on/off (owner request 2026-11-10): AT+CFUN=1/0 over the modem's AT channel;
+    /// off is the airplane mode. Persisted in /var/lib/walpad/mobile-radio.
+    MobileRadio {
+        on: bool,
+    },
+    /// Mobile data on/off: runs `/usr/local/sbin/walpad-modem data on|off` (fixed path, only the
+    /// boolean comes from the client).
+    MobileData {
+        on: bool,
+    },
+    /// APN for mobile data (1-62 characters [A-Za-z0-9.-_]); stored in /etc/walpad/mobile.conf.
+    MobileApn {
+        apn: String,
+    },
+    /// SIM PIN (4-8 digits). Secret: never logged, never in argv; written to the AT channel only.
+    SimPin {
+        pin: Secret,
+    },
+    /// Modem identity on request (IMEI, ICCID, firmware): never in the status topic.
+    MobileInfo,
     Launch {
         app: String,
     },
@@ -287,6 +313,12 @@ impl Command {
                 }
                 Ok(())
             }
+            Command::MobileApn { apn } if !valid_apn(apn) => {
+                Err("apn must be 1-62 characters of A-Z a-z 0-9 . - _".into())
+            }
+            Command::SimPin { pin } if !valid_sim_pin(pin.expose()) => {
+                Err("pin must be 4-8 digits".into())
+            }
             Command::Launch { app } | Command::CloseApp { app } => {
                 if valid_app_id(app) {
                     Ok(())
@@ -308,6 +340,18 @@ pub fn valid_hotspot_ssid(s: &str) -> bool {
 /// Hotspot WPA2 passphrase: 8-63 printable ASCII characters (what hostapd's wpa_passphrase takes).
 pub fn valid_hotspot_secret(s: &str) -> bool {
     (8..=63).contains(&s.len()) && s.bytes().all(|b| (0x20..=0x7e).contains(&b))
+}
+
+/// Access point name: 1-62 characters of A-Z a-z 0-9 . - _ (safe in an AT command and a file).
+pub fn valid_apn(s: &str) -> bool {
+    (1..=62).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+/// SIM PIN: 4-8 ASCII digits.
+pub fn valid_sim_pin(s: &str) -> bool {
+    (4..=8).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// App ids are short lower-case slugs ("browser", "system-monitor").

@@ -88,6 +88,85 @@ pub struct HotspotStatus {
     pub exclusive: bool,
 }
 
+/// The cellular modem (owner request 2026-11-10).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModemState {
+    /// No modem support on this system (walpad-modem missing).
+    #[default]
+    Absent,
+    /// walpad-modem exists but the modem is not running (not started yet).
+    Present,
+    /// `walpad-modem start` is running.
+    Booting,
+    /// The AT channel answers.
+    Ready,
+    /// The modem did not come up (reason in `MobileStatus::reason`).
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SimState {
+    Ready,
+    PinRequired,
+    PukRequired,
+    Absent,
+    Busy,
+    #[default]
+    Unknown,
+}
+
+/// Network registration (best of CREG / CGREG / CEREG).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MobileReg {
+    Home,
+    Roaming,
+    Searching,
+    Denied,
+    NotRegistered,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MobileData {
+    #[default]
+    Off,
+    Connecting,
+    On,
+    Failed,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MobileStatus {
+    pub modem: ModemState,
+    /// Why the modem failed (never contains an identifier).
+    pub reason: Option<String>,
+    /// AT+CFUN: true = full functionality; None = not known yet.
+    pub radio_on: Option<bool>,
+    pub sim: SimState,
+    pub operator: Option<String>,
+    /// "2G" | "3G" | "4G" from the access technology of AT+COPS.
+    pub tech: Option<String>,
+    /// 0-4 bars and the dBm estimate from AT+CSQ; None = unknown.
+    pub signal_bars: Option<u8>,
+    pub signal_dbm: Option<i32>,
+    pub registration: MobileReg,
+    pub data: MobileData,
+    pub data_reason: Option<String>,
+    pub ip: Option<String>,
+    /// Configured APN (/etc/walpad/mobile.conf); None = chosen by operator.
+    pub apn: Option<String>,
+    /// APN of the active / last data context.
+    pub apn_in_use: Option<String>,
+    /// Modem firmware (ATI).
+    pub firmware: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hardware {
     pub touch: String,
@@ -108,6 +187,8 @@ pub struct Status {
     pub wifi: WifiStatus,
     #[serde(default)]
     pub hotspot: HotspotStatus,
+    #[serde(default)]
+    pub mobile: MobileStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
 }

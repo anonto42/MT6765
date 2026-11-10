@@ -8,6 +8,7 @@ pub mod fake;
 pub mod hotspot;
 pub mod inputs;
 pub mod logic;
+pub mod modem;
 pub mod shadow;
 pub mod shadow_live;
 pub mod wpa;

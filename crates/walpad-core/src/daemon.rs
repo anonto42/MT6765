@@ -5,6 +5,7 @@ use crate::brain::{Brain, Effect};
 use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
+use crate::modem::{MobileError, Modem};
 use crate::wpa::manager::{Wifi, WifiError, WifiEvent};
 use crate::wpa::parse::{hex, ssid_display, unhex};
 use crate::xbridge::{class_matches, XBridge, XError};
@@ -103,6 +104,7 @@ pub struct Daemon {
     apps: Apps,
     wifi: Wifi,
     hotspot: Hotspot,
+    modem: Modem,
     xb: Option<XBridge>,
     x_retry: Instant,
     x_ping: Instant,
@@ -149,6 +151,15 @@ fn wifi_err(e: WifiError) -> (ErrorCode, String) {
         ),
         WifiError::Invalid(m) => (ErrorCode::InvalidArgs, m),
         WifiError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
+fn mobile_err(e: MobileError) -> (ErrorCode, String) {
+    match e {
+        MobileError::Busy(m) => (ErrorCode::Busy, m),
+        MobileError::Refused(m) => (ErrorCode::Refused, m),
+        MobileError::Invalid(m) => (ErrorCode::InvalidArgs, m),
+        MobileError::Failed(m) => (ErrorCode::Internal, m),
     }
 }
 
@@ -221,6 +232,7 @@ impl Daemon {
             apps,
             wifi: Wifi::new(&root),
             hotspot: Hotspot::new(&root),
+            modem: Modem::new(&root),
             xb: None,
             x_retry: now,
             x_ping: now,
@@ -239,6 +251,8 @@ impl Daemon {
         d.apply(fx, true);
         // a hotspot can outlive a core restart: pick up its real state
         d.hotspot.probe(now);
+        // the modem: pick up a running one, or boot it once per boot (owner request 2026-11-10)
+        d.modem.startup(now);
         Ok(d)
     }
 
@@ -445,6 +459,11 @@ impl Daemon {
     /// Test hook: shorter hotspot script timeouts.
     pub fn hotspot_mut(&mut self) -> &mut Hotspot {
         &mut self.hotspot
+    }
+
+    /// Test hook: modem timeouts and poll periods.
+    pub fn modem_mut(&mut self) -> &mut Modem {
+        &mut self.modem
     }
 
     /// Test hook: how long a closing app gets before it is killed.
@@ -829,6 +848,7 @@ impl Daemon {
             lid_closed: self.brain.screen.lid_closed(),
             wifi,
             hotspot: self.hotspot.status().clone(),
+            mobile: self.modem.status().clone(),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
                 touch: ok(input::find(&devs, input::is_touch).is_some()),
@@ -990,6 +1010,11 @@ impl Daemon {
                 }
                 Ok(reply)
             }
+            Command::MobileRadio { on } => self.modem.set_radio(on, Instant::now()).map_err(mobile_err),
+            Command::MobileData { on } => self.modem.set_data(on, Instant::now()).map_err(mobile_err),
+            Command::MobileApn { apn } => self.modem.set_apn(&apn).map_err(mobile_err),
+            Command::SimPin { pin } => self.modem.sim_pin(&pin, Instant::now()).map_err(mobile_err),
+            Command::MobileInfo => Ok(self.modem.info()),
             Command::PowerMenu { open } => {
                 self.shell_menu_until = open.then(|| now + SHELL_MENU_MAX_MS);
                 Ok(json!({"open": open}))
@@ -1244,6 +1269,11 @@ impl Daemon {
         }
         if self.hotspot.tick(Instant::now()) {
             self.publish_hotspot();
+            did = true;
+        }
+        did |= self.modem.tick(Instant::now());
+        for n in self.modem.take_notices() {
+            self.publish(Topic::Notice, "notice", n);
             did = true;
         }
         let now = Instant::now();

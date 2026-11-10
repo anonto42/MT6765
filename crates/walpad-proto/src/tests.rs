@@ -311,6 +311,7 @@ fn sample_status() -> Status {
             enabled: true,
         },
         hotspot: Default::default(),
+        mobile: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,
@@ -367,4 +368,99 @@ fn legacy_status_has_old_field_set() {
     assert_eq!(bk, ["estimated", "mv", "percent", "status", "temp_dC"]);
     assert_eq!(v["battery"]["temp_dC"], "340");
     assert_eq!(v["wifi"], "COMPLETED 192.168.0.100");
+}
+
+#[test]
+fn mobile_commands_are_validated_and_the_pin_redacted() {
+    // owner request 2026-11-10
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"mobile_radio","args":{"on":false}}"#)
+            .unwrap()
+            .1,
+        Command::MobileRadio { on: false }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"mobile_data","args":{"on":true}}"#)
+            .unwrap()
+            .1,
+        Command::MobileData { on: true }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"mobile_apn","args":{"apn":"gpinternet"}}"#)
+            .unwrap()
+            .1,
+        Command::MobileApn {
+            apn: "gpinternet".into()
+        }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"mobile_info","args":{"x":1}}"#)
+            .unwrap()
+            .1,
+        Command::MobileInfo
+    );
+    let (_, c) = req(r#"{"v":1,"id":1,"cmd":"sim_pin","args":{"pin":"4711"}}"#).unwrap();
+    assert!(!format!("{c:?}").contains("4711"), "the PIN is redacted");
+    assert!(req(r#"{"v":1,"id":1,"cmd":"mobile_apn","args":{"apn":"a.b-c_D9"}}"#).is_ok());
+    let long = "a".repeat(62);
+    assert!(req(&format!(
+        r#"{{"v":1,"id":1,"cmd":"mobile_apn","args":{{"apn":"{long}"}}}}"#
+    ))
+    .is_ok());
+    let too_long = format!(
+        r#"{{"v":1,"id":1,"cmd":"mobile_apn","args":{{"apn":"{}"}}}}"#,
+        "a".repeat(63)
+    );
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"mobile_radio","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"mobile_data","args":{"on":"on"}}"#,
+        r#"{"v":1,"id":1,"cmd":"mobile_apn","args":{"apn":""}}"#,
+        r#"{"v":1,"id":1,"cmd":"mobile_apn","args":{"apn":"inter net"}}"#,
+        r#"{"v":1,"id":1,"cmd":"mobile_apn","args":{"apn":"x\";AT+CFUN=0"}}"#,
+        too_long.as_str(),
+        r#"{"v":1,"id":1,"cmd":"sim_pin","args":{"pin":"123"}}"#,
+        r#"{"v":1,"id":1,"cmd":"sim_pin","args":{"pin":"123456789"}}"#,
+        r#"{"v":1,"id":1,"cmd":"sim_pin","args":{"pin":"12a4"}}"#,
+        r#"{"v":1,"id":1,"cmd":"sim_pin","args":{"pin":"1234\""}}"#,
+        r#"{"v":1,"id":1,"cmd":"sim_pin","args":{}}"#,
+    ] {
+        let r = req(bad);
+        assert_eq!(code(r.clone()), ErrorCode::InvalidArgs, "{bad}");
+        let msg = r
+            .err()
+            .and_then(|e| e.error)
+            .map(|e| e.msg)
+            .unwrap_or_default();
+        assert!(!msg.contains("12a4") && !msg.contains("123456789"), "{msg}");
+    }
+    assert!(valid_sim_pin("00000000") && !valid_sim_pin("０１２３"));
+    assert!(valid_apn("internet") && !valid_apn("ünet"));
+}
+
+#[test]
+fn mobile_status_defaults_and_names() {
+    let mut v = serde_json::to_value(sample_status()).unwrap();
+    assert_eq!(v["mobile"]["modem"], "absent");
+    assert_eq!(v["mobile"]["sim"], "unknown");
+    assert_eq!(v["mobile"]["data"], "off");
+    v.as_object_mut().unwrap().remove("mobile");
+    let s: Status = serde_json::from_value(v).unwrap();
+    assert_eq!(s.mobile, MobileStatus::default());
+    let m = MobileStatus {
+        modem: ModemState::Ready,
+        sim: SimState::PinRequired,
+        registration: MobileReg::Roaming,
+        data: MobileData::Connecting,
+        ..Default::default()
+    };
+    let v = serde_json::to_value(&m).unwrap();
+    assert_eq!(
+        (&v["modem"], &v["sim"], &v["registration"], &v["data"]),
+        (
+            &json!("ready"),
+            &json!("pin_required"),
+            &json!("roaming"),
+            &json!("connecting")
+        )
+    );
 }

@@ -3,6 +3,8 @@
 # using the stock vendor daemons through Android's linker (same method as walpad-wifi).
 #   walpad-modem start   mount the modem's NV partitions, start ccci_fsd + ccci_mdinit, wait for MD
 #   walpad-modem status  print the modem state (no side effects)
+#   walpad-modem data on|off|status   mobile data (owner request 2026-11-10; see data_on below);
+#                        prints key=value lines: state=on|off|failed, reason, ip, apn
 # The NV partitions hold the IMEI and RF calibration: backups are in firmware/MT6765/backups/modem-*
 # (host) and /mnt/sd/walpad-backup (tablet).  ccci_fsd writes to them like Android does.
 SYS=/system/system
@@ -51,6 +53,96 @@ vendor_daemon() {  # name args...: run a vendor binary through the bionic linker
 
 md_state() { timeout 2 cat /sys/kernel/ccci/md_en 2>/dev/null; }
 
+# ---- mobile data (owner request 2026-11-10) -----------------------------------------------------
+# The AT channel is gsm0710muxd's pseudo-terminal; one opener at a time (walpad-core pauses its own
+# AT polling while this runs).  WALPAD_MODEM_ROOT prefixes the paths (host tests only).
+MR=${WALPAD_MODEM_ROOT:-}
+AT_TTY=$MR/dev/radio/pttycmd1
+MOBILE_CONF=$MR/etc/walpad/mobile.conf
+LINK_HOOK=$MR/usr/local/sbin/walpad-modem-link
+DATA_STATE=$MR/run/walpad/mobile-data
+
+# at "<command>" [timeout_s]: one AT command; prints the reply lines (echo and OK removed).
+# 0 = OK, 1 = ERROR / +CME ERROR (printed), 2 = no channel or timeout.  Runs in a subshell so a
+# failed open never ends the script.
+at() (
+  [ -e "$AT_TTY" ] || exit 2
+  exec 3<>"$AT_TTY" || exit 2
+  stty -F "$AT_TTY" raw -echo 2>/dev/null
+  printf '%s\r' "$1" >&3
+  end=$(( $(date +%s) + ${2:-5} ))
+  while :; do
+    left=$(( end - $(date +%s) )); [ "$left" -gt 0 ] || exit 2
+    IFS= read -r -t "$left" line <&3 || exit 2
+    line=$(printf '%s' "$line" | tr -d '\r')
+    case $line in
+      ""|"$1") ;;
+      OK) exit 0 ;;
+      ERROR|"+CME ERROR"*|"+CMS ERROR"*|"NO CARRIER") echo "$line"; exit 1 ;;
+      *) echo "$line" ;;
+    esac
+  done
+)
+
+apn_for() {  # operator name -> APN (Bangladesh operators; "internet" otherwise)
+  case $(printf '%s' "$1" | tr 'A-Z' 'a-z') in
+    *grameen*|gp) echo gpinternet ;;
+    *robi*|*airtel*) echo internet ;;
+    *banglalink*) echo blweb ;;
+    *teletalk*) echo wap ;;
+    *) echo internet ;;
+  esac
+}
+
+result() {  # state reason ip apn: the key=value answer, also kept for `data status`
+  { echo "state=$1"; [ -n "$2" ] && echo "reason=$2"; [ -n "$3" ] && echo "ip=$3"; [ -n "$4" ] && echo "apn=$4"; } > "$DATA_STATE.tmp"
+  mkdir -p "${DATA_STATE%/*}"; mv -f "$DATA_STATE.tmp" "$DATA_STATE" 2>/dev/null
+  cat "$DATA_STATE" 2>/dev/null || echo "state=$1"
+}
+
+data_on() {
+  mkdir -p "${DATA_STATE%/*}"
+  [ -e "$AT_TTY" ] || { result failed "the modem is not running"; return 1; }
+  apn=$(sed -n 's/^apn=//p' "$MOBILE_CONF" 2>/dev/null | tail -n 1)
+  case $apn in *[!A-Za-z0-9._-]*) apn= ;; esac
+  if [ -z "$apn" ]; then
+    at "AT+COPS=3,0" >/dev/null
+    op=$(at "AT+COPS?" | sed -n 's/^+COPS: *[0-9]*,[0-9]*,"\([^"]*\)".*/\1/p')
+    apn=$(apn_for "$op")
+  fi
+  say "data on: apn $apn"
+  at "AT+EDALLOW=1" >/dev/null   # MediaTek: allow packet data (harmless where unknown)
+  at "AT+CGDCONT=1,\"IP\",\"$apn\"" >/dev/null || { result failed "the modem rejected the APN" "" "$apn"; return 1; }
+  at "AT+CGACT=1,1" 25 >/dev/null || { result failed "could not activate the data context (no network?)" "" "$apn"; return 1; }
+  ip=$(at "AT+CGPADDR=1" | sed -n 's/^+CGPADDR: *1, *"\{0,1\}\([0-9.]*\).*/\1/p')
+  dns=$(at "AT+CGCONTRDP=1" | sed -n 's/^+CGCONTRDP: *//p' | head -n 1 | tr -d '"')
+  dns1=$(echo "$dns" | cut -d, -f6); dns2=$(echo "$dns" | cut -d, -f7)
+  [ -n "$ip" ] || { result failed "the network gave no IP address" "" "$apn"; return 1; }
+  # binding the context to a ccmni interface is the hook's job (not working on this tablet yet)
+  if [ ! -x "$LINK_HOOK" ]; then
+    say "data on: context active ($ip), no link hook"
+    result failed "data link not supported yet" "$ip" "$apn"; return 1
+  fi
+  if "$LINK_HOOK" up "$ip" "$dns1" "$dns2" >/dev/null 2>&1; then
+    result on "" "$ip" "$apn"
+  else
+    result failed "the data link did not come up" "$ip" "$apn"; return 1
+  fi
+}
+
+data_off() {
+  [ -x "$LINK_HOOK" ] && "$LINK_HOOK" down >/dev/null 2>&1
+  if [ -e "$AT_TTY" ] && ! at "AT+CGACT=0,1" 15 >/dev/null; then
+    result failed "could not deactivate the data context"; return 1
+  fi
+  rm -f "$DATA_STATE"
+  echo state=off
+}
+
+data_status() {
+  if [ -f "$DATA_STATE" ] && grep -q '^state=on$' "$DATA_STATE"; then cat "$DATA_STATE"; else echo state=off; fi
+}
+
 case ${1:-status} in
   start)
     [ -x "$LINKER" ] || { say "bootstrap linker missing: /system not mounted"; exit 1; }
@@ -95,5 +187,13 @@ case ${1:-status} in
     for n in nvram_daemon ccci_fsd ccci_mdinit gsm0710muxd; do printf '%s: %s\n' "$n" "$(running "$n" && echo running || echo stopped)"; done
     grep -E "^(vendor\.service\.nvram_init|vendor\.mtk\.md1\.status|mtk\.md1\.status)=" $PROPS 2>/dev/null | tail -3
     ;;
-  *) echo "usage: $0 start|status" >&2; exit 2 ;;
+  data)
+    case $2 in
+      on) data_on ;;
+      off) data_off ;;
+      status) data_status ;;
+      *) echo "usage: $0 data on|off|status" >&2; exit 2 ;;
+    esac
+    ;;
+  *) echo "usage: $0 start|status|data on|off|status" >&2; exit 2 ;;
 esac

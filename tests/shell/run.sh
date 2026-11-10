@@ -408,4 +408,50 @@ rm -f "$HS/hostapd-fail"
 OUT=$(hs bogus); eq "unknown verb" "$?" 2
 eq "no fake daemons left at the end" "$(ps -eo comm | grep -cx 'hostapd\|udhcpd')" 0
 
+# ===== walpad-modem data on|off|status (owner request 2026-11-10): fake AT channel on a pty =====
+MS=$S/walpad-modem
+sh -n "$MS" && ok "syntax walpad-modem" || bad "syntax walpad-modem" error ok
+if command -v python3 >/dev/null 2>&1 && command -v busybox >/dev/null 2>&1; then
+  MR=$T/modem; mkdir -p "$MR/dev/radio" "$MR/etc/walpad" "$MR/run/walpad" "$MR/usr/local/sbin"
+  # the device runs it under busybox ash (read -t, stty -F)
+  md() { WALPAD_MODEM_ROOT=$MR busybox sh "$MS" data "$1" 2>/dev/null; }
+  OUT=$(md on); eq "data on without the channel fails" "$?/$(kv "$OUT" state)/$(kv "$OUT" reason)" "1/failed/the modem is not running"
+  python3 -I tests/shell/fake_at.py "$MR/dev/radio/pttycmd1" "$MR/at.log" & FAKE=$!
+  i=0; while [ ! -e "$MR/dev/radio/pttycmd1" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+  OUT=$(md on); rc=$?
+  eq "no link hook: data on fails honestly" "$rc/$(kv "$OUT" state)/$(kv "$OUT" reason)" "1/failed/data link not supported yet"
+  eq "  context address reported" "$(kv "$OUT" ip)" "10.20.30.40"
+  eq "  operator APN (Grameenphone -> gpinternet)" "$(kv "$OUT" apn)" gpinternet
+  grep -q '^AT+CGDCONT=1,"IP","gpinternet"$' "$MR/at.log" && ok "  CGDCONT with the APN" || bad "  CGDCONT with the APN" "$(cat "$MR/at.log")" CGDCONT
+  grep -q '^AT+EDALLOW=1$' "$MR/at.log" && grep -q '^AT+CGACT=1,1$' "$MR/at.log" && ok "  EDALLOW + CGACT" || bad "  EDALLOW + CGACT" "$(cat "$MR/at.log")" present
+  eq "  status after a failed start is off" "$(md status)" state=off
+  # the hook binds the link: data is on; the configured APN wins over the operator map
+  printf '#!/bin/sh\necho "$*" >> %s/hook.log\n' "$MR" > "$MR/usr/local/sbin/walpad-modem-link"; chmod +x "$MR/usr/local/sbin/walpad-modem-link"
+  printf '# x\napn=my.apn\n' > "$MR/etc/walpad/mobile.conf"
+  OUT=$(md on); eq "with the hook: data on" "$?/$(kv "$OUT" state)/$(kv "$OUT" apn)" "0/on/my.apn"
+  eq "  hook got ip and DNS" "$(cat "$MR/hook.log")" "up 10.20.30.40 8.8.8.8 8.8.4.4"
+  eq "  status reports on" "$(kv "$(md status)" state)/$(kv "$(md status)" ip)" "on/10.20.30.40"
+  OUT=$(md off); eq "data off" "$?/$OUT" "0/state=off"
+  eq "  hook down, context deactivated" "$(tail -n 1 "$MR/hook.log")/$(grep -c '^AT+CGACT=0,1$' "$MR/at.log")" "down/1"
+  eq "  status off" "$(md status)" state=off
+  printf 'apn=bad apn;AT\n' > "$MR/etc/walpad/mobile.conf"
+  : > "$MR/at.log"; md on >/dev/null
+  grep -q '"gpinternet"' "$MR/at.log" && ok "  an invalid stored APN is ignored" || bad "  an invalid stored APN is ignored" "$(cat "$MR/at.log")" gpinternet
+  kill $FAKE 2>/dev/null; wait $FAKE 2>/dev/null
+  FAKE_AT_CGACT_FAIL=1 python3 -I tests/shell/fake_at.py "$MR/dev/radio/pttycmd1" "$MR/at.log" & FAKE=$!
+  sleep 0.5
+  OUT=$(md on); eq "activation refused: reason" "$?/$(kv "$OUT" reason)" "1/could not activate the data context (no network?)"
+  kill $FAKE 2>/dev/null; wait $FAKE 2>/dev/null
+  # no reply at all: the per-command timeout ends it (the fake is gone, the link stays)
+  printf '#!/bin/sh\nexec sleep 30\n' > "$MR/silent"; rm -f "$MR/dev/radio/pttycmd1"; mkfifo "$MR/dev/radio/pttycmd1"
+  ( exec 4<>"$MR/dev/radio/pttycmd1"; sleep 12 ) & HOLD=$!
+  t0=$(date +%s); OUT=$(md off); t1=$(date +%s)
+  [ $((t1 - t0)) -le 20 ] && ok "  a silent channel times out ($((t1 - t0)) s)" || bad "  a silent channel times out" "$((t1 - t0)) s" "<= 20 s"
+  eq "  reported as failed" "$(kv "$OUT" state)" failed
+  kill $HOLD 2>/dev/null; wait $HOLD 2>/dev/null
+  OUT=$(WALPAD_MODEM_ROOT=$MR busybox sh "$MS" data bogus 2>/dev/null); eq "data: unknown verb" "$?" 2
+else
+  echo "SKIP walpad-modem data tests (python3 or busybox missing)"
+fi
+
 exit $FAIL

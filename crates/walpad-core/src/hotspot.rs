@@ -387,7 +387,7 @@ impl Hotspot {
     }
 }
 
-fn write_600(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_600(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     if let Some(d) = path.parent() {
