@@ -11,12 +11,12 @@ use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 mod lock_flow;
 
-use crate::vpn_screen;
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
-use crate::volume_ui::{self, Osd};
 use crate::store::{self, StoreTarget, StoreView};
+use crate::volume_ui::{self, Osd};
+use crate::vpn_screen;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use walpad_hw::Root;

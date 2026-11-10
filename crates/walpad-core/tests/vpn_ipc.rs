@@ -308,7 +308,10 @@ fn kill_switch_confirm_and_revert_are_reported() {
     // the helper runs asynchronously: wait for its call to be logged
     let t = Instant::now();
     while !rig.calls().lines().any(|l| l == "confirm") {
-        assert!(t.elapsed() < Duration::from_secs(5), "confirm never reached the helper");
+        assert!(
+            t.elapsed() < Duration::from_secs(5),
+            "confirm never reached the helper"
+        );
         std::thread::sleep(Duration::from_millis(50));
     }
     // the watcher reverted on its own (nobody confirmed): the next poll shows a failure

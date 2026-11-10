@@ -186,7 +186,9 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
     let info = |l: &str, (v, t): (String, Tone)| Row::Info(l.into(), v, t);
     match page {
         // Sound is built by the app (it needs the live slider state)
-        Page::Display | Page::Mobile | Page::Bluetooth | Page::Sound | Page::Apps | Page::Vpn => Vec::new(),
+        Page::Display | Page::Mobile | Page::Bluetooth | Page::Sound | Page::Apps | Page::Vpn => {
+            Vec::new()
+        }
         Page::Input => {
             let mut r: Vec<Row> = c
                 .sys
