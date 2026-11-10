@@ -191,6 +191,9 @@ struct Atoms {
 pub struct Dock {
     xc: XConn,
     win: XWindow,
+    /// 1x1 managed window that only carries the strut (the strip itself is override-redirect so
+    /// openbox cannot move it; openbox only honours struts of windows it manages)
+    strut_win: XWindow,
     shell: XWindow,
     gc: u32,
     depth: u8,
@@ -238,7 +241,10 @@ impl Dock {
                     | EventMask::EXPOSURE
                     | EventMask::STRUCTURE_NOTIFY,
             )
-            .background_pixel(0x001A_1D21);
+            .background_pixel(0x001A_1D21)
+            // openbox placed the managed strip at the top of the screen over the app, ignoring
+            // the requested position: the strip is unmanaged and placed by us
+            .override_redirect(1);
         conn.create_window(
             0,
             win,
@@ -291,9 +297,52 @@ impl Dock {
             AtomEnum::WM_HINTS,
             &[1, 0, 0, 0, 0, 0, 0, 0, 0],
         )?;
+        let strut_win = conn.generate_id()?;
+        conn.create_window(
+            0,
+            strut_win,
+            xc.root,
+            0,
+            0,
+            1,
+            1,
+            0,
+            WindowClass::INPUT_OUTPUT,
+            0,
+            &CreateWindowAux::new(),
+        )?;
+        conn.change_property32(
+            PropMode::REPLACE,
+            strut_win,
+            atoms.window_type,
+            AtomEnum::ATOM,
+            &[atoms.type_dock],
+        )?;
+        conn.change_property32(
+            PropMode::REPLACE,
+            strut_win,
+            AtomEnum::WM_HINTS,
+            AtomEnum::WM_HINTS,
+            &[1, 0, 0, 0, 0, 0, 0, 0, 0],
+        )?;
+        conn.change_property8(
+            PropMode::REPLACE,
+            strut_win,
+            atoms.net_name,
+            atoms.utf8,
+            b"walpad-dock-strut",
+        )?;
+        conn.change_property8(
+            PropMode::REPLACE,
+            strut_win,
+            AtomEnum::WM_CLASS,
+            AtomEnum::STRING,
+            b"walpad-dock-strut\0walpad-dock-strut\0",
+        )?;
         let mut d = Dock {
             xc,
             win,
+            strut_win,
             shell,
             gc,
             depth,
@@ -332,14 +381,14 @@ impl Dock {
         let c = &self.xc.conn;
         c.change_property32(
             PropMode::REPLACE,
-            self.win,
+            self.strut_win,
             self.atoms.strut_partial,
             AtomEnum::CARDINAL,
             &s,
         )?;
         c.change_property32(
             PropMode::REPLACE,
-            self.win,
+            self.strut_win,
             self.atoms.strut,
             AtomEnum::CARDINAL,
             &s[..4],
@@ -404,19 +453,37 @@ impl Dock {
 
     fn set_mapped(&mut self, on: bool) -> Result<(), XError> {
         if on == self.mapped {
+            if on {
+                // the window manager restacks the apps it manages; keep the unmanaged strip on top
+                self.xc.conn.configure_window(
+                    self.win,
+                    &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
+                )?;
+                self.xc.conn.flush()?;
+            }
             return Ok(());
         }
         self.mapped = on;
         if on {
+            self.xc.conn.map_window(self.strut_win)?;
             self.xc.conn.map_window(self.win)?;
-            // a remapped window keeps its old place in the stack: put the strip on top again
+            // openbox places a newly mapped window itself (it ended up at the top of the screen,
+            // covering the app): ask for our place again once mapped, and put the strip on top
+            // (a remapped window keeps its old place in the stack)
+            let r = dock_rect(self.area);
             self.xc.conn.configure_window(
                 self.win,
-                &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
+                &ConfigureWindowAux::new()
+                    .x(r.x)
+                    .y(r.y)
+                    .width(r.w as u32)
+                    .height(r.h as u32)
+                    .stack_mode(StackMode::ABOVE),
             )?;
         } else {
             self.pressed = None;
             self.xc.conn.unmap_window(self.win)?;
+            self.xc.conn.unmap_window(self.strut_win)?;
         }
         self.xc.conn.flush()?;
         Ok(())

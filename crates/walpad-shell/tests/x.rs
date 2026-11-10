@@ -638,10 +638,21 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     });
     let g = c.get_geometry(dock).unwrap().reply().unwrap();
     assert_eq!((g.x, g.y, g.width, g.height), (0, 1224, 800, 56));
+    // the strip is override-redirect (openbox moved a managed strip to the top); a managed 1x1
+    // window carries the strut and the dock type
+    assert!(
+        c.get_window_attributes(dock)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .override_redirect
+    );
+    let strut_win = find_by_class(&probe.0, b"walpad-dock-strut\0").expect("strut window");
+    assert!(is_mapped(&probe.0, strut_win));
     let strut = c
         .get_property(
             false,
-            dock,
+            strut_win,
             atom(&probe.0, "_NET_WM_STRUT_PARTIAL"),
             AtomEnum::CARDINAL,
             0,
@@ -661,7 +672,7 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     let ty = c
         .get_property(
             false,
-            dock,
+            strut_win,
             atom(&probe.0, "_NET_WM_WINDOW_TYPE"),
             AtomEnum::ATOM,
             0,
@@ -708,7 +719,7 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     let strut = c
         .get_property(
             false,
-            dock,
+            strut_win,
             atom(&probe.0, "_NET_WM_STRUT_PARTIAL"),
             AtomEnum::CARDINAL,
             0,
