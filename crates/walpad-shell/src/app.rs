@@ -9,6 +9,8 @@ use crate::gesture::Gesture;
 use crate::home;
 use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
+mod lock_flow;
+
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
@@ -21,6 +23,8 @@ use walpad_ui::components::{Key, KeyboardLayer, Painter, Tab, Tone};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
 use walpad_ui::{Icon, Rect};
+
+pub use lock_flow::{lock_rows, LockAct, LockFlow};
 
 pub type Ms = u64;
 
@@ -220,6 +224,8 @@ pub enum Target {
     DialogConfirm,
     /// Power menu item (index into `overlay::POWER_ITEMS`).
     PowerItem(usize),
+    /// Settings > Security: the screen lock rows (OpenSpec `lock-screen`).
+    Lock(LockAct),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -281,6 +287,15 @@ pub enum Cmd {
         address: String,
         accept: bool,
     },
+    /// Screen lock (OpenSpec `lock-screen`): secrets are never printed (`Secret`'s Debug is `***`).
+    LockSet {
+        kind: walpad_proto::LockKind,
+        secret: Secret,
+        current: Option<Secret>,
+    },
+    LockRemove(Secret),
+    LockNow,
+    LockConfig(u32),
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `set_setting` with an allowlisted key.
@@ -309,6 +324,7 @@ pub enum Purpose {
     MobileInfo,
     BtPair,
     BtOp,
+    Lock,
     Other,
 }
 
@@ -393,6 +409,27 @@ impl Cmd {
                 "bluetooth_confirm",
                 json!({"address": address, "accept": accept}),
             ),
+            // serialized onto the control socket only, never a log
+            Cmd::LockSet {
+                kind,
+                secret,
+                current,
+            } => {
+                let mut a = json!({
+                    "kind": kind,
+                    "secret": serde_json::to_value(secret).unwrap_or(Value::Null),
+                });
+                if let Some(c) = current {
+                    a["current"] = serde_json::to_value(c).unwrap_or(Value::Null);
+                }
+                ("lock_set", a)
+            }
+            Cmd::LockRemove(c) => (
+                "lock_remove",
+                json!({"current": serde_json::to_value(c).unwrap_or(Value::Null)}),
+            ),
+            Cmd::LockNow => ("lock_now", Value::Null),
+            Cmd::LockConfig(s) => ("lock_config", json!({"auto_lock_s": s})),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
@@ -416,6 +453,9 @@ impl Cmd {
             Cmd::MobileInfo => Purpose::MobileInfo,
             Cmd::BtPair(_) => Purpose::BtPair,
             Cmd::BtConnect(_) | Cmd::BtDisconnect(_) | Cmd::BtForget(_) => Purpose::BtOp,
+            Cmd::LockSet { .. } | Cmd::LockRemove(_) | Cmd::LockNow | Cmd::LockConfig(_) => {
+                Purpose::Lock
+            }
             Cmd::CloseApp(_) => Purpose::Close,
             Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
@@ -461,6 +501,8 @@ pub struct Model {
     pub imei_shown: bool,
     /// Address of the Bluetooth connect / pair request in progress.
     pub bt_busy: Option<String>,
+    /// The open "set / change / remove the screen lock" sequence (Settings > Security).
+    pub lock_flow: Option<LockFlow>,
 }
 
 impl Model {
@@ -488,6 +530,7 @@ impl Model {
             mobile_info: None,
             imei_shown: false,
             bt_busy: None,
+            lock_flow: None,
         }
     }
 
@@ -1062,6 +1105,7 @@ impl App {
                     }
                 }
             }
+            (Purpose::Lock, ok) => self.on_lock_reply(ok, error, out),
             (Purpose::MobileInfo, true) => {
                 self.model.mobile_info = Some(MobileInfo {
                     imei: data["imei"].as_str().map(String::from),
@@ -1644,6 +1688,7 @@ impl App {
             }
             Target::PowerMenu => self.open_power_menu(out),
             Target::PowerItem(i) => self.power_item(i, out),
+            Target::Lock(a) if interactive => self.on_lock_tap(a, out),
             // ---- overlays
             Target::SheetCancel => self.close_overlay(),
             Target::DialogCancel => self.close_overlay(),
@@ -1800,6 +1845,7 @@ impl App {
             s.secret.clear();
         }
         self.model.net.connecting = None;
+        self.model.lock_flow = None;
         self.model.overlay = None;
     }
 
@@ -1852,6 +1898,9 @@ impl App {
     }
 
     fn try_connect(&mut self, out: &mut Outcome) {
+        if matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_lock()) {
+            return self.lock_submit(out);
+        }
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
             if s.is_mobile() {
                 if s.valid() && !s.connecting {

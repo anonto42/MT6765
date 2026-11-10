@@ -5,6 +5,7 @@ use crate::bluetooth::{Bluetooth, BluetoothError};
 use crate::brain::{Brain, Effect};
 use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
+use crate::lock::{Lock, LockError, Unlock};
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
 use crate::modem::{MobileError, Modem};
 use crate::volume::Volume;
@@ -21,8 +22,8 @@ use std::time::{Duration, Instant};
 use walpad_hw::{battery::read_battery, gsensor::read_gsensor, input, sysfs, Root};
 use walpad_proto::{
     encode_line, parse_devd_line, parse_request, Command, ErrorCode, Event, Hardware, KeyboardMode,
-    LegacyStatus, LineDecoder, PowerAction, Response, ShellInput, Status, Topic, WifiRadio,
-    WifiStatus, PROTO_VERSION,
+    LegacyStatus, LineDecoder, PowerAction, Response, ScreenMode, ScreenState, ShellInput, Status,
+    Topic, WifiRadio, WifiStatus, PROTO_VERSION,
 };
 
 const STATUS_EVERY: Duration = Duration::from_secs(2);
@@ -109,6 +110,7 @@ pub struct Daemon {
     bluetooth: Bluetooth,
     modem: Modem,
     volume: Volume,
+    lock: Lock,
     xb: Option<XBridge>,
     x_retry: Instant,
     x_ping: Instant,
@@ -140,6 +142,32 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     let tmp = PathBuf::from(tmp);
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, path)
+}
+
+/// Milliseconds since the epoch: the screen lock's clock (its rate-limit state is persisted).
+fn wall_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn lock_err(e: LockError) -> (ErrorCode, String) {
+    match e {
+        LockError::WrongSecret { retry_in_s: None } => {
+            (ErrorCode::Refused, "wrong PIN or password".into())
+        }
+        LockError::WrongSecret {
+            retry_in_s: Some(s),
+        }
+        | LockError::Wait { retry_in_s: s } => (
+            ErrorCode::Refused,
+            format!("too many wrong attempts, wait {s} s"),
+        ),
+        LockError::Invalid(m) => (ErrorCode::InvalidArgs, m),
+        LockError::NotSet => (ErrorCode::Refused, "no screen lock is set".into()),
+        LockError::Io(m) => (ErrorCode::Internal, m),
+    }
 }
 
 fn internal<E: std::fmt::Display>(e: E) -> (ErrorCode, String) {
@@ -247,6 +275,7 @@ impl Daemon {
             bluetooth: Bluetooth::new(&root),
             modem: Modem::new(&root),
             volume: Volume::new(&root, now),
+            lock: Lock::new(&root, wall_ms()),
             xb: None,
             x_retry: now,
             x_ping: now,
@@ -468,6 +497,11 @@ impl Daemon {
                 c.queue(line.clone());
             }
         }
+    }
+
+    /// Test hook: cheaper PBKDF2 for the screen lock's new secrets.
+    pub fn lock_mut(&mut self) -> &mut Lock {
+        &mut self.lock
     }
 
     /// Test hook: shorter hotspot script timeouts.
@@ -727,6 +761,21 @@ impl Daemon {
     }
 
     fn run_action(&mut self, a: Action) {
+        // a locked tablet takes no key shortcut that reaches an app or the shell
+        if self.lock.locked()
+            && matches!(
+                a,
+                Action::Key(_)
+                    | Action::Launch(_)
+                    | Action::Run(_)
+                    | Action::Home
+                    | Action::Keyboard
+                    | Action::PowerMenu
+                    | Action::Screenshot
+            )
+        {
+            return;
+        }
         match a {
             Action::None => {}
             Action::Key(spec) => {
@@ -812,7 +861,11 @@ impl Daemon {
                 Effect::KeyboardDock(o) => {
                     self.x_try(|b| b.dock_keyboard(o).map(|_| ()));
                 }
+                Effect::PowerMenuOpen if self.lock.locked() => {}
                 Effect::PowerMenuOpen => self.open_power_menu(),
+                Effect::LockNow => {
+                    self.lock.lock_now();
+                }
                 Effect::PowerMenuActivate => {
                     if self.shell_menu_active() {
                         self.publish_input(ShellInput::PowerShort);
@@ -882,6 +935,7 @@ impl Daemon {
             mobile: self.modem.status().clone(),
             bluetooth: bt.clone(),
             audio: self.volume.status(),
+            lock: self.lock.status(wall_ms()),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
                 touch: ok(input::find(&devs, input::is_touch).is_some()),
@@ -972,6 +1026,10 @@ impl Daemon {
                 let mut fx = Vec::new();
                 Brain::screen_effects(a, &mut fx);
                 self.apply(fx, true);
+                // switching the screen off by hand locks at once (like the short power press)
+                if mode != ScreenMode::On && self.brain.screen.state() == ScreenState::Off {
+                    self.lock.lock_now();
+                }
                 Ok(
                     json!({"screen": self.brain.screen.state(), "brightness": self.brain.screen.brightness()}),
                 )
@@ -1102,6 +1160,50 @@ impl Daemon {
                 self.shell_menu_until = open.then(|| now + SHELL_MENU_MAX_MS);
                 Ok(json!({"open": open}))
             }
+            Command::LockSet {
+                kind,
+                secret,
+                current,
+            } => self
+                .lock
+                .set(
+                    kind,
+                    secret.expose(),
+                    current.as_ref().map(|c| c.expose()),
+                    wall_ms(),
+                )
+                .map(|_| {
+                    eprintln!("walpad-core: screen lock set ({kind:?})");
+                    json!({"kind": kind})
+                })
+                .map_err(lock_err),
+            Command::LockRemove { current } => self
+                .lock
+                .remove(current.expose(), wall_ms())
+                .map(|_| {
+                    eprintln!("walpad-core: screen lock removed");
+                    json!({})
+                })
+                .map_err(lock_err),
+            Command::Unlock { secret } => {
+                Ok(match self.lock.unlock(secret.expose(), wall_ms()) {
+                    Unlock::Unlocked => json!({"unlocked": true}),
+                    Unlock::Wrong { attempts_left } => {
+                        json!({"unlocked": false, "attempts_left": attempts_left})
+                    }
+                    Unlock::Wait { retry_in_s } => {
+                        json!({"unlocked": false, "retry_in_s": retry_in_s})
+                    }
+                })
+            }
+            Command::LockNow => Ok(
+                json!({"locked": self.lock.lock_now(), "configured": self.lock.configured()}),
+            ),
+            Command::LockConfig { auto_lock_s } => self
+                .lock
+                .set_auto_lock(auto_lock_s)
+                .map(|_| json!({"auto_lock_s": auto_lock_s}))
+                .map_err(lock_err),
             Command::Hello { .. } | Command::Subscribe { .. } => Ok(json!({})),
         }
     }
@@ -1351,6 +1453,10 @@ impl Daemon {
         });
 
         did |= self.app_tick();
+        let wall = wall_ms();
+        self.lock
+            .screen(self.brain.screen.state() == ScreenState::Off, wall);
+        did |= self.lock.tick(wall);
         for ev in self.wifi.tick(Instant::now()) {
             let line = encode_line(&Event::new("wifi", wifi_event_json(&ev)));
             for c in &mut self.clients {

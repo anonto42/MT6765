@@ -10,6 +10,7 @@ use crate::dock::{load_wm_classes, Dock};
 use crate::gesture::{Gesture, Recogniser};
 use crate::ime::{FocusKbd, ImEvent, ImServer, KbdAction};
 use crate::keyboard::SysKeyboard;
+use crate::lock_window::{LockEvent, LockWindow};
 use crate::mousepad::MousePad;
 use crate::seltools::{BarState, EditBar, EditOut};
 use crate::nav::Nav;
@@ -19,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use walpad_hw::Root;
-use walpad_proto::ShellInput;
+use walpad_proto::{LockKind, ShellInput};
 use walpad_ui::components::Painter;
 use walpad_ui::tokens::BG;
 use walpad_ui::{Canvas, Fonts};
@@ -49,6 +50,17 @@ pub struct Shell {
     /// The XIM server whose focus events drive the keyboard (None when it could not start or
     /// its X connection died: the terminal then gets the keyboard at start, as before).
     ime: Option<ImServer>,
+    /// The lock screen (None when its X connection could not be opened or died; retried while
+    /// the core says the tablet is locked).
+    lock: Option<LockWindow>,
+    /// The core says (or, before it answered, `/run/walpad/locked` says) the tablet is locked.
+    lock_wanted: bool,
+    lock_kind: LockKind,
+    lock_retry_in_s: Option<u32>,
+    /// Id of the `unlock` request in flight.
+    lock_pending: Option<u64>,
+    lock_reopen_at: u64,
+    sock: PathBuf,
     /// Text-input focus -> keyboard visibility.
     focus: FocusKbd,
     /// The selection toolbar and the clipboard list (None when their X connection died).
@@ -175,7 +187,17 @@ impl Shell {
                 .clone()
                 .unwrap_or_else(|| opts.root.p(walpad_proto::SOCKET_PATH)),
         );
-        Ok(Shell {
+        // locked at boot / after a shell restart: the core's marker file is there before its first
+        // status event, so the lock screen is up before the first frame of Home
+        let lock_wanted = opts.root.p("/run/walpad/locked").exists();
+        let lock = match LockWindow::open(&sock, (w, h), wall.clone()) {
+            Ok(l) => Some(l),
+            Err(e) => {
+                eprintln!("walpad-shell: lock screen disabled: {}", e.0);
+                None
+            }
+        };
+        let mut shell = Shell {
             win,
             dock,
             kbd,
@@ -183,6 +205,13 @@ impl Shell {
             nav,
             nav_close: Vec::new(),
             ime,
+            lock,
+            lock_wanted,
+            lock_kind: LockKind::Pin,
+            lock_retry_in_s: None,
+            lock_pending: None,
+            lock_reopen_at: 0,
+            sock,
             focus: FocusKbd::new(),
             edit,
             keeper,
@@ -201,7 +230,95 @@ impl Shell {
             need_refresh: true,
             first_frame: true,
             frames: 0,
-        })
+        };
+        if shell.lock_wanted {
+            shell.sync_lock();
+        }
+        Ok(shell)
+    }
+
+    // ------------------------------------------------------------------ lock screen
+    /// Bring the lock window in line with `lock_wanted`.
+    fn sync_lock(&mut self) {
+        let now = self.now_ms();
+        if self.lock.is_none() && self.lock_wanted && now >= self.lock_reopen_at {
+            self.lock_reopen_at = now + 1000;
+            let wall = self.app.model.wall.clone();
+            match LockWindow::open(&self.sock, self.win.size, wall) {
+                Ok(l) => self.lock = Some(l),
+                Err(e) => eprintln!("walpad-shell: lock screen unavailable: {}", e.0),
+            }
+        }
+        let Some(mut w) = self.lock.take() else {
+            return;
+        };
+        let (kind, retry) = (self.lock_kind, self.lock_retry_in_s);
+        let r = if !self.lock_wanted {
+            self.lock_pending = None;
+            w.hide()
+        } else if !w.visible() {
+            // the strips of the shell go away with the app they belong to
+            self.set_keyboard(false, true);
+            self.set_pad(false);
+            w.show(kind, retry, now, &mut self.fonts)
+        } else {
+            w.sync_retry(retry, &mut self.fonts)
+        };
+        match r {
+            Ok(()) => self.lock = Some(w),
+            Err(e) => {
+                eprintln!("walpad-shell: lock screen error: {}", e.0);
+                self.lock_reopen_at = now + 1000;
+            }
+        }
+    }
+
+    fn on_lock_status(&mut self, l: &walpad_proto::LockStatus) {
+        self.lock_wanted = l.locked;
+        self.lock_kind = l.kind.unwrap_or(LockKind::Pin);
+        self.lock_retry_in_s = l.retry_in_s;
+        self.sync_lock();
+    }
+
+    fn on_lock_event(&mut self, e: LockEvent) {
+        let LockEvent::Submit(secret) = e;
+        // the secret goes onto the control socket and nowhere else (never a log, never argv)
+        match self
+            .core
+            .send("unlock", serde_json::json!({ "secret": secret }))
+        {
+            Some(id) => self.lock_pending = Some(id),
+            None => {
+                if let Some(l) = self.lock.as_mut() {
+                    let _ = l.failed("The system service is not responding", &mut self.fonts);
+                }
+            }
+        }
+    }
+
+    /// The core's answer to `unlock`.
+    fn on_unlock_reply(&mut self, ok: bool, data: &serde_json::Value, msg: Option<&str>) {
+        let Some(mut l) = self.lock.take() else {
+            return;
+        };
+        let r = if ok && data["unlocked"] == true {
+            // the status event follows; go back to the app at once
+            self.lock_wanted = false;
+            self.lock_retry_in_s = None;
+            l.hide()
+        } else if ok {
+            l.rejected(
+                data["attempts_left"].as_u64().map(|n| n as u32),
+                data["retry_in_s"].as_u64().map(|n| n as u32),
+                &mut self.fonts,
+            )
+        } else {
+            l.failed(msg.unwrap_or("Could not check the secret"), &mut self.fonts)
+        };
+        match r {
+            Ok(()) => self.lock = Some(l),
+            Err(e) => eprintln!("walpad-shell: lock screen error: {}", e.0),
+        }
     }
 
     fn now_ms(&self) -> u64 {
@@ -497,6 +614,11 @@ impl Shell {
                 }
             }
             self.bottom_changed();
+            if let Some(l) = self.lock.as_mut() {
+                if let Err(e) = l.set_shell_size(w, h, &mut self.fonts) {
+                    eprintln!("walpad-shell: lock screen: {}", e.0);
+                }
+            }
             if let Some(d) = &mut self.dock {
                 if let Err(e) = d.set_shell_size(w, h) {
                     eprintln!("walpad-shell: system dock: {}", e.0);
@@ -546,6 +668,23 @@ impl Shell {
         let now = self.now_ms();
         let gs = self.rec.tick(now);
         self.apply_gestures(gs);
+        if self.lock_wanted && self.lock.is_none() {
+            self.sync_lock();
+        }
+        if let Some(mut l) = self.lock.take() {
+            match l.poll(now, &mut self.fonts) {
+                Ok(evs) => {
+                    self.lock = Some(l);
+                    for e in evs {
+                        self.on_lock_event(e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("walpad-shell: lock screen error: {}", e.0);
+                    self.lock_reopen_at = now + 1000;
+                }
+            }
+        }
         if let Some(mut d) = self.dock.take() {
             match d.poll(&mut self.fonts) {
                 Ok(cmds) => {
@@ -650,6 +789,16 @@ impl Shell {
                     // a (re)started core learns the keyboard state from us
                     self.report_keyboard();
                 }
+                CoreEvent::Status(s) => self.on_lock_status(&s.lock),
+                CoreEvent::Reply {
+                    id,
+                    ok,
+                    data,
+                    error,
+                } if self.lock_pending == Some(*id) => {
+                    self.lock_pending = None;
+                    self.on_unlock_reply(*ok, data, error.as_ref().map(|e| e.msg.as_str()));
+                }
                 CoreEvent::Input(ShellInput::KeyboardShow) => self.set_keyboard(true, false),
                 CoreEvent::Input(ShellInput::KeyboardHide) => self.set_keyboard(false, false),
                 // a terminal is useless without keys: XIM focus normally brings the keyboard up
@@ -679,6 +828,11 @@ impl Shell {
         if Instant::now() >= self.next_minute {
             let (wall, to_minute) = WallTime::now(self.clock_24h);
             self.next_minute = Instant::now() + Duration::from_millis(to_minute);
+            if let Some(l) = self.lock.as_mut() {
+                if let Err(e) = l.set_wall(wall.clone(), &mut self.fonts) {
+                    eprintln!("walpad-shell: lock screen: {}", e.0);
+                }
+            }
             self.dirty |= self.app.set_wall(wall);
             // uptime and memory change: refresh the facts once a minute while Settings/Device is open
             self.need_refresh |= matches!(
@@ -724,6 +878,12 @@ impl Shell {
                 .saturating_duration_since(Instant::now())
                 .as_millis() as u64,
         );
+        if let Some(d) = self.lock.as_ref().and_then(|l| l.next_deadline(now)) {
+            wait = wait.min(d);
+        }
+        if self.lock_wanted && self.lock.is_none() {
+            wait = wait.min(500); // the lock window is retried
+        }
         if !self.core.connected() {
             wait = wait.min(500); // reconnect attempts
         }
@@ -737,6 +897,7 @@ impl Shell {
         fds.extend(self.ime.as_ref().map(|s| s.wait_fd()));
         fds.extend(self.keeper.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.edit.as_ref().map(|e| e.wait_fd()));
+        fds.extend(self.lock.as_ref().map(|l| l.wait_fd()));
         walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }

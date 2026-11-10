@@ -149,6 +149,12 @@ pub enum Row {
         target: Target,
         disabled: bool,
     },
+    /// An action button whose label is computed (the screen lock's auto-lock delay).
+    ActionText {
+        label: String,
+        target: Target,
+        danger: bool,
+    },
 }
 
 pub struct Ctx<'a> {
@@ -251,11 +257,13 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
                 n => (n.to_string(), Tone::Info),
             };
             let (scope, tone) = telnet_scope(&c.sys.listening);
-            vec![
+            let mut rows = crate::app::lock_rows(c.status);
+            rows.extend([
                 Row::Info("SSH".into(), ssh.0, ssh.1),
                 Row::Info("Authorised keys".into(), keys.0, keys.1),
                 Row::Info("Telnet".into(), scope.into(), tone),
-            ]
+            ]);
+            rows
         }
         Page::System => {
             let mem = c
@@ -425,11 +433,12 @@ pub fn render(
         _ => p.screen_title("Settings", l.title),
     }
     // rows over the wallpaper get a translucent card behind each run (buttons have their own fill)
-    let runs = walpad_ui::components::row_runs(
-        l.rows
-            .iter()
-            .map(|(r, row)| (*r, !matches!(row, Row::Action { .. }))),
-    );
+    let runs = walpad_ui::components::row_runs(l.rows.iter().map(|(r, row)| {
+        (
+            *r,
+            !matches!(row, Row::Action { .. } | Row::ActionText { .. }),
+        )
+    }));
     for g in runs {
         p.row_group(g);
     }
@@ -449,6 +458,32 @@ pub fn render(
                 hits.push((*r, *t));
             }
             Row::Action {
+                label,
+                target,
+                danger,
+            } => {
+                let inner = Rect::new(r.x, r.y + 4, r.w, r.h - 8);
+                let st = if !online {
+                    ButtonState::Disabled
+                } else if pressed == Some(*target) {
+                    ButtonState::Pressed
+                } else {
+                    ButtonState::Default
+                };
+                p.button(
+                    inner,
+                    label,
+                    if *danger {
+                        ButtonKind::Danger
+                    } else {
+                        ButtonKind::Secondary
+                    },
+                    st,
+                    None,
+                );
+                hits.push((inner, *target));
+            }
+            Row::ActionText {
                 label,
                 target,
                 danger,

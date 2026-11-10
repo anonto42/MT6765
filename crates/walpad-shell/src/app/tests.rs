@@ -39,6 +39,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         mobile: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
+        lock: Default::default(),
         apps: apps
             .iter()
             .map(|(a, r)| AppState {

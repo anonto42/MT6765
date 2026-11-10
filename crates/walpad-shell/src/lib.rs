@@ -16,6 +16,8 @@ pub mod gesture;
 pub mod home;
 pub mod ime;
 pub mod keyboard;
+pub mod lock_screen;
+pub mod lock_window;
 pub mod mobile;
 pub mod mousepad;
 pub mod nav;

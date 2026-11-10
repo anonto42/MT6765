@@ -29,6 +29,8 @@ pub enum Effect {
     KeyboardDock(u16),
     PowerMenuOpen,
     PowerMenuActivate,
+    /// The screen was switched off by hand (short power press): lock at once.
+    LockNow,
     Cover(bool),
     LowBattery(bool),
     CriticalPoweroff(u32),
@@ -70,6 +72,8 @@ impl fmt::Display for Effect {
             Effect::KeyboardDock(o) => write!(f, "WOULD keyboard-dock {o}"),
             Effect::PowerMenuOpen => write!(f, "WOULD powermenu open"),
             Effect::PowerMenuActivate => write!(f, "WOULD powermenu activate"),
+            // the Python daemon has no screen lock: nothing to compare in shadow mode
+            Effect::LockNow => Ok(()),
             Effect::Cover(c) => write!(f, "WOULD cover {}", if *c { "closed" } else { "open" }),
             Effect::LowBattery(l) => write!(f, "WOULD low-battery {l}"),
             Effect::CriticalPoweroff(mv) => write!(f, "WOULD poweroff (critical battery {mv} mV)"),
@@ -220,7 +224,10 @@ impl Brain {
         for x in a {
             match x {
                 pk::Act::ToggleScreen => {
-                    Self::screen_effects(self.screen.screen(ScreenMode::Toggle, now), out)
+                    Self::screen_effects(self.screen.screen(ScreenMode::Toggle, now), out);
+                    if self.screen.state() == ScreenState::Off {
+                        out.push(Effect::LockNow);
+                    }
                 }
                 pk::Act::WakeScreen => {
                     Self::screen_effects(self.screen.screen(ScreenMode::On, now), out)
@@ -426,5 +433,21 @@ mod tests {
             fx.iter().any(|e| matches!(e, Effect::Action(_))),
             "single press after the tap window is a volume action: {fx:?}"
         );
+    }
+
+    #[test]
+    fn a_short_power_press_that_turns_the_screen_off_locks_and_waking_does_not() {
+        let mut b = brain();
+        b.on_event(Role::Key, &key(KEY_POWER, 1), 1000);
+        let mut fx = b.on_event(Role::Key, &key(KEY_POWER, 0), 1100);
+        fx.extend(tick(&mut b, 1200));
+        assert_eq!(b.screen.state(), ScreenState::Off);
+        assert!(fx.contains(&Effect::LockNow), "{fx:?}");
+        // the press that wakes it again locks nothing
+        b.on_event(Role::Key, &key(KEY_POWER, 1), 5000);
+        let mut fx = b.on_event(Role::Key, &key(KEY_POWER, 0), 5100);
+        fx.extend(tick(&mut b, 5200));
+        assert_ne!(b.screen.state(), ScreenState::Off);
+        assert!(!fx.contains(&Effect::LockNow), "{fx:?}");
     }
 }

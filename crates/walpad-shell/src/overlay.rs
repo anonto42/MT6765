@@ -2,6 +2,7 @@
 //! the forget-network and power dialogs, the power menu, and the two popovers (quick settings and
 //! the Apps panel, drawn by `panels`). Geometry is pure so hit areas are testable.
 use crate::app::Target;
+use walpad_proto::LockKind;
 use walpad_ui::components::{keyboard_layout, ButtonKind, ButtonState, KeyboardLayer, Painter};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
@@ -20,6 +21,12 @@ pub enum SheetPurpose {
     MobileApn,
     /// The SIM PIN (4-8 digits, hidden; sent to the core as a secret).
     SimPin,
+    /// Screen lock (OpenSpec `lock-screen`): the present secret before changing it, the one
+    /// before removing the lock, the new one and its repeat. The kind says what is typed.
+    LockCurrent(LockKind),
+    LockRemove(LockKind),
+    LockNew(LockKind),
+    LockRepeat(LockKind),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +75,40 @@ impl PasswordSheet {
             ..PasswordSheet::new(String::new(), title.into())
         }
     }
+    /// A screen-lock sheet (`purpose` must be one of the four lock purposes); a PIN opens on the
+    /// digits layer.
+    pub fn lock(purpose: SheetPurpose) -> Self {
+        let (title, kind) = match purpose {
+            SheetPurpose::LockCurrent(k) | SheetPurpose::LockRemove(k) => ("Current", k),
+            SheetPurpose::LockNew(k) => ("New", k),
+            SheetPurpose::LockRepeat(k) => ("Repeat new", k),
+            _ => ("Screen lock", LockKind::Pin),
+        };
+        let what = if kind == LockKind::Pin {
+            "PIN"
+        } else {
+            "password"
+        };
+        PasswordSheet {
+            layer: if kind == LockKind::Pin {
+                KeyboardLayer::Symbols
+            } else {
+                KeyboardLayer::Lower
+            },
+            purpose,
+            ..PasswordSheet::new(String::new(), format!("{title} {what}"))
+        }
+    }
+    /// The sheet belongs to the screen-lock flow.
+    pub fn is_lock(&self) -> bool {
+        matches!(
+            self.purpose,
+            SheetPurpose::LockCurrent(_)
+                | SheetPurpose::LockRemove(_)
+                | SheetPurpose::LockNew(_)
+                | SheetPurpose::LockRepeat(_)
+        )
+    }
     /// The APN or SIM PIN sheet. The PIN sheet opens on the digits layer.
     pub fn mobile(purpose: SheetPurpose, initial: &str) -> Self {
         let (title, layer) = match purpose {
@@ -99,6 +140,12 @@ impl PasswordSheet {
             SheetPurpose::HotspotPassword => walpad_proto::valid_hotspot_secret(&self.secret),
             SheetPurpose::MobileApn => walpad_proto::valid_apn(&self.secret),
             SheetPurpose::SimPin => walpad_proto::valid_sim_pin(&self.secret),
+            SheetPurpose::LockCurrent(_) | SheetPurpose::LockRemove(_) => {
+                walpad_proto::valid_attempt(&self.secret)
+            }
+            SheetPurpose::LockNew(k) | SheetPurpose::LockRepeat(k) => {
+                walpad_proto::valid_lock_secret(k, &self.secret)
+            }
         }
     }
     /// Longest text the field takes (bytes).
@@ -109,6 +156,10 @@ impl PasswordSheet {
             SheetPurpose::HotspotPassword => 63,
             SheetPurpose::MobileApn => 62,
             SheetPurpose::SimPin => 8,
+            SheetPurpose::LockCurrent(_)
+            | SheetPurpose::LockRemove(_)
+            | SheetPurpose::LockNew(_)
+            | SheetPurpose::LockRepeat(_) => 64,
         }
     }
 }
@@ -231,6 +282,11 @@ pub fn render_password(
         SheetPurpose::HotspotPassword => ("8-63 characters", true, "Save"),
         SheetPurpose::MobileApn => ("e.g. gpinternet", false, "Save"),
         SheetPurpose::SimPin => ("4-8 digits", true, "Unlock"),
+        SheetPurpose::LockCurrent(_) => ("Current secret", true, "Next"),
+        SheetPurpose::LockRemove(_) => ("Current secret", true, "Remove lock"),
+        SheetPurpose::LockNew(LockKind::Pin) => ("4-12 digits", true, "Next"),
+        SheetPurpose::LockNew(_) => ("4-64 characters", true, "Next"),
+        SheetPurpose::LockRepeat(_) => ("Type it again", true, "Save"),
     };
     if let Some(eye) = p.text_field(
         g.field,

@@ -8,6 +8,7 @@ pub mod daemon;
 pub mod fake;
 pub mod hotspot;
 pub mod inputs;
+pub mod lock;
 pub mod logic;
 pub mod modem;
 pub mod shadow;

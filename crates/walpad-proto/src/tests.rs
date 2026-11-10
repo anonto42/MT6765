@@ -315,6 +315,7 @@ fn sample_status() -> Status {
         mobile: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
+        lock: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,
@@ -569,4 +570,63 @@ fn status_audio_defaults_and_wire_names() {
     v.as_object_mut().unwrap().remove("audio");
     let s: Status = serde_json::from_value(v).unwrap();
     assert_eq!(s.audio, AudioStatus::default());
+}
+
+#[test]
+fn lock_commands_are_validated_and_secrets_redacted() {
+    // owner request 2026-11-10 (lock-screen)
+    let (_, c) =
+        req(r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pin","secret":"4321"}}"#).unwrap();
+    assert!(!format!("{c:?}").contains("4321"), "the PIN is redacted");
+    let (_, c) = req(
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"password","secret":"hunter22x","current":"4321"}}"#,
+    )
+    .unwrap();
+    assert!(!format!("{c:?}").contains("hunter22x") && !format!("{c:?}").contains("4321"));
+    assert!(req(r#"{"v":1,"id":1,"cmd":"unlock","args":{"secret":"4321"}}"#).is_ok());
+    assert!(req(r#"{"v":1,"id":1,"cmd":"lock_remove","args":{"current":"4321"}}"#).is_ok());
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"lock_now","args":{"x":1}}"#)
+            .unwrap()
+            .1,
+        Command::LockNow
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"lock_config","args":{"auto_lock_s":300}}"#)
+            .unwrap()
+            .1,
+        Command::LockConfig { auto_lock_s: 300 }
+    );
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pin","secret":"123"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pin","secret":"1234567890123"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pin","secret":"12a4"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"password","secret":"abc"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pattern","secret":"012"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pattern","secret":"0129"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"pattern","secret":"01210"}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_set","args":{"kind":"tattoo","secret":"1234"}}"#,
+        r#"{"v":1,"id":1,"cmd":"unlock","args":{"secret":""}}"#,
+        r#"{"v":1,"id":1,"cmd":"unlock","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"lock_config","args":{"auto_lock_s":3601}}"#,
+    ] {
+        assert!(req(bad).is_err(), "{bad}");
+    }
+    assert!(valid_lock_secret(LockKind::Pattern, "01258"));
+    assert!(valid_lock_secret(LockKind::Pin, "123456789012"));
+}
+
+#[test]
+fn lock_status_defaults_and_never_carries_a_secret() {
+    let l = LockStatus::default();
+    assert!(!l.configured && !l.locked && l.kind.is_none() && l.retry_in_s.is_none());
+    let v = serde_json::to_value(&l).unwrap();
+    let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        ["auto_lock_s", "configured", "kind", "locked", "retry_in_s"]
+    );
+    let back: LockStatus = serde_json::from_value(serde_json::json!({})).unwrap();
+    assert_eq!(back, l);
 }

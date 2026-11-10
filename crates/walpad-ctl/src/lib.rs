@@ -24,6 +24,9 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   wifi on|off                     the Wi-Fi switch (network level; the chip stays powered)
   hotspot on|off                  start/stop the hotspot (needs a password: hotspot-config)
   hotspot-config [--name N] [--password]   set name and/or password (password read from stdin)
+  lock-now                        lock the screen at once (needs a lock to be set)
+  lock_clear                      RESCUE: remove the screen lock (needs no PIN; run it over SSH or
+                                  the USB recovery shell; also works while the core is down)
   power poweroff|reboot --yes     refuses without --yes
   key-held <name|code>            volumedown|volumeup|power or 114|115|116; exit 0 held, 1 not held,
                                   2 error/unknown device (never blocks, needs no core)";
@@ -75,6 +78,7 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
         Some("home") => ("home".into(), Value::Null),
         Some("back") => ("back".into(), Value::Null),
         Some("screenshot") => ("screenshot".into(), Value::Null),
+        Some("lock-now" | "lock_now") => ("lock_now".into(), Value::Null),
         Some("restart-shell") => ("restart_shell".into(), Value::Null),
         Some("launch") => ("launch".into(), json!({"app": need(1)?})),
         Some("wifi-saved") => ("wifi_list_saved".into(), Value::Null),
@@ -234,6 +238,7 @@ pub fn run_with_stdin(
 ) -> Result<String, String> {
     let sock = root.p(walpad_proto::SOCKET_PATH);
     match args.first().map(String::as_str) {
+        Some("lock_clear" | "lock-clear") => return lock_clear(root),
         Some("wifi-scan") => {
             let d = rpc_wifi(
                 &sock,
@@ -310,6 +315,31 @@ pub fn run_with_stdin(
     run_simple(args, root)
 }
 
+/// The screen-lock rescue. It removes the lock file and the "locked" marker directly (the core
+/// notices within a second and unlocks), so it works without a PIN and even when the core is down.
+/// Whoever can run this already has root on the tablet through SSH keys or the USB recovery shell;
+/// the lock screen itself covers the tablet's own terminal.
+fn lock_clear(root: &Root) -> Result<String, String> {
+    let file = root.p("/var/lib/walpad/lock.json");
+    let existed = file.exists();
+    for p in [
+        file,
+        root.p("/run/walpad/locked"),
+        root.p("/run/walpad/lock-rate"),
+    ] {
+        match std::fs::remove_file(&p) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("cannot remove {}: {e}", p.display())),
+        }
+    }
+    Ok(if existed {
+        "screen lock removed".into()
+    } else {
+        "no screen lock was set".into()
+    })
+}
+
 fn walpad_hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -373,6 +403,29 @@ mod tests {
         assert_eq!(key_held_status(&s(&["key-held", "116"]), &r), 2); // no mtk-pmic-keys here
         assert_eq!(key_held_status(&s(&["key-held", "bogus"]), &r), 2);
         assert_eq!(key_held_status(&s(&["key-held"]), &r), 2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn lock_clear_removes_the_lock_without_a_core_and_without_a_pin() {
+        let root = std::env::temp_dir().join(format!("walpad-ctl-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("var/lib/walpad")).unwrap();
+        std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+        std::fs::write(root.join("var/lib/walpad/lock.json"), "{}").unwrap();
+        std::fs::write(root.join("run/walpad/locked"), "1").unwrap();
+        let r = Root::new(&root);
+        assert_eq!(run(&s(&["lock_clear"]), &r).unwrap(), "screen lock removed");
+        assert!(!root.join("var/lib/walpad/lock.json").exists());
+        assert!(!root.join("run/walpad/locked").exists());
+        assert_eq!(
+            run(&s(&["lock-clear"]), &r).unwrap(),
+            "no screen lock was set"
+        );
+        assert_eq!(
+            build_request(&s(&["lock-now"])).unwrap(),
+            ("lock_now".into(), Value::Null)
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

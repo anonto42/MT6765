@@ -20,6 +20,8 @@ x11rb = { version = "0.13", default-features = false, features = ["xtest"] }
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 sha1 = "0.10"
 hmac = "0.12"
+# screen-lock secret hash: PBKDF2-HMAC-SHA256 (same digest 0.10 family as sha1; pure Rust)
+sha2 = "0.10"
 
 [dev-dependencies]
 # the AT tests run a fake modem on a pseudo-terminal pair

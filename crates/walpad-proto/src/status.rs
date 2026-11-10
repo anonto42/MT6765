@@ -253,6 +253,31 @@ pub struct Hardware {
     pub sd_card: String,
 }
 
+/// What the screen lock is made of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LockKind {
+    Pin,
+    Password,
+    /// 3x3 dot pattern, stored as the visited dots 0-8 (row-major) written as digits.
+    Pattern,
+}
+
+/// The screen lock (owner request 2026-11-10). Never carries a secret or the hash.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LockStatus {
+    /// A PIN / password / pattern is set.
+    pub configured: bool,
+    pub kind: Option<LockKind>,
+    /// The tablet is locked now (the shell shows the lock screen).
+    pub locked: bool,
+    /// Seconds until attempts are accepted again after too many wrong secrets.
+    pub retry_in_s: Option<u32>,
+    /// Lock this long after the screen went off (0 = as soon as it turns off).
+    pub auto_lock_s: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Status {
     pub battery: Battery,
@@ -270,6 +295,7 @@ pub struct Status {
     pub bluetooth: BluetoothStatus,
     #[serde(default)]
     pub audio: AudioStatus,
+    pub lock: LockStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
 }

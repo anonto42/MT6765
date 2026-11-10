@@ -10,17 +10,18 @@ mod status;
 
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
-    valid_apn, valid_bt_address, valid_hotspot_secret, valid_hotspot_ssid, valid_sim_pin,
-    BrightnessArgs, Command, KeyboardMode, PowerAction, RawRequest, RotateMode, ScreenMode,
-    ShellInput, Topic, ALLOWED_SETTINGS, COMMAND_NAMES,
+    lock_secret_rule, valid_apn, valid_attempt, valid_bt_address, valid_hotspot_secret,
+    valid_hotspot_ssid, valid_lock_secret, valid_sim_pin, BrightnessArgs, Command, KeyboardMode,
+    PowerAction, RawRequest, RotateMode, ScreenMode, ShellInput, Topic, ALLOWED_SETTINGS,
+    COMMAND_NAMES,
 };
 pub use devd::parse_devd_line;
 pub use secret::{redact_hex_ssid, Secret};
 pub use status::{
     AppState, AudioStatus, Battery, BatterySource, BluetoothController, BluetoothDevice,
     BluetoothStatus, Hardware, HotspotInternet, HotspotState, HotspotStatus, LegacyStatus,
-    MobileData, MobileReg, MobileStatus, ModemState, ScreenState, SimState, Status, WifiRadio,
-    WifiStatus,
+    LockKind, LockStatus, MobileData, MobileReg, MobileStatus, ModemState, ScreenState,
+    SimState, Status, WifiRadio, WifiStatus,
 };
 
 use serde::{Deserialize, Serialize};

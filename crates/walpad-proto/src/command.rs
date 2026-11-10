@@ -1,4 +1,4 @@
-use crate::{ErrorCode, Secret};
+use crate::{ErrorCode, LockKind, Secret};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -43,6 +43,11 @@ pub const COMMAND_NAMES: &[&str] = &[
     "volume_delta",
     "mute",
     "volume_test",
+    "lock_set",
+    "lock_remove",
+    "unlock",
+    "lock_now",
+    "lock_config",
 ];
 
 /// Commands without arguments.
@@ -57,6 +62,7 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "screenshot",
     "mobile_info",
     "volume_test",
+    "lock_now",
 ];
 
 /// Settings accepted by `set_setting` (section 9 of the plan).
@@ -277,6 +283,29 @@ pub enum Command {
     },
     /// Play the 1 s test tone through the default sink (`walpad-volume test`, bounded).
     VolumeTest,
+    /// Set or change the screen lock (owner request 2026-11-10, `lock-screen`). `current` is the
+    /// present secret and is required when a lock is already set. Secrets are never logged, never
+    /// in argv; the core stores only a salted PBKDF2 hash.
+    LockSet {
+        kind: LockKind,
+        secret: Secret,
+        #[serde(default)]
+        current: Option<Secret>,
+    },
+    /// Remove the screen lock; needs the current secret.
+    LockRemove {
+        current: Secret,
+    },
+    /// Try to unlock. Answers `{unlocked, retry_in_s}`; a wrong secret is not a protocol error.
+    Unlock {
+        secret: Secret,
+    },
+    /// Lock at once.
+    LockNow,
+    /// Auto-lock delay in seconds after the screen has been off (0 = at once).
+    LockConfig {
+        auto_lock_s: u32,
+    },
 }
 
 /// Hardware-key events published on the `input` topic for the shell (never touch).
@@ -402,6 +431,27 @@ impl Command {
                 }
             }
             Command::SetSetting { key, value } => validate_setting(key, value),
+            Command::LockSet {
+                kind,
+                secret,
+                current,
+            } => {
+                if !valid_lock_secret(*kind, secret.expose()) {
+                    return Err(lock_secret_rule(*kind).into());
+                }
+                if current.as_ref().is_some_and(|c| !valid_attempt(c.expose())) {
+                    return Err("current secret is not valid".into());
+                }
+                Ok(())
+            }
+            Command::LockRemove { current: s } | Command::Unlock { secret: s }
+                if !valid_attempt(s.expose()) =>
+            {
+                Err("secret must be 1-128 characters".into())
+            }
+            Command::LockConfig { auto_lock_s } if *auto_lock_s > 3600 => {
+                Err("auto_lock_s must be 0-3600".into())
+            }
             _ => Ok(()),
         }
     }
@@ -439,6 +489,38 @@ pub fn valid_apn(s: &str) -> bool {
 /// SIM PIN: 4-8 ASCII digits.
 pub fn valid_sim_pin(s: &str) -> bool {
     (4..=8).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Rule text for a lock secret kind (shown to the user as is).
+pub fn lock_secret_rule(kind: LockKind) -> &'static str {
+    match kind {
+        LockKind::Pin => "PIN must be 4-12 digits",
+        LockKind::Password => "password must be 4-64 printable characters",
+        LockKind::Pattern => "pattern must connect 4-9 different dots",
+    }
+}
+
+/// A new lock secret: PIN 4-12 digits, password 4-64 printable characters (no control
+/// characters), pattern 4-9 different dots of the 3x3 grid written as the digits 0-8.
+pub fn valid_lock_secret(kind: LockKind, s: &str) -> bool {
+    match kind {
+        LockKind::Pin => (4..=12).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit()),
+        LockKind::Password => {
+            (4..=64).contains(&s.chars().count()) && !s.chars().any(char::is_control)
+        }
+        LockKind::Pattern => {
+            (4..=9).contains(&s.len())
+                && s.bytes().all(|b| (b'0'..=b'8').contains(&b))
+                && s.bytes()
+                    .enumerate()
+                    .all(|(i, b)| !s.as_bytes()[..i].contains(&b))
+        }
+    }
+}
+
+/// A secret offered for verification: any 1-128 bytes (the stored kind decides what it can match).
+pub fn valid_attempt(s: &str) -> bool {
+    (1..=128).contains(&s.len())
 }
 
 /// App ids are short lower-case slugs ("browser", "system-monitor").
