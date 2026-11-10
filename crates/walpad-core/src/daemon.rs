@@ -109,6 +109,8 @@ pub struct Daemon {
     apps_x_at: Instant,
     ext_close: Vec<ExtClose>,
     close_grace: Duration,
+    /// Helper processes started by `spawn_simple` (keyboard, mixer, ...), reaped in `app_tick`.
+    helpers: std::cell::RefCell<Vec<std::process::Child>>,
     /// Until when (ms) the shell's power menu owns the volume and power keys.
     shell_menu_until: Option<u64>,
 }
@@ -209,6 +211,7 @@ impl Daemon {
             apps_x_at: now,
             ext_close: Vec::new(),
             close_grace: Duration::from_secs(3),
+            helpers: Default::default(),
             shell_menu_until: None,
             root,
         };
@@ -307,8 +310,9 @@ impl Daemon {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn();
-        if let Err(e) = r {
-            eprintln!("walpad-core: cannot start {exe}: {e}");
+        match r {
+            Ok(child) => self.helpers.borrow_mut().push(child),
+            Err(e) => eprintln!("walpad-core: cannot start {exe}: {e}"),
         }
     }
 
@@ -329,7 +333,12 @@ impl Daemon {
             .filter_map(|e| {
                 let pid: i32 = e.file_name().to_str()?.parse().ok()?;
                 let comm = std::fs::read_to_string(e.path().join("comm")).ok()?;
-                comm.trim().starts_with(prefix).then_some(pid)
+                // a zombie (state Z, after the comm's closing parenthesis) is not running: its
+                // parent has not reaped it yet (orphans of an earlier core land on the ramdisk's
+                // PID 1, which never reaps)
+                let stat = std::fs::read_to_string(e.path().join("stat")).unwrap_or_default();
+                let state = stat.rsplit_once(") ").and_then(|(_, r)| r.chars().next());
+                (comm.trim().starts_with(prefix) && state != Some('Z')).then_some(pid)
             })
             .collect()
     }
@@ -463,6 +472,10 @@ impl Daemon {
     /// Housekeeping for apps: reap children and publish their exit, look for app windows on
     /// screen, finish pending external closes. Returns true when something changed.
     fn app_tick(&mut self) -> bool {
+        // reap finished helpers so they do not stay zombies
+        self.helpers
+            .borrow_mut()
+            .retain_mut(|c| matches!(c.try_wait(), Ok(None)));
         let now = Instant::now();
         let mut did = false;
         for (id, exit) in self.apps.reap(now) {

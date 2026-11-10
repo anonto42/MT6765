@@ -28,13 +28,14 @@ while [ $# -gt 0 ]; do
 done
 case $RESTART in core|shell|none) ;; *) echo "--restart core|shell|none" >&2; exit 2 ;; esac
 
-SSH_OPTS="-o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o BatchMode=yes"
+# WALPAD_SSH_EXTRA adds ssh options, e.g. "-o UserKnownHostsFile=build/ssh/known_hosts" (each flash makes a new host key).
+SSH_OPTS="-o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o BatchMode=yes ${WALPAD_SSH_EXTRA:-}"
 if [ $LOCAL -eq 0 ]; then
   [ -n "$HOST" ] || HOST=$(bash scripts/wifi_find.sh --ip-only) || { echo "no tablet found; use --host" >&2; exit 1; }
 fi
 rsh() { if [ $LOCAL -eq 1 ]; then sh -c "$1"; else ssh $SSH_OPTS "root@$HOST" "$1"; fi; }
 rput() { # rput local remote
-  if [ $LOCAL -eq 1 ]; then cp "$1" "$2"; else scp -q $SSH_OPTS "$1" "root@$HOST:$2"; fi; }
+  if [ $LOCAL -eq 1 ]; then cp "$1" "$2"; else ssh $SSH_OPTS "root@$HOST" "cat > '$2'" < "$1"; fi; }
 
 do_restart() {
   case $RESTART in
@@ -71,6 +72,9 @@ printf '%s\n' "$SUMS" | sed 's/  / /' | while read -r h n; do
   [ "$got" = "$h" ] || { echo "HASH MISMATCH for $n" >&2; exit 1; }
 done
 rsh "set -e; cd '$REL'; for n in *.new; do chmod 755 \"\$n\"; mv \"\$n\" \"\${n%.new}\"; done
+     # a partial deploy (one FILE) keeps the other binaries of the live release
+     if [ -d '$BASE/current' ]; then for b in '$BASE'/current/walpad-*; do
+       [ -f \"\$b\" ] && [ ! -e \"'$REL'/\$(basename \"\$b\")\" ] && cp -p \"\$b\" '$REL'/; done; fi
      cd '$BASE'
      if [ -L current ] && [ \"\$(readlink current)\" != '$REL' ]; then ln -sfn \"\$(readlink current)\" previous; fi
      ln -sfn '$REL' current
