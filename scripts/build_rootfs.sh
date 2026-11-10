@@ -31,7 +31,8 @@ case $NO_PY in 0|1) ;; *) echo "WALPAD_NO_PYTHON must be 0 or 1" >&2; exit 2;; e
 OUT=${WALPAD_ROOTFS_OUT:-build/rootfs}; [ "$NO_PY" = 1 ] && OUT=${WALPAD_ROOTFS_OUT:-build/rootfs-nopython}
 BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-utils libc-utils dropbear dropbear-ssh \
       wpa_supplicant iw wireless-regdb e2fsprogs e2fsprogs-extra util-linux-misc ca-certificates-bundle tzdata \
-      iproute2 procps curl nano htop kbd fuse-exfat ntfs-3g alsa-utils hostapd iptables"
+      iproute2 procps curl nano htop kbd fuse-exfat ntfs-3g alsa-utils hostapd iptables \
+      bluez bluez-deprecated dbus"
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji \
@@ -47,7 +48,7 @@ if [ "$NO_PY" = 1 ]; then
 fi
 PKGS="$BASE_PKGS"; [ "${WALPAD_GUI:-1}" = "1" ] && PKGS="$BASE_PKGS $GUI_PKGS"
 [ -z "${WALPAD_PRINT_PKGS:-}" ] || { echo "$PKGS"; exit 0; }   # dry run for tests/shell/run.sh
-mkdir -p "$OUT"
+mkdir -p "$OUT" build/bt   # build/bt/hci_vhci.ko comes from scripts/build_bt_module.sh (optional)
 # host-built static tools that go into the image (gitignored binaries): build them if missing
 for t in dmlinear padui fbmirror; do
   [ -x "tools/$t/$t" ] || { echo "building tools/$t"; bash "tools/$t/build.sh" >&2; }
@@ -55,7 +56,7 @@ done
 ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || true)
 [ -n "$ALPINE_DIGEST" ] || { docker pull -q "alpine:$ALPINE_REL" >/dev/null; ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || echo unknown); }
 AUTH=""; [ -f "$HOME/.ssh/id_ed25519.pub" ] && AUTH="$(cat "$HOME/.ssh/id_ed25519.pub")"
-docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro \
+docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro -v "$PWD/build/bt":/bt:ro \
   -e ALPINE_REL="$ALPINE_REL" -e ALPINE_DIGEST="$ALPINE_DIGEST" -e SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}" -e NO_PY="$NO_PY" -e SIZE_MIB="$SIZE_MIB" -e PKGS="$PKGS" -e WALPAD_GUI="${WALPAD_GUI:-1}" -e AUTH="$AUTH" -e UID_="$(id -u)" -e GID_="$(id -g)" \
   "alpine:$ALPINE_REL" sh -euc '
   REL=$(cut -d. -f1,2 /etc/alpine-release)
@@ -86,7 +87,17 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
     ln -sfn ../lib/walpad/current/walpad-core /out/root/usr/local/bin/walpad-core
     ln -sfn ../lib/walpad/current/walpad-shell /out/root/usr/local/bin/walpad-shell
     ln -sfn ../lib/walpad/current/walpad-ctl /out/root/usr/local/bin/walpad-ctl-rs
+    if [ -f /rust/walpad-btbridge ]; then
+      install -m 755 /rust/walpad-btbridge $REL/
+      ln -sfn ../lib/walpad/current/walpad-btbridge /out/root/usr/local/bin/walpad-btbridge
+    fi
   fi
+  # Bluetooth: our hci_vhci.ko for the running 4.19.127 kernel (scripts/build_bt_module.sh), and the
+  # D-Bus system user (apk runs with --no-scripts, so the dbus package did not create it)
+  if [ -f /bt/hci_vhci.ko ]; then mkdir -p /out/root/usr/local/lib/modules && install -m 644 /bt/hci_vhci.ko /out/root/usr/local/lib/modules/; fi
+  grep -q "^messagebus:" /out/root/etc/group || echo "messagebus:x:101:messagebus" >> /out/root/etc/group
+  grep -q "^messagebus:" /out/root/etc/passwd || echo "messagebus:x:100:101:messagebus:/run/dbus:/sbin/nologin" >> /out/root/etc/passwd
+  grep -q "^messagebus:" /out/root/etc/shadow 2>/dev/null || echo "messagebus:!::0:::::" >> /out/root/etc/shadow
   # no-Python image: delete the .py runtime, add the Rust-only session/init/runtime.conf, assert no Python is left
   [ "$NO_PY" = 1 ] && WALPAD_CFG_DIR=/cfg sh /cfg-np/apply.sh /out/root
   chmod 755 /out/root/sbin/walpad-init /out/root/usr/local/sbin/* /out/root/usr/local/bin/*
@@ -100,7 +111,8 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   # sha256 + mode + path of everything the repo owns, as it ended up in the image (before the per-host ssh key)
   { (cd /cfg && find . -type f); [ "$NO_PY" = 1 ] && (cd /cfg-np/files && find . -type f)
     echo ./usr/local/bin/dmlinear; echo ./usr/local/bin/padui; echo ./usr/local/bin/fbmirror
-    [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl; do echo ./usr/local/lib/walpad/image/$b; done
+    [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl walpad-btbridge; do echo ./usr/local/lib/walpad/image/$b; done
+    echo ./usr/local/lib/modules/hci_vhci.ko
     true; } | LC_ALL=C sort -u | while read -r f; do
       [ -f "/out/root/$f" ] || continue
       echo "$(sha256sum "/out/root/$f" | cut -d" " -f1) $(stat -c %a "/out/root/$f") $f"

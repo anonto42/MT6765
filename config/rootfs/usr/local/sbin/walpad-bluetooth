@@ -1,0 +1,171 @@
+#!/bin/sh
+# walpad-bluetooth start|stop|status
+#
+# MediaTek CONNSYS Bluetooth -> BlueZ:
+#   wmt_drv (already loaded by walpad-wifi; NEVER rmmod it: that deadlocks the kernel)
+#   -> insmod /vendor/lib/modules/bt_drv.ko      (creates /dev/stpbt: H:4 stream, open = BT power on)
+#   -> insmod /usr/local/lib/modules/hci_vhci.ko (our build, scripts/build_bt_module.sh; /dev/vhci)
+#   -> walpad-btbridge (copies packets /dev/stpbt <-> /dev/vhci, creates hciN)
+#   -> dbus-daemon (system bus, if not running) -> hciconfig hciN up -> bluetoothd
+# Every step has a timeout and logs one line ("[bt] ..."), also to /dev/kmsg as WALPAD-BT.
+# Optional /etc/walpad/bluetooth.conf: BDADDR=AA:BB:CC:DD:EE:FF (sent with the MediaTek vendor
+# command 0xfc1a before hciN is created; without it the controller keeps its own address).
+#
+# WALPAD_ROOT prefixes every path (host tests run against a fake root with fake commands in PATH).
+R=${WALPAD_ROOT:-}
+RUN=$R/run/walpad
+LOG=$R/var/log
+BT_DRV=$R/vendor/lib/modules/bt_drv.ko
+VHCI_KO=$R/usr/local/lib/modules/hci_vhci.ko
+STPBT=$R/dev/stpbt
+VHCI=$R/dev/vhci
+CONF=$R/etc/walpad/bluetooth.conf
+BRIDGE_PID=$RUN/btbridge.pid
+BRIDGE_READY=$RUN/btbridge.hci
+BRIDGE_STATS=$RUN/btbridge.stats
+BTD_PID=$RUN/bluetoothd.pid
+DBUS_SOCK=$R/run/dbus/system_bus_socket
+WMT_WAIT=${WALPAD_BT_WMT_WAIT:-60}
+
+say() { echo "[bt] $*"; [ -z "$R" ] && echo "WALPAD-BT: $*" > /dev/kmsg 2>/dev/null; return 0; }
+fail() { say "FAILED: $*"; echo failed > "$RUN/bt-state"; exit 1; }
+loaded() { grep -q "^$1 " "$R/proc/modules" 2>/dev/null; }
+alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+# char device present?  (fake roots use plain files)
+chr() { [ -c "$1" ] || { [ -n "$R" ] && [ -e "$1" ]; }; }
+
+# mknod $1 from a sysfs "major:minor" file $2 (wait up to 5 s for it); $3 = fallback "major minor"
+make_node() {
+  node=$1; sysdev=$2; fallback=$3
+  chr "$node" && return 0
+  i=0; while [ ! -r "$sysdev" ] && [ $i -lt 10 ]; do sleep 0.5; i=$((i+1)); done
+  if [ -r "$sysdev" ]; then num=$(cat "$sysdev"); maj=${num%%:*}; min=${num##*:}
+  elif [ -n "$fallback" ]; then set -- $fallback; maj=$1; min=$2; say "no $sysdev, using $maj:$min"
+  else return 1; fi
+  rm -f "$node"; timeout 5 mknod "$node" c "$maj" "$min" && chmod 600 "$node" && say "created $node ($maj:$min)"
+}
+
+# processes holding $1 open (the stpbt driver allows a single opener)
+holders() {
+  for fd in "$R"/proc/[0-9]*/fd/*; do
+    [ "$(readlink "$fd" 2>/dev/null)" = "${1#$R}" ] && { p=${fd#$R/proc/}; echo "${p%%/*}"; }
+  done | sort -u
+}
+
+bluetoothd_bin() {
+  for b in "$R/usr/lib/bluetooth/bluetoothd" "$R/usr/libexec/bluetooth/bluetoothd"; do [ -x "$b" ] && { echo "$b"; return; }; done
+  command -v bluetoothd
+}
+
+start() {
+  mkdir -p "$RUN" "$LOG"
+  if alive "$BRIDGE_PID"; then say "already running ($(cat "$BRIDGE_READY" 2>/dev/null))"; return 0; fi
+  echo starting > "$RUN/bt-state"
+
+  # 1. the CONNSYS stack belongs to walpad-wifi: wait for it, never load or unload it here
+  i=0; while ! loaded wmt_drv && [ $i -lt "$WMT_WAIT" ]; do sleep 1; i=$((i+1)); done
+  loaded wmt_drv || fail "wmt_drv not loaded after ${WMT_WAIT}s (walpad-wifi brings the CONNSYS stack up)"
+  chr "$R/dev/stpwmt" || say "warning: /dev/stpwmt missing (wmt_loader not run?)"
+  say "wmt_drv loaded"
+
+  # 2. vendor BT char driver
+  if ! loaded bt_drv; then
+    [ -f "$BT_DRV" ] || fail "$BT_DRV missing (/vendor not mounted?)"
+    timeout 20 insmod "$BT_DRV" || fail "insmod bt_drv (see dmesg | grep MTK-BT)"
+    say "insmod bt_drv"
+  else say "bt_drv already loaded"; fi
+  make_node "$STPBT" "$R/sys/class/stpbt/stpbt/dev" "192 0" || fail "cannot create $STPBT"
+  h=$(holders "$STPBT"); [ -z "$h" ] || fail "$STPBT already open by pid $h (single opener only)"
+
+  # 3. virtual HCI driver (ours; built for 4.19.127, vermagic/CRCs checked by insmod)
+  # decided by the kernel state, not by /dev/vhci (a node left over after rmmod would skip the insmod)
+  if ! loaded hci_vhci && [ ! -e "$R/sys/class/misc/vhci" ]; then
+    [ -f "$VHCI_KO" ] || fail "$VHCI_KO missing"
+    if ! timeout 10 insmod "$VHCI_KO" 2> "$RUN/insmod-vhci.err"; then
+      say "insmod hci_vhci: $(cat "$RUN/insmod-vhci.err" 2>/dev/null)"
+      dmesg 2>/dev/null | grep -iE 'hci_vhci|disagrees|version magic|Unknown symbol' | tail -5
+      fail "insmod hci_vhci (CRC/vermagic mismatch is refused cleanly; see dmesg above)"
+    fi
+    say "insmod hci_vhci"
+  fi
+  make_node "$VHCI" "$R/sys/class/misc/vhci/dev" "10 137" || fail "cannot create $VHCI"
+
+  # 4. bridge: opening /dev/stpbt powers the BT function on (mtk_wcn_wmt_func_on in BT_open)
+  BDADDR=""; [ -f "$CONF" ] && BDADDR=$(sed -n 's/^BDADDR=\([0-9A-Fa-f:]\{17\}\)$/\1/p' "$CONF")
+  rm -f "$BRIDGE_READY"
+  set -- --stpbt "$STPBT" --vhci "$VHCI" --ready "$BRIDGE_READY" --stats "$BRIDGE_STATS" --open-timeout 15
+  [ -n "$BDADDR" ] && set -- "$@" --bdaddr "$BDADDR"
+  setsid walpad-btbridge "$@" >> "$LOG/walpad-btbridge.log" 2>&1 < /dev/null &
+  echo $! > "$BRIDGE_PID"
+  i=0; while [ ! -s "$BRIDGE_READY" ] && alive "$BRIDGE_PID" && [ $i -lt 50 ]; do sleep 0.5; i=$((i+1)); done
+  if [ ! -s "$BRIDGE_READY" ]; then
+    tail -n 5 "$LOG/walpad-btbridge.log" 2>/dev/null
+    alive "$BRIDGE_PID" && kill "$(cat "$BRIDGE_PID")" 2>/dev/null
+    rm -f "$BRIDGE_PID"
+    fail "bridge did not create an HCI device in 25 s (log: /var/log/walpad-btbridge.log)"
+  fi
+  HCI=$(cat "$BRIDGE_READY")
+  say "bridge pid $(cat "$BRIDGE_PID") -> $HCI"
+
+  # 5. system D-Bus (BlueZ needs it) and bluetoothd
+  if [ ! -S "$DBUS_SOCK" ] || ! pgrep -x dbus-daemon > /dev/null 2>&1; then
+    mkdir -p "$R/run/dbus" "$R/var/lib/dbus"; rm -f "$DBUS_SOCK" "$R/run/dbus/dbus.pid"
+    timeout 5 dbus-uuidgen --ensure 2>/dev/null
+    timeout 10 dbus-daemon --system --fork || fail "dbus-daemon --system"
+    say "dbus-daemon started"
+  fi
+  if command -v hciconfig > /dev/null 2>&1; then
+    timeout 10 hciconfig "$HCI" up && say "hciconfig $HCI up" || say "warning: hciconfig $HCI up failed (bluetoothd will retry via mgmt)"
+  fi
+  if ! alive "$BTD_PID"; then
+    BTD=$(bluetoothd_bin); [ -n "$BTD" ] || fail "bluetoothd not installed (apk add bluez)"
+    setsid "$BTD" -n >> "$LOG/bluetoothd.log" 2>&1 < /dev/null &
+    echo $! > "$BTD_PID"
+    sleep 1; alive "$BTD_PID" || fail "bluetoothd exited (log: /var/log/bluetoothd.log)"
+    say "bluetoothd pid $(cat "$BTD_PID")"
+  fi
+  echo "up $HCI" > "$RUN/bt-state"
+  say "ready: bluetoothctl power on; bluetoothctl scan on"
+}
+
+stop_pid() { # $1 pidfile, $2 name: TERM, wait up to 5 s, then KILL
+  alive "$1" || { rm -f "$1"; return 0; }
+  p=$(cat "$1"); kill "$p" 2>/dev/null
+  i=0; while kill -0 "$p" 2>/dev/null && [ $i -lt 10 ]; do sleep 0.5; i=$((i+1)); done
+  kill -0 "$p" 2>/dev/null && { kill -9 "$p" 2>/dev/null; say "$2 killed"; } || say "$2 stopped"
+  rm -f "$1"
+}
+
+stop() {
+  stop_pid "$BTD_PID" bluetoothd
+  stop_pid "$BRIDGE_PID" walpad-btbridge   # closes /dev/vhci (hciN gone) and /dev/stpbt (BT off)
+  rm -f "$BRIDGE_READY"
+  if loaded hci_vhci; then timeout 10 rmmod hci_vhci && say "rmmod hci_vhci" || say "hci_vhci still in use, left loaded"; fi
+  # bt_drv and wmt_drv stay loaded on purpose (shared CONNSYS stack; rmmod wmt_drv deadlocks)
+  echo stopped > "$RUN/bt-state"
+}
+
+status() {
+  yn() { if "$@"; then echo yes; else echo no; fi; }
+  echo "state:      $(cat "$RUN/bt-state" 2>/dev/null || echo unknown)"
+  echo "wmt_drv:    $(yn loaded wmt_drv)"
+  echo "bt_drv:     $(yn loaded bt_drv)"
+  echo "hci_vhci:   $(yn loaded hci_vhci)"
+  echo "/dev/stpbt: $(yn chr "$STPBT")"
+  echo "/dev/vhci:  $(yn chr "$VHCI")"
+  if alive "$BRIDGE_PID"; then echo "bridge:     running pid $(cat "$BRIDGE_PID") $(cat "$BRIDGE_READY" 2>/dev/null)"
+  else echo "bridge:     stopped"; fi
+  [ -f "$BRIDGE_STATS" ] && sed 's/^/  /' "$BRIDGE_STATS"
+  if alive "$BTD_PID"; then echo "bluetoothd: running pid $(cat "$BTD_PID")"; else echo "bluetoothd: stopped"; fi
+  HCI=$(cat "$BRIDGE_READY" 2>/dev/null)
+  [ -n "$HCI" ] && command -v hciconfig > /dev/null 2>&1 && timeout 5 hciconfig "$HCI" 2>/dev/null | sed 's/^/  /'
+  alive "$BRIDGE_PID"
+}
+
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; start ;;
+  status) status ;;
+  *) echo "usage: walpad-bluetooth start|stop|restart|status" >&2; exit 2 ;;
+esac

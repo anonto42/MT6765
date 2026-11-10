@@ -454,4 +454,75 @@ else
   echo "SKIP walpad-modem data tests (python3 or busybox missing)"
 fi
 
+# --- walpad-bluetooth (fake root, fake insmod/mknod/bridge/bluetoothd)
+BT=$T/bt; BR=$BT/root; BTS=$S/walpad-bluetooth
+mkdir -p "$BT/bin" "$BR/proc" "$BR/dev" "$BR/vendor/lib/modules" "$BR/usr/local/lib/modules" "$BR/usr/lib/bluetooth" "$BR/etc/walpad"
+: > "$BR/vendor/lib/modules/bt_drv.ko"; : > "$BR/usr/local/lib/modules/hci_vhci.ko"; : > "$BR/proc/modules"
+cat > "$BT/bin/insmod" <<EOF
+#!/bin/sh
+echo "insmod \$*" >> $BT/calls
+m=\$(basename "\$1" .ko)
+[ -e $BT/fail-\$m ] && { echo "insmod: ERROR: could not insert module: Invalid argument" >&2; exit 1; }
+echo "\$m 16384 0 - Live 0x0" >> $BR/proc/modules
+case \$m in
+  bt_drv) mkdir -p $BR/sys/class/stpbt/stpbt; echo 192:0 > $BR/sys/class/stpbt/stpbt/dev ;;
+  hci_vhci) mkdir -p $BR/sys/class/misc/vhci; echo 10:137 > $BR/sys/class/misc/vhci/dev ;;
+esac
+EOF
+cat > "$BT/bin/rmmod" <<EOF
+#!/bin/sh
+echo "rmmod \$*" >> $BT/calls; grep -v "^\$1 " $BR/proc/modules > $BT/m; cat $BT/m > $BR/proc/modules
+[ "\$1" = hci_vhci ] && rm -rf $BR/sys/class/misc/vhci
+EOF
+printf '#!/bin/sh\necho "mknod $*" >> %s/calls; : > "$1"\n' "$BT" > "$BT/bin/mknod"
+for c in hciconfig dbus-daemon dbus-uuidgen; do printf '#!/bin/sh\necho "%s $*" >> %s/calls\n' "$c" "$BT" > "$BT/bin/$c"; done
+cat > "$BT/bin/walpad-btbridge" <<EOF
+#!/bin/sh
+echo "bridge \$*" >> $BT/calls
+[ -e $BT/bridge-fail ] && { echo "walpad-btbridge: open /dev/stpbt: EIO"; exit 3; }
+while [ \$# -gt 0 ]; do [ "\$1" = --ready ] && echo hci0 > "\$2"; shift; done
+exec sleep 30
+EOF
+printf '#!/bin/sh\nexec sleep 30\n' > "$BR/usr/lib/bluetooth/bluetoothd"
+chmod +x "$BT/bin/"* "$BR/usr/lib/bluetooth/bluetoothd"
+bt() { WALPAD_ROOT=$BR WALPAD_BT_WMT_WAIT=1 PATH=$BT/bin:$PATH sh "$BTS" "$@" 2>&1; }
+
+OUT=$(bt start); eq "bt: no wmt_drv -> exit 1" "$?" 1
+case $OUT in *"wmt_drv not loaded"*) ok "bt:   says why";; *) bad "bt:   says why" "$OUT" "wmt_drv not loaded";; esac
+eq "bt:   state failed" "$(cat "$BR/run/walpad/bt-state")" failed
+[ -e "$BT/calls" ] && bad "bt:   nothing loaded" "$(cat "$BT/calls")" "" || ok "bt:   nothing loaded"
+
+echo "wmt_drv 1564184 2 - Live 0x0" >> "$BR/proc/modules"
+echo "BDADDR=00:11:22:33:44:55" > "$BR/etc/walpad/bluetooth.conf"
+OUT=$(bt start); eq "bt: start -> exit 0" "$?" 0
+eq "bt:   load order" "$(grep -E '^(insmod|mknod)' "$BT/calls" | sed "s|$BR||g" | tr '\n' ';')" \
+  "insmod /vendor/lib/modules/bt_drv.ko;mknod /dev/stpbt c 192 0;insmod /usr/local/lib/modules/hci_vhci.ko;mknod /dev/vhci c 10 137;"
+grep -q -- "--bdaddr 00:11:22:33:44:55" "$BT/calls" && ok "bt:   BDADDR passed to the bridge" || bad "bt:   BDADDR passed" "$(grep bridge "$BT/calls")" "--bdaddr"
+grep -q "^hciconfig hci0 up" "$BT/calls" && ok "bt:   hciconfig hci0 up" || bad "bt:   hciconfig hci0 up" missing present
+grep -q "^dbus-daemon --system" "$BT/calls" && ok "bt:   system bus started" || bad "bt:   system bus started" missing present
+eq "bt:   state" "$(cat "$BR/run/walpad/bt-state")" "up hci0"
+OUT=$(bt status); eq "bt: status exit 0 while running" "$?" 0
+case $OUT in *"bridge:     running pid"*hci0*"bluetoothd: running"*) ok "bt:   status shows bridge + bluetoothd";; *) bad "bt:   status" "$OUT" "running";; esac
+OUT=$(bt start); case $OUT in *"already running"*) ok "bt: second start is a no-op";; *) bad "bt: second start" "$OUT" "already running";; esac
+eq "bt:   bridge started once" "$(grep -c '^bridge' "$BT/calls")" 1
+BP=$(cat "$BR/run/walpad/btbridge.pid"); DP=$(cat "$BR/run/walpad/bluetoothd.pid")
+bt stop > /dev/null
+kill -0 "$BP" 2>/dev/null && bad "bt: stop ends the bridge" alive dead || ok "bt: stop ends the bridge"
+kill -0 "$DP" 2>/dev/null && bad "bt: stop ends bluetoothd" alive dead || ok "bt: stop ends bluetoothd"
+eq "bt:   only hci_vhci unloaded" "$(grep '^rmmod' "$BT/calls" | tr '\n' ';')" "rmmod hci_vhci;"
+OUT=$(bt status); eq "bt: status exit 1 when stopped" "$?" 1
+
+: > "$BT/bridge-fail"; rm -f "$BR/etc/walpad/bluetooth.conf"
+OUT=$(bt start); eq "bt: bridge failure -> exit 1" "$?" 1
+case $OUT in *"did not create an HCI device"*) ok "bt:   says why";; *) bad "bt:   bridge failure reason" "$OUT" "did not create";; esac
+rm -f "$BT/bridge-fail"; bt stop > /dev/null
+: > "$BT/fail-hci_vhci"
+OUT=$(bt start); eq "bt: insmod hci_vhci refused -> exit 1" "$?" 1
+case $OUT in *"FAILED: insmod hci_vhci"*) ok "bt:   says why";; *) bad "bt:   insmod failure reason" "$OUT" "insmod hci_vhci";; esac
+rm -f "$BT/fail-hci_vhci"
+grep -q '^rmmod wmt_drv\|^rmmod bt_drv' "$BT/calls" && bad "bt: never rmmod wmt_drv/bt_drv" present absent || ok "bt: never rmmod wmt_drv/bt_drv"
+bt stop > /dev/null
+OUT=$(bt bogus); eq "bt: unknown verb" "$?" 2
+for p in bluez bluez-deprecated dbus; do case " $(WALPAD_PRINT_PKGS=1 bash scripts/build_rootfs.sh) " in *" $p "*) ok "image has $p";; *) bad "image has $p" missing present;; esac; done
+
 exit $FAIL
