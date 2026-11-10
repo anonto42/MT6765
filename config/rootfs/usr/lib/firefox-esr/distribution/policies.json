@@ -1,0 +1,11 @@
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DontCheckDefaultBrowser": true,
+    "Permissions": {
+      "Autoplay": {
+        "Default": "block-audio"
+      }
+    }
+  }
+}

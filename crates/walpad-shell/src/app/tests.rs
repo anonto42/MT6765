@@ -10,6 +10,7 @@ use walpad_ui::{Canvas, Fonts};
 mod bluetooth;
 mod hotspot;
 mod mobile;
+mod volume;
 
 pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
     Status {
@@ -37,6 +38,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         bluetooth: Default::default(),
+        audio: Default::default(),
         apps: apps
             .iter()
             .map(|(a, r)| AppState {
@@ -321,6 +323,8 @@ fn home_taps_launch_apps_or_navigate() {
             Target::BtSwitch,
             Target::BatteryCard,
             Target::Slider,
+            Target::VolumeSlider,
+            Target::MuteToggle,
             Target::Rotation,
             Target::ScreenOff
         ]

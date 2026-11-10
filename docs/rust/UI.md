@@ -110,7 +110,9 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   data); Bluetooth (owner request 2026-11-10; subtitle Off / Starting... / On / Connected: <name> / N devices connected / Scanning... / Failed to start / Not available; the row opens Bluetooth, the switch toggles it); Battery (NN %) (opens Device;
   "Battery (~62%)" + "Estimated from voltage" in warning for an estimate, "Battery (unavailable)"
   when there is no reading, the charge state for a gauge); divider; Brightness label + percent and
-  the slider; divider; Rotation: Auto/Locked, Screen off (disabled while the core is away). No
+  the slider; Volume (owner request 2026-11-10: speaker icon, label + percent / "Muted" / "Unavailable",
+  the slider and at its right a round outlined mute button, the speaker crossed out and warning-coloured
+  while muted; disabled while the core reports no sound control); divider; Rotation: Auto/Locked, Screen off (disabled while the core is away). No
   Keyboard row: the keyboard opens where it is needed (a focused text input, dock button). Rows 56 high. The quick toggles keep it open; the two navigation rows and a tap outside
   close it.
 - **Apps panel** (popover 320 wide, bottom-left next to the sidebar, 16 px from the bottom, padding
@@ -154,6 +156,12 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   Portrait flipped/Landscape flipped with a white check; dim after; screen off after; off on cover
   close toggle); Battery (level + source, state, voltage, temperature, thresholds read-only); Touch;
   Hardware. Unavailable hardware stays labelled (warning/danger text), never hidden.
+- **Volume pill** (owner request 2026-11-10): a hardware volume key (core `audio` event, source `key`)
+  shows a 280x48 capsule (SURFACE_STRONG, 1.5 px OUTLINE, speaker icon, bar, percent / "Mute") at 72 % of the
+  content height, centred, for 1.5 s (each press restarts it). Slider changes from the shell show no pill.
+- **Settings > Sound**: a slider row (icon, Volume, percent, 56 px slider), a Mute toggle, a "Play test tone"
+  button (`volume_test`: 1 s 440 Hz through the default sink) and a Sound output info row (Speaker / No sound
+  service). Same controls as Quick Settings; disabled while there is no sound control.
 - **Settings**: 64 px rows with outline icons, dividers and chevrons, each run of rows backed by a
   translucent card (`row_group`, also on Device); subpages have an
   outlined 48 px back button. Maintenance actions are outlined buttons; Restart tablet and Shut down

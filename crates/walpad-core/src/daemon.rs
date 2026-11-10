@@ -7,6 +7,7 @@ use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
 use crate::modem::{MobileError, Modem};
+use crate::volume::Volume;
 use crate::wpa::manager::{Wifi, WifiError, WifiEvent};
 use crate::wpa::parse::{hex, ssid_display, unhex};
 use crate::xbridge::{class_matches, XBridge, XError};
@@ -107,6 +108,7 @@ pub struct Daemon {
     hotspot: Hotspot,
     bluetooth: Bluetooth,
     modem: Modem,
+    volume: Volume,
     xb: Option<XBridge>,
     x_retry: Instant,
     x_ping: Instant,
@@ -244,6 +246,7 @@ impl Daemon {
             hotspot: Hotspot::new(&root),
             bluetooth: Bluetooth::new(&root),
             modem: Modem::new(&root),
+            volume: Volume::new(&root, now),
             xb: None,
             x_retry: now,
             x_ping: now,
@@ -474,6 +477,11 @@ impl Daemon {
     /// Test hook: shorter Bluetooth limits.
     pub fn bluetooth_mut(&mut self) -> &mut Bluetooth {
         &mut self.bluetooth
+    }
+
+    /// Test hook: walpad-volume timeout.
+    pub fn volume_mut(&mut self) -> &mut Volume {
+        &mut self.volume
     }
 
     /// Test hook: modem timeouts and poll periods.
@@ -763,12 +771,9 @@ impl Daemon {
                 }
             }
             Action::Volume(v) => {
-                let arg = if v >= 0 {
-                    format!("{v}%+")
-                } else {
-                    format!("{}%-", -v)
-                };
-                self.spawn_simple("amixer", &["-q", "sset", "Master", &arg]);
+                let now = Instant::now();
+                let a = self.volume.delta(v, now);
+                self.publish_audio("key", a);
             }
             Action::Unknown(s) => eprintln!("walpad-core: unknown key action {s:?}"),
         }
@@ -866,6 +871,7 @@ impl Daemon {
             hotspot: self.hotspot.status().clone(),
             mobile: self.modem.status().clone(),
             bluetooth: bt.clone(),
+            audio: self.volume.status(),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
                 touch: ok(input::find(&devs, input::is_touch).is_some()),
@@ -907,6 +913,16 @@ impl Daemon {
             // the client stays paused while an exclusive hotspot runs
             "held_by_hotspot": on && self.hotspot.status().exclusive,
         }))
+    }
+
+    /// `audio` event on the status topic: `{volume, muted, available, source: "key"|"ipc"}`. The
+    /// shell draws its volume pill for `key` (a slider drag needs no extra feedback).
+    fn publish_audio(&mut self, source: &str, a: walpad_proto::AudioStatus) {
+        self.publish(
+            Topic::Status,
+            "audio",
+            json!({"volume": a.volume, "muted": a.muted, "available": a.available, "source": source}),
+        );
     }
 
     /// `wifi` event `hotspot` with the current hotspot status (state changes, failures).
@@ -962,6 +978,26 @@ impl Daemon {
                 self.apply(fx, true);
                 Ok(json!({"brightness": self.brain.screen.brightness()}))
             }
+            Command::VolumeSet { percent } => {
+                let a = self.volume.set_volume(percent, Instant::now());
+                self.publish_audio("ipc", a);
+                Ok(json!(a))
+            }
+            Command::VolumeDelta { delta } => {
+                let a = self.volume.delta(delta, Instant::now());
+                self.publish_audio("ipc", a);
+                Ok(json!(a))
+            }
+            Command::Mute { on } => {
+                let a = self.volume.set_mute(on, Instant::now());
+                self.publish_audio("ipc", a);
+                Ok(json!(a))
+            }
+            Command::VolumeTest => match self.volume.test_tone(Instant::now()) {
+                Ok(true) => Ok(json!({"playing": true})),
+                Ok(false) => Err((ErrorCode::Busy, "the test tone is still playing".into())),
+                Err(m) => Err((ErrorCode::Internal, m)),
+            },
             Command::Rotate { mode } => {
                 let a = self.brain.rotation.command(mode);
                 let mut fx = Vec::new();
@@ -1310,6 +1346,7 @@ impl Daemon {
             did = true;
         }
         did |= self.modem.tick(Instant::now());
+        did |= self.volume.tick(Instant::now());
         for n in self.modem.take_notices() {
             self.publish(Topic::Notice, "notice", n);
             did = true;

@@ -38,6 +38,10 @@ pub const COMMAND_NAMES: &[&str] = &[
     "screenshot",
     "set_setting",
     "power_menu",
+    "volume_set",
+    "volume_delta",
+    "mute",
+    "volume_test",
 ];
 
 /// Commands without arguments.
@@ -50,6 +54,7 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "restart_shell",
     "screenshot",
     "mobile_info",
+    "volume_test",
 ];
 
 /// Settings accepted by `set_setting` (section 9 of the plan).
@@ -252,6 +257,21 @@ pub enum Command {
     PowerMenu {
         open: bool,
     },
+    /// Output volume 0-100 % (owner request 2026-11-10): software volume of the sound server,
+    /// the codec's gain only when no sound server runs. Persisted by the core.
+    VolumeSet {
+        percent: i32,
+    },
+    /// Relative volume change, -100..100 percentage points (clamped to 0-100 in the result).
+    VolumeDelta {
+        delta: i32,
+    },
+    /// Mute / unmute (the volume is kept).
+    Mute {
+        on: bool,
+    },
+    /// Play the 1 s test tone through the default sink (`walpad-volume test`, bounded).
+    VolumeTest,
 }
 
 /// Hardware-key events published on the `input` topic for the shell (never touch).
@@ -356,6 +376,12 @@ impl Command {
                 if !valid_bt_address(address) =>
             {
                 Err("address must be like AA:BB:CC:DD:EE:FF".into())
+            }
+            Command::VolumeSet { percent } if !(0..=100).contains(percent) => {
+                Err("percent must be 0-100".into())
+            }
+            Command::VolumeDelta { delta } if !(-100..=100).contains(delta) => {
+                Err("delta must be -100..100".into())
             }
             Command::MobileApn { apn } if !valid_apn(apn) => {
                 Err("apn must be 1-62 characters of A-Z a-z 0-9 . - _".into())

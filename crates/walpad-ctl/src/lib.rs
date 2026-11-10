@@ -12,6 +12,8 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   status                          show device status (JSON)
   screen on|off|toggle
   brightness N|+N|-N              native units 0-255
+  volume N|+N|-N                  output volume in percent (0-100)
+  mute on|off
   rotate auto|lock|toggle|0|90|180|270
   keyboard [show|hide|toggle]
   home | screenshot | restart-shell
@@ -48,6 +50,23 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
             } else {
                 ("set_brightness".into(), json!({"value": n}))
             }
+        }
+        Some("volume") => {
+            let s = need(1)?;
+            let n: i32 = s.parse().map_err(|_| format!("bad number {s:?}"))?;
+            if s.starts_with('+') || s.starts_with('-') {
+                ("volume_delta".into(), json!({"delta": n}))
+            } else {
+                ("volume_set".into(), json!({"percent": n}))
+            }
+        }
+        Some("mute") => {
+            let on = match need(1)? {
+                "on" => true,
+                "off" => false,
+                _ => return Err(USAGE.to_string()),
+            };
+            ("mute".into(), json!({"on": on}))
         }
         Some("keyboard") => (
             "keyboard".into(),
@@ -381,6 +400,20 @@ mod tests {
             true
         );
         assert!(build_request(&s(&["brightness", "x"])).is_err());
+        assert_eq!(
+            build_request(&s(&["volume", "+5"])).unwrap(),
+            ("volume_delta".into(), json!({"delta": 5}))
+        );
+        assert_eq!(
+            build_request(&s(&["volume", "40"])).unwrap(),
+            ("volume_set".into(), json!({"percent": 40}))
+        );
+        assert_eq!(
+            build_request(&s(&["mute", "on"])).unwrap(),
+            ("mute".into(), json!({"on": true}))
+        );
+        assert!(build_request(&s(&["mute", "maybe"])).is_err());
+        assert!(build_request(&s(&["volume", "loud"])).is_err());
         assert!(build_request(&s(&["screen"])).is_err());
         assert!(build_request(&s(&["nonsense"])).is_err());
         assert_eq!(

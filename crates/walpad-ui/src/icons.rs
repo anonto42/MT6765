@@ -37,10 +37,13 @@ pub enum Icon {
     Mouse,
     /// SIM card (mobile network, owner request 2026-11-10).
     Sim,
+    /// Speaker with sound waves / crossed out (volume, owner request 2026-11-10).
+    Volume,
+    VolumeOff,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 30] = [
+    pub const ALL: [Icon; 32] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -71,6 +74,8 @@ impl Icon {
         Icon::Spinner,
         Icon::Mouse,
         Icon::Sim,
+        Icon::Volume,
+        Icon::VolumeOff,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -88,6 +93,7 @@ impl Icon {
             "bluetooth" => Icon::Bluetooth,
             "mouse" => Icon::Mouse,
             "sim" => Icon::Sim,
+            "volume" => Icon::Volume,
             _ => return None,
         })
     }
@@ -342,8 +348,33 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.rrect(8.5, 11.0, 7.0, 7.0, 1.0);
             p.line((12.0, 11.0), (12.0, 18.0));
         }
+        Icon::Volume => {
+            speaker(&mut p);
+            p.arc(11.0, 12.0, 5.0, -48.0, 48.0);
+            p.arc(11.0, 12.0, 9.0, -48.0, 48.0);
+        }
+        Icon::VolumeOff => {
+            speaker(&mut p);
+            p.line((16.0, 9.0), (22.0, 15.0));
+            p.line((22.0, 9.0), (16.0, 15.0));
+        }
     }
     (p.stroke.finish(), p.dots.finish())
+}
+
+/// The speaker body of the volume icons.
+fn speaker(p: &mut Pen) {
+    p.poly(
+        &[
+            (3.5, 9.0),
+            (7.5, 9.0),
+            (12.5, 4.5),
+            (12.5, 19.5),
+            (7.5, 15.0),
+            (3.5, 15.0),
+        ],
+        true,
+    );
 }
 
 /// Draw `icon` with its top-left at (x, y), `size` px square (24 = native).
@@ -436,7 +467,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 30);
+        assert_eq!(Icon::ALL.len(), 32);
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }

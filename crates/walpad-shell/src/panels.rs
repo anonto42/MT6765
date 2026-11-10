@@ -26,6 +26,10 @@ pub struct QsGeom {
     pub divider1: i32,
     pub brightness_label: Rect,
     pub slider: Rect,
+    /// Volume block (owner request 2026-11-10): caption line, slider and mute button.
+    pub volume_label: Rect,
+    pub volume_slider: Rect,
+    pub volume_mute: Rect,
     pub divider2: i32,
     pub rotation: Rect,
     pub screen_off: Rect,
@@ -45,7 +49,10 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
     let divider1 = battery.bottom() + 4;
     let brightness_label = Rect::new(ix + SP_3, divider1 + 9, iw - 2 * SP_3, 24);
     let slider = Rect::new(ix, brightness_label.bottom(), iw, 56);
-    let divider2 = slider.bottom() + 4;
+    let volume_label = Rect::new(ix + SP_3, slider.bottom() + 4, iw - 2 * SP_3, 24);
+    let volume_slider = Rect::new(ix, volume_label.bottom(), iw - QS_ROW, 56);
+    let volume_mute = Rect::new(volume_slider.right(), volume_label.bottom(), QS_ROW, 56);
+    let divider2 = volume_slider.bottom() + 4;
     let mut y = divider2 + 5;
     let mut row = || {
         let r = Rect::new(ix, y, iw, QS_ROW);
@@ -64,6 +71,9 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         divider1,
         brightness_label,
         slider,
+        volume_label,
+        volume_slider,
+        volume_mute,
         divider2,
         rotation,
         screen_off,
@@ -363,6 +373,14 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     );
     p.slider(g.slider, m.brightness_value(), m.slider_active, !online);
     hits.push((g.slider, Target::Slider));
+    crate::volume_ui::render_qs(
+        p,
+        m,
+        g.volume_label,
+        g.volume_slider,
+        g.volume_mute,
+        &mut hits,
+    );
     p.divider(g.panel.x + SP_4, g.divider2, g.panel.w - 2 * SP_4);
 
     let rot = if m.status.as_ref().is_some_and(|s| s.rotation_locked) {
@@ -600,6 +618,8 @@ mod tests {
                 g.bluetooth,
                 g.battery,
                 g.slider,
+                g.volume_slider,
+                g.volume_mute,
                 g.rotation,
                 g.screen_off,
             ];

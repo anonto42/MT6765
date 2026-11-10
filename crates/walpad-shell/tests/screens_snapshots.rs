@@ -61,6 +61,11 @@ fn status() -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         bluetooth: Default::default(),
+        audio: walpad_proto::AudioStatus {
+            volume: 60,
+            muted: false,
+            available: true,
+        },
         apps: vec![
             AppState {
                 app: "browser".into(),

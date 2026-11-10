@@ -12,6 +12,7 @@ use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
+use crate::volume_ui::{self, Osd};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use walpad_hw::Root;
@@ -147,6 +148,10 @@ pub enum Target {
     WifiCard,
     BatteryCard,
     Slider,
+    /// Volume slider (Quick Settings and Settings > Sound), mute button / row, test tone button.
+    VolumeSlider,
+    MuteToggle,
+    TestTone,
     Rotation,
     ScreenOff,
     // Home grid (index into `Model::apps`)
@@ -220,6 +225,10 @@ pub enum Target {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cmd {
     SetBrightness(u8),
+    /// `volume_set` percent 0-100, `mute`, `volume_test` (owner request 2026-11-10).
+    SetVolume(u8),
+    Mute(bool),
+    TestTone,
     RotateToggle,
     /// Toggle / show / hide the shell's system keyboard. Handled by the shell loop itself; the
     /// resulting state is reported to the core as `keyboard show|hide`.
@@ -304,6 +313,9 @@ impl Cmd {
     pub fn request(&self) -> (&'static str, Value) {
         match self {
             Cmd::SetBrightness(v) => ("set_brightness", json!({"value": v})),
+            Cmd::SetVolume(v) => ("volume_set", json!({"percent": v})),
+            Cmd::Mute(on) => ("mute", json!({"on": on})),
+            Cmd::TestTone => ("volume_test", Value::Null),
             Cmd::RotateToggle => ("rotate", json!({"mode": "toggle"})),
             Cmd::KeyboardToggle => ("keyboard", json!({"mode": "toggle"})),
             Cmd::KeyboardShow => ("keyboard", json!({"mode": "show"})),
@@ -425,6 +437,10 @@ pub struct Model {
     pub pressed: Option<Target>,
     pub slider_active: bool,
     pub slider_value: f32,
+    /// Which slider is being dragged: `Target::Slider` (brightness) or `Target::VolumeSlider`.
+    pub slider_target: Target,
+    /// The volume pill for a hardware key (None = hidden).
+    pub osd: Option<Osd>,
     pub net: NetModel,
     pub overlay: Option<Overlay>,
     pub toast: Option<Toast>,
@@ -453,6 +469,8 @@ impl Model {
             pressed: None,
             slider_active: false,
             slider_value: 0.0,
+            slider_target: Target::Slider,
+            osd: None,
             net: NetModel::default(),
             overlay: None,
             toast: None,
@@ -469,7 +487,7 @@ impl Model {
 
     /// Slider position 0..=1: the dragged value while dragging, else the core's brightness.
     pub fn brightness_value(&self) -> f32 {
-        if self.slider_active {
+        if self.slider_active && self.slider_target == Target::Slider {
             self.slider_value
         } else {
             self.status
@@ -532,6 +550,10 @@ pub struct App {
     now: Ms,
     /// Commands produced by time (tick), drained by the event loop with `take_cmds`.
     queued: Vec<Cmd>,
+}
+
+fn percent(v: f32) -> u8 {
+    (v.clamp(0.0, 1.0) * 100.0).round() as u8
 }
 
 fn native_brightness(v: f32) -> u8 {
@@ -730,6 +752,17 @@ impl App {
                 }
             }
             CoreEvent::Input(k) => self.on_hw_key(*k, &mut out),
+            // the volume pill for a hardware key (a slider drag needs no extra feedback)
+            CoreEvent::Audio(v) if v["source"] == "key" => {
+                self.model.osd = Some(Osd {
+                    volume: v["volume"].as_u64().unwrap_or(0).min(100) as u8,
+                    muted: v["muted"] == true,
+                    available: v["available"] == true,
+                    until: now + volume_ui::OSD_MS,
+                });
+                out.dirty = true;
+            }
+            CoreEvent::Audio(_) => {}
             // app lifecycle events drive the system keyboard (shell loop), nothing to draw here
             CoreEvent::Apps(_) => {}
             CoreEvent::Reply {
@@ -1085,6 +1118,10 @@ impl App {
             self.model.toast = None;
             dirty = true;
         }
+        if self.model.osd.is_some_and(|o| now >= o.until) {
+            self.model.osd = None;
+            dirty = true;
+        }
         if self.armed_until().is_some_and(|t| now >= t) {
             match &mut self.model.overlay {
                 Some(Overlay::PowerConfirm { armed_until, .. }) => *armed_until = None,
@@ -1116,7 +1153,8 @@ impl App {
             Some(Overlay::PowerMenu { until, .. }) => Some(*until),
             _ => None,
         };
-        [spin, toast, self.armed_until(), menu]
+        let osd = self.model.osd.map(|o| o.until);
+        [spin, toast, osd, self.armed_until(), menu]
             .into_iter()
             .flatten()
             .min()
@@ -1192,7 +1230,7 @@ impl App {
             .iter()
             .chain(self.hits.iter())
             .chain(self.content_hits.iter())
-            .find(|(_, t)| *t == Target::Slider)
+            .find(|(_, t)| *t == self.model.slider_target)
             .map(|(r, _)| *r)
     }
 
@@ -1217,7 +1255,13 @@ impl App {
                 {
                     s.pressed_key = Some(i);
                 }
-                if t == Some(Target::Slider) && self.model.connected {
+                let slider_ok = match t {
+                    Some(Target::Slider) => self.model.connected,
+                    Some(Target::VolumeSlider) => volume_ui::usable(&self.model),
+                    _ => false,
+                };
+                if slider_ok {
+                    self.model.slider_target = t.unwrap_or(Target::Slider);
                     self.model.slider_active = true;
                     self.model.slider_value = self.slider_value_at(x);
                 }
@@ -1277,9 +1321,7 @@ impl App {
                     out.dirty = true;
                     if now.saturating_sub(self.last_slider_send) >= SLIDER_SEND_EVERY_MS {
                         self.last_slider_send = now;
-                        out.cmd(Cmd::SetBrightness(native_brightness(
-                            self.model.slider_value,
-                        )));
+                        out.cmd(self.slider_cmd());
                     }
                 } else if self.scrolls() && self.model.overlay.is_none() {
                     let max = (self.content_h - self.view.h).max(0);
@@ -1292,14 +1334,20 @@ impl App {
             }
             Gesture::DragEnd => {
                 if std::mem::take(&mut self.model.slider_active) {
-                    out.cmd(Cmd::SetBrightness(native_brightness(
-                        self.model.slider_value,
-                    )));
+                    out.cmd(self.slider_cmd());
                     out.dirty = true;
                 }
             }
         }
         out
+    }
+
+    /// The command for the slider being dragged (its value is in `slider_value`).
+    fn slider_cmd(&self) -> Cmd {
+        match self.model.slider_target {
+            Target::VolumeSlider => Cmd::SetVolume(percent(self.model.slider_value)),
+            _ => Cmd::SetBrightness(native_brightness(self.model.slider_value)),
+        }
     }
 
     fn activate(&mut self, id: &str, out: &mut Outcome) {
@@ -1476,10 +1524,24 @@ impl App {
                 let v = if was_slider {
                     self.model.slider_value
                 } else {
+                    self.model.slider_target = Target::Slider;
                     self.slider_value_at(x)
                 };
                 out.cmd(Cmd::SetBrightness(native_brightness(v)));
             }
+            Target::VolumeSlider if volume_ui::usable(&self.model) => {
+                let v = if was_slider {
+                    self.model.slider_value
+                } else {
+                    self.model.slider_target = Target::VolumeSlider;
+                    self.slider_value_at(x)
+                };
+                out.cmd(Cmd::SetVolume(percent(v)));
+            }
+            Target::MuteToggle if volume_ui::usable(&self.model) => {
+                out.cmd(Cmd::Mute(!volume_ui::muted(&self.model)))
+            }
+            Target::TestTone if interactive => out.cmd(Cmd::TestTone),
             Target::Rotation if interactive => out.cmd(Cmd::RotateToggle),
             Target::ScreenOff if interactive => out.cmd(Cmd::ScreenOff),
             Target::Scan
@@ -1625,6 +1687,7 @@ impl App {
     fn settings_rows(&self) -> Vec<settings_screen::Row> {
         match self.model.settings_page {
             None => Vec::new(),
+            Some(Page::Sound) => volume_ui::sound_rows(&self.model),
             Some(pg) => settings_screen::page_rows(
                 pg,
                 &settings_screen::Ctx {
@@ -1959,6 +2022,9 @@ impl App {
         };
         if let Some(t) = &self.model.toast {
             p.toast(frame.content, &t.text, t.tone);
+        }
+        if let Some(o) = &self.model.osd {
+            volume_ui::render_osd(p, frame.content, o);
         }
     }
 

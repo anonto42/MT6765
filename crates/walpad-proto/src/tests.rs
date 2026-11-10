@@ -313,6 +313,7 @@ fn sample_status() -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         bluetooth: Default::default(),
+        audio: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,
@@ -531,4 +532,40 @@ fn old_status_without_bluetooth_parses() {
     let s: Status = serde_json::from_value(v).unwrap();
     assert_eq!(s.bluetooth.controller, BluetoothController::Absent);
     assert!(s.bluetooth.enabled);
+}
+
+#[test]
+fn volume_commands_are_validated() {
+    let (_, c) = req(r#"{"v":1,"id":1,"cmd":"volume_set","args":{"percent":70}}"#).unwrap();
+    assert_eq!(c, Command::VolumeSet { percent: 70 });
+    assert!(req(r#"{"v":1,"id":1,"cmd":"volume_set","args":{"percent":0}}"#).is_ok());
+    assert!(req(r#"{"v":1,"id":1,"cmd":"volume_set","args":{"percent":100}}"#).is_ok());
+    let (_, c) = req(r#"{"v":1,"id":2,"cmd":"volume_delta","args":{"delta":-5}}"#).unwrap();
+    assert_eq!(c, Command::VolumeDelta { delta: -5 });
+    let (_, c) = req(r#"{"v":1,"id":3,"cmd":"mute","args":{"on":true}}"#).unwrap();
+    assert_eq!(c, Command::Mute { on: true });
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"volume_set","args":{"percent":101}}"#,
+        r#"{"v":1,"id":1,"cmd":"volume_set","args":{"percent":-1}}"#,
+        r#"{"v":1,"id":1,"cmd":"volume_set","args":{"percent":"loud"}}"#,
+        r#"{"v":1,"id":1,"cmd":"volume_set"}"#,
+        r#"{"v":1,"id":1,"cmd":"volume_delta","args":{"delta":101}}"#,
+        r#"{"v":1,"id":1,"cmd":"volume_delta","args":{"delta":-101}}"#,
+        r#"{"v":1,"id":1,"cmd":"mute","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"mute","args":{"on":1}}"#,
+    ] {
+        assert_eq!(code(req(bad)), ErrorCode::InvalidArgs, "{bad}");
+    }
+}
+
+#[test]
+fn status_audio_defaults_and_wire_names() {
+    let mut v = serde_json::to_value(sample_status()).unwrap();
+    assert_eq!(
+        v["audio"],
+        json!({"volume": 60, "muted": false, "available": false})
+    );
+    v.as_object_mut().unwrap().remove("audio");
+    let s: Status = serde_json::from_value(v).unwrap();
+    assert_eq!(s.audio, AudioStatus::default());
 }

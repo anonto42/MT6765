@@ -58,6 +58,7 @@ fn status() -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         bluetooth: Default::default(),
+        audio: Default::default(),
         apps: vec![
             AppState {
                 app: "browser".into(),

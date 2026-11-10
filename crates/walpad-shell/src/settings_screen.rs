@@ -13,6 +13,8 @@ use walpad_ui::{Align, Face, Icon, Rect, Style};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Display,
+    /// Volume, mute and the test tone (owner request 2026-11-10).
+    Sound,
     Input,
     Power,
     Network,
@@ -28,8 +30,9 @@ pub enum Page {
     Logs,
 }
 
-pub const CATEGORIES: [(Page, &str, Icon); 11] = [
+pub const CATEGORIES: [(Page, &str, Icon); 12] = [
     (Page::Display, "Display", Icon::Sun),
+    (Page::Sound, "Sound", Icon::Volume),
     (Page::Input, "Input", Icon::Keyboard),
     (Page::Power, "Power", Icon::Power),
     (Page::Network, "Network", Icon::Wifi),
@@ -136,6 +139,16 @@ pub enum Row {
     },
     Link(&'static str, Page),
     Mono(String),
+    /// Label line (icon, name, value text) above a 56 px slider; the slider is the hit area.
+    Slider {
+        icon: Icon,
+        label: &'static str,
+        pct: String,
+        value: f32,
+        active: bool,
+        target: Target,
+        disabled: bool,
+    },
 }
 
 pub struct Ctx<'a> {
@@ -160,7 +173,8 @@ fn secs(s: u32) -> String {
 pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
     let info = |l: &str, (v, t): (String, Tone)| Row::Info(l.into(), v, t);
     match page {
-        Page::Display | Page::Mobile | Page::Bluetooth => Vec::new(),
+        // Sound is built by the app (it needs the live slider state)
+        Page::Display | Page::Mobile | Page::Bluetooth | Page::Sound => Vec::new(),
         Page::Input => {
             let mut r: Vec<Row> = c
                 .sys
@@ -324,6 +338,7 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
 pub fn row_h(r: &Row) -> i32 {
     match r {
         Row::Mono(_) => 22,
+        Row::Slider { .. } => crate::volume_ui::SLIDER_ROW_H,
         _ => ROW_H,
     }
 }
@@ -474,6 +489,34 @@ pub fn render(
                     false,
                 );
                 hits.push((*r, Target::Page(*pg)));
+            }
+            Row::Slider {
+                icon,
+                label,
+                pct,
+                value,
+                active,
+                target,
+                disabled,
+            } => {
+                let lc = if *disabled { TEXT_DISABLED } else { TEXT };
+                let cap = Rect::new(r.x + SP_3, r.y + 8, r.w - 2 * SP_3, 24);
+                p.cv.icon(*icon, cap.x, cap.y, ICON, lc);
+                p.text(
+                    label,
+                    Style::new(Face::Regular, SIZE_SECONDARY + 1.0, lc),
+                    Rect::new(cap.x + ICON + SP_3, cap.y, cap.w - ICON - SP_3, cap.h),
+                    Align::Left,
+                );
+                p.text(
+                    pct,
+                    Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+                    cap,
+                    Align::Right,
+                );
+                let sl = Rect::new(r.x, cap.bottom(), r.w, 56);
+                p.slider(sl, *value, *active, *disabled);
+                hits.push((sl, *target));
             }
             Row::Mono(line) => p.text(
                 line,

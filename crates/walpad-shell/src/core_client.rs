@@ -22,6 +22,8 @@ pub enum CoreEvent {
     /// A hardware-key event for the shell (`input` topic): long power press, volume keys, power,
     /// system keyboard show/hide.
     Input(ShellInput),
+    /// An `audio` event payload ({"volume", "muted", "available", "source": "key"|"ipc"}).
+    Audio(Value),
     /// An `apps` event payload ({"kind":"started","app":"terminal","pid":..}, exited, ...).
     Apps(Value),
     /// The response to a request we sent (handshake replies are not reported).
@@ -185,6 +187,7 @@ impl CoreClient {
                 "wifi" => out.push(CoreEvent::Wifi(v["data"].clone())),
                 "notice" => out.push(CoreEvent::Notice(v["data"].clone())),
                 "apps" => out.push(CoreEvent::Apps(v["data"].clone())),
+                "audio" => out.push(CoreEvent::Audio(v["data"].clone())),
                 "input" => {
                     if let Ok(k) = serde_json::from_value::<ShellInput>(v["data"].clone()) {
                         out.push(CoreEvent::Input(k));

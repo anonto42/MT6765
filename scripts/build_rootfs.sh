@@ -32,7 +32,7 @@ OUT=${WALPAD_ROOTFS_OUT:-build/rootfs}; [ "$NO_PY" = 1 ] && OUT=${WALPAD_ROOTFS_
 BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-utils libc-utils dropbear dropbear-ssh \
       wpa_supplicant iw wireless-regdb e2fsprogs e2fsprogs-extra util-linux-misc ca-certificates-bundle tzdata \
       iproute2 procps curl nano htop kbd fuse-exfat ntfs-3g alsa-utils hostapd iptables \
-      bluez bluez-deprecated dbus"
+      bluez bluez-deprecated dbus pulseaudio pulseaudio-utils"
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji \
@@ -98,6 +98,14 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   grep -q "^messagebus:" /out/root/etc/group || echo "messagebus:x:101:messagebus" >> /out/root/etc/group
   grep -q "^messagebus:" /out/root/etc/passwd || echo "messagebus:x:100:101:messagebus:/run/dbus:/sbin/nologin" >> /out/root/etc/passwd
   grep -q "^messagebus:" /out/root/etc/shadow 2>/dev/null || echo "messagebus:!::0:::::" >> /out/root/etc/shadow
+  # Sound server (walpad-sound): pulseaudio --system drops to the pulse user, which apk (--no-scripts) did
+  # not create; it needs the audio group for /dev/snd.  NOT pulseaudio-alsa / alsa-plugins-pulse: they
+  # would redirect ALSA `default` into pulse while the pulse sink opens ALSA (a loop).
+  grep -q "^pulse:" /out/root/etc/group || echo "pulse:x:102:" >> /out/root/etc/group
+  grep -q "^pulse-access:" /out/root/etc/group || echo "pulse-access:x:103:" >> /out/root/etc/group
+  grep -q "^pulse:" /out/root/etc/passwd || echo "pulse:x:102:102:PulseAudio:/var/lib/pulse:/sbin/nologin" >> /out/root/etc/passwd
+  grep -q "^pulse:" /out/root/etc/shadow 2>/dev/null || echo "pulse:!::0:::::" >> /out/root/etc/shadow
+  awk -F: -v OFS=: "\$1==\"audio\" && \$4 !~ /(^|,)pulse(,|\$)/ { \$4 = (\$4 == \"\" ? \"pulse\" : \$4 \",pulse\") } { print }" /out/root/etc/group > /out/group.new && cat /out/group.new > /out/root/etc/group && rm -f /out/group.new
   # no-Python image: delete the .py runtime, add the Rust-only session/init/runtime.conf, assert no Python is left
   [ "$NO_PY" = 1 ] && WALPAD_CFG_DIR=/cfg sh /cfg-np/apply.sh /out/root
   chmod 755 /out/root/sbin/walpad-init /out/root/usr/local/sbin/* /out/root/usr/local/bin/*

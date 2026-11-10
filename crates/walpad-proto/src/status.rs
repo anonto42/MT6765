@@ -225,6 +225,25 @@ pub struct MobileStatus {
     pub firmware: Option<String>,
 }
 
+/// Output volume (owner request 2026-11-10). `available` = something can change the volume (the
+/// sound server or the codec mixer); until the first probe answers it is false.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioStatus {
+    pub volume: u8,
+    pub muted: bool,
+    pub available: bool,
+}
+
+impl Default for AudioStatus {
+    fn default() -> Self {
+        AudioStatus {
+            volume: 60,
+            muted: false,
+            available: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hardware {
     pub touch: String,
@@ -249,6 +268,7 @@ pub struct Status {
     pub mobile: MobileStatus,
     #[serde(default)]
     pub bluetooth: BluetoothStatus,
+    pub audio: AudioStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
 }

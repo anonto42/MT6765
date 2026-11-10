@@ -546,4 +546,105 @@ for f in config/rootfs/sbin/walpad-init config/rootfs-nopython/files/sbin/walpad
 done
 for p in bluez bluez-deprecated dbus; do case " $(WALPAD_PRINT_PKGS=1 bash scripts/build_rootfs.sh) " in *" $p "*) ok "image has $p";; *) bad "image has $p" missing present;; esac; done
 
+# --- walpad-volume: pulse backend, mixer fallback, test tone (fake pactl/amixer/paplay/aplay)
+VS=$S/walpad-volume
+sh -n "$VS" && ok "syntax walpad-volume" || bad "syntax walpad-volume" error ok
+VB=$T/vol; mkdir -p "$VB/bin"; export VB
+cat > "$VB/bin/pactl" <<'EOF'
+#!/bin/sh
+echo "pactl $*" >> "$VB/calls"
+[ -f "$VB/nopulse" ] && exit 1
+case $1 in
+  info) echo "Server Name: pulseaudio" ;;
+  get-sink-volume) echo "Volume: front-left: 26214 /  $(cat "$VB/vol")% / -11.93 dB,   front-right: 26214 /  $(cat "$VB/vol")% / -11.93 dB"; echo "        balance 0.00" ;;
+  get-sink-mute) if [ "$(cat "$VB/mute")" = 1 ]; then echo "Mute: yes"; else echo "Mute: no"; fi ;;
+  set-sink-volume) v=$3; echo "${v%?}" > "$VB/vol" ;;
+  set-sink-mute) echo "$3" > "$VB/mute" ;;
+esac
+EOF
+cat > "$VB/bin/amixer" <<'EOF'
+#!/bin/sh
+echo "amixer $*" >> "$VB/calls"
+[ -f "$VB/nomixer" ] && exit 1
+case " $* " in
+  *" cget name=Lineout_PGAL_GAIN "*) printf "numid=9,iface=MIXER,name='Lineout_PGAL_GAIN'\n  ; type=ENUMERATED,access=rw------,values=1,items=19\n  : values=%s\n" "$(cat "$VB/gain")" ;;
+  *" cset name=Lineout_PGAL_GAIN "*) echo "$6" > "$VB/gain" ;;
+esac
+exit 0
+EOF
+cat > "$VB/bin/paplay" <<'EOF'
+#!/bin/sh
+echo "paplay $*" >> "$VB/calls"; cp "$1" "$VB/played.wav"
+EOF
+cat > "$VB/bin/aplay" <<'EOF'
+#!/bin/sh
+echo "aplay $*" >> "$VB/calls"; for a; do f=$a; done; cp "$f" "$VB/played.wav"
+EOF
+chmod +x "$VB"/bin/*
+vol() { PATH=$VB/bin:$PATH WALPAD_VOLUME_FILE=$VB/state TMPDIR=$VB sh "$VS" "$@" 2>/dev/null; }
+echo 40 > "$VB/vol"; echo 0 > "$VB/mute"; echo 8 > "$VB/gain"
+eq "vol: get via pulse" "$(vol get | tr '\n' ' ')" "volume=40 muted=0 available=1 backend=pulse "
+vol set 70 >/dev/null; eq "vol: set 70 -> sink volume" "$(cat "$VB/vol")" 70
+grep -q "pactl set-sink-volume @DEFAULT_SINK@ 70%" "$VB/calls" && ok "vol:   uses the default sink" || bad "vol:   default sink" missing present
+vol up >/dev/null; eq "vol: up is +5" "$(cat "$VB/vol")" 75
+vol down 80 >/dev/null; eq "vol: down clamps at 0" "$(cat "$VB/vol")" 0
+vol set 98 >/dev/null; vol up >/dev/null; eq "vol: up clamps at 100" "$(cat "$VB/vol")" 100
+vol mute >/dev/null; eq "vol: mute" "$(cat "$VB/mute")" 1
+eq "vol: get shows muted" "$(vol get | sed -n 's/^muted=//p')" 1
+vol unmute >/dev/null; eq "vol: unmute" "$(cat "$VB/mute")" 0
+vol apply 33 1 >/dev/null; eq "vol: apply sets both" "$(cat "$VB/vol")/$(cat "$VB/mute")" 33/1
+vol up >/dev/null; eq "vol: up unmutes" "$(cat "$VB/mute")/$(cat "$VB/vol")" 0/38
+vol set 101 >/dev/null 2>&1; eq "vol: set 101 refused (exit 2)" "$?" 2
+vol set abc >/dev/null 2>&1; eq "vol: set abc refused" "$?" 2
+vol apply 50 2 >/dev/null 2>&1; eq "vol: apply bad mute refused" "$?" 2
+vol bogus >/dev/null 2>&1; eq "vol: unknown verb" "$?" 2
+# test tone: a 1 s, 44.1 kHz, 440 Hz WAV through the default sink only
+: > "$VB/calls"; vol test; eq "vol: test exit 0" "$?" 0
+grep -q "^paplay " "$VB/calls" && ok "vol:   tone plays through pulse" || bad "vol:   tone through pulse" "$(cat "$VB/calls")" paplay
+grep -q -e "-D hw\|hw:" "$VB/calls" && bad "vol:   never raw hw" present absent || ok "vol:   never raw hw"
+eq "vol:   tone size = 44 + 88200" "$(wc -c < "$VB/played.wav" | tr -d ' ')" 88244
+if command -v python3 >/dev/null 2>&1; then
+  eq "vol:   tone is 1 s mono 44.1 kHz, 440 Hz" "$(python3 -I - "$VB/played.wav" <<'PY'
+import sys, wave, struct, math
+w = wave.open(sys.argv[1])
+n = w.getnframes(); s = struct.unpack("<%dh" % n, w.readframes(n))
+cross = sum(1 for a, b in zip(s, s[1:]) if a < 0 <= b)
+print(w.getnchannels(), w.getframerate(), w.getsampwidth(), n, abs(cross - 440) <= 1, max(s) > 8000, max(s) < 12000)
+PY
+)" "1 44100 2 44100 True True True"
+fi
+# no sound server: the codec PGA gain (0..8) takes over
+touch "$VB/nopulse"; echo 8 > "$VB/gain"; echo "60 0" > "$VB/state"
+eq "vol: fallback get" "$(vol get | tr '\n' ' ')" "volume=100 muted=0 available=1 backend=mixer "
+vol set 50 >/dev/null; eq "vol: fallback set 50 -> gain 4" "$(cat "$VB/gain")" 4
+vol set 100 >/dev/null; eq "vol: fallback 100 -> gain 8 (0 dB, no boost)" "$(cat "$VB/gain")" 8
+vol set 3 >/dev/null; eq "vol: fallback 3 -> gain 1 (not silent)" "$(cat "$VB/gain")" 1
+vol set 0 >/dev/null; eq "vol: fallback 0 -> gain 0" "$(cat "$VB/gain")" 0
+vol apply 60 1 >/dev/null; eq "vol: fallback mute -> gain 0" "$(cat "$VB/gain")" 0
+vol apply 60 0 >/dev/null; eq "vol: fallback unmute -> gain 5" "$(cat "$VB/gain")" 5
+: > "$VB/calls"; vol test; grep -q "^aplay -q -D default " "$VB/calls" && ok "vol: fallback tone uses aplay on default" || bad "vol: fallback tone" "$(cat "$VB/calls")" "aplay -D default"
+grep -q "^paplay" "$VB/calls" && bad "vol: no paplay without a server" present absent || ok "vol: no paplay without a server"
+# nothing at all
+touch "$VB/nomixer"; OUT=$(vol get | tr '\n' ' '); eq "vol: none get" "$OUT" "volume=0 muted=0 available=0 backend=none "
+vol get >/dev/null; eq "vol: none get exits 1" "$?" 1
+vol set 40 >/dev/null; eq "vol: none set exits 1" "$?" 1
+# a hanging pactl is cut by the timeout
+rm -f "$VB/nopulse" "$VB/nomixer"
+printf '#!/bin/sh\nsleep 20\n' > "$VB/bin/pactl"; chmod +x "$VB/bin/pactl"
+t0=$(date +%s); WALPAD_VOLUME_TIMEOUT=1 PATH=$VB/bin:$PATH WALPAD_VOLUME_FILE=$VB/state sh "$VS" get >/dev/null 2>&1; t1=$(date +%s)
+[ $((t1 - t0)) -le 6 ] && ok "vol: hanging pactl is cut by the timeout" || bad "vol: timeout" "$((t1 - t0)) s" "<= 6 s"
+# sound server packages
+for p in pulseaudio pulseaudio-utils; do case " $(WALPAD_PRINT_PKGS=1 bash scripts/build_rootfs.sh) " in *" $p "*) ok "image has $p";; *) bad "image has $p" missing present;; esac; done
+case " $(WALPAD_PRINT_PKGS=1 bash scripts/build_rootfs.sh) " in *" pulseaudio-alsa "*|*" alsa-plugins-pulse "*) bad "no ALSA-to-pulse default (would loop with the pulse sink)" present absent;; *) ok "no ALSA-to-pulse default";; esac
+sh -n "$S/walpad-sound" && ok "syntax walpad-sound" || bad "syntax walpad-sound" error ok
+for f in "$PWD"/config/rootfs/etc/pulse/daemon.conf "$PWD"/config/rootfs/etc/pulse/system.pa "$PWD"/config/rootfs/etc/pulse/client.conf; do
+  [ -f "$f" ] && ok "image ships ${f#*/rootfs}" || bad "image ships ${f#*/rootfs}" missing present
+done
+grep -q "default-sample-rate = 44100" config/rootfs/etc/pulse/daemon.conf && grep -q "alternate-sample-rate = 44100" config/rootfs/etc/pulse/daemon.conf && ok "pulse: fixed 44.1 kHz" || bad "pulse: fixed 44.1 kHz" missing present
+grep -q "tsched=0" config/rootfs/etc/pulse/system.pa && ok "pulse: tsched off" || bad "pulse: tsched off" missing present
+grep -q "udev" config/rootfs/etc/pulse/system.pa && bad "pulse: no udev module" present absent || ok "pulse: no udev module"
+grep -q "autospawn = no" config/rootfs/etc/pulse/client.conf && ok "pulse: clients never autospawn" || bad "pulse: autospawn" missing present
+for f in config/rootfs/usr/lib/firefox-esr/distribution/policies.json; do python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>/dev/null && ok "firefox policies.json is valid JSON" || bad "firefox policies.json" invalid valid; done
+grep -q 'media.cubeb.backend", "pulse"' config/rootfs/usr/lib/firefox-esr/defaults/pref/walpad-audio.js && ok "firefox: pulse cubeb backend" || bad "firefox: pulse backend" missing present
+
 exit $FAIL

@@ -12,5 +12,6 @@ pub mod logic;
 pub mod modem;
 pub mod shadow;
 pub mod shadow_live;
+pub mod volume;
 pub mod wpa;
 pub mod xbridge;

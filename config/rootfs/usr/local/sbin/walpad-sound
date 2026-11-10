@@ -1,0 +1,41 @@
+#!/bin/sh
+# walpad-sound start|stop|status: the system-wide PulseAudio daemon (owner request 2026-11-10).
+# Firefox and other apps play through it (client.conf: unix:/run/pulse/native); it opens the codec
+# only through /etc/asound.conf's walpad_out (44.1 kHz S16 stereo plug) and keeps the volume in
+# software (walpad-volume).  Started from walpad-init after walpad-audio; safe to run again.
+# Configuration: /etc/pulse/{daemon.conf,system.pa,client.conf}; log /run/pulse/pulseaudio.log.
+PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PULSE_SERVER=${PULSE_SERVER:-unix:/run/pulse/native}
+running() { timeout 3 pactl info >/dev/null 2>&1; }
+case $1 in
+  start)
+    [ -e /dev/snd/controlC0 ] || { echo "walpad-sound: no sound card"; exit 0; }
+    command -v pulseaudio >/dev/null 2>&1 || { echo "walpad-sound: pulseaudio is not installed"; exit 0; }
+    running && { echo "walpad-sound: already running"; exit 0; }
+    # system mode drops to the pulse user (created by build_rootfs.sh: apk runs with --no-scripts)
+    id pulse >/dev/null 2>&1 || { echo "walpad-sound: no pulse user"; exit 1; }
+    mkdir -p /run/pulse /var/lib/pulse
+    chown pulse:pulse /run/pulse /var/lib/pulse
+    chmod 755 /run/pulse
+    chgrp audio /dev/snd/* 2>/dev/null; chmod 660 /dev/snd/* 2>/dev/null
+    rm -f /run/pulse/pid /run/pulse/native
+    pulseaudio --system --daemonize=yes --disallow-exit --exit-idle-time=-1 >> /var/log/pulseaudio.out 2>&1
+    i=0; while [ $i -lt 20 ] && ! running; do sleep 0.5; i=$((i + 1)); done
+    if running; then
+      chmod 777 /run/pulse/native 2>/dev/null
+      # the stored level (walpad-core writes /var/lib/walpad/volume as "<percent> <muted>")
+      if [ -r /var/lib/walpad/volume ]; then
+        set -- $(cat /var/lib/walpad/volume 2>/dev/null)
+        [ -n "$1" ] && walpad-volume apply "$1" "${2:-0}" >/dev/null 2>&1
+      fi
+      echo "walpad-sound: up"
+    else
+      echo "walpad-sound: pulseaudio did not come up (see /run/pulse/pulseaudio.log)"; exit 1
+    fi ;;
+  stop)
+    timeout 5 pactl exit 2>/dev/null; sleep 1
+    pkill -x pulseaudio 2>/dev/null; echo "walpad-sound: stopped" ;;
+  status)
+    if running; then echo "walpad-sound: running"; timeout 3 pactl list short sinks 2>/dev/null; else echo "walpad-sound: not running"; exit 1; fi ;;
+  *) echo "usage: walpad-sound start|stop|status" >&2; exit 2 ;;
+esac

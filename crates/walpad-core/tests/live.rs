@@ -367,3 +367,66 @@ fn without_a_subscribed_shell_the_old_menu_path_is_used() {
         "120"
     );
 }
+
+/// Volume keys mapped to `volume:+5` / `volume:-5` change the level through walpad-volume and tell
+/// the shell with an `audio` event (source "key"; owner request 2026-11-10).
+#[test]
+fn volume_key_actions_change_the_level_and_publish_an_audio_event() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tmp("volkeys");
+    fake::populate(&root).unwrap();
+    put_device(&root, 1, "mtk-kpd", &[]);
+    put_device(&root, 2, "mtk-pmic-keys", &[]);
+    std::fs::write(
+        root.join("etc/walpad/keys.json"),
+        r#"{"tap_window_ms":120,"long_ms":600,"vol_up":{"single":"volume:+5"},"vol_down":{"single":"volume:-5"}}"#,
+    )
+    .unwrap();
+    let s = root.join("usr/local/sbin/walpad-volume");
+    std::fs::create_dir_all(s.parent().unwrap()).unwrap();
+    std::fs::write(
+        &s,
+        "#!/bin/sh\necho \"$*\" >> \"$WALPAD_VOLUME_ROOT/vol-calls\"\nprintf 'volume=%s\\nmuted=%s\\navailable=1\\nbackend=pulse\\n' \"${2:-1}\" \"${3:-0}\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&s, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut d = Daemon::new(Root::new(&root)).unwrap();
+    d.enable_live(true, true);
+    let _r = Running::start(d);
+    let mut c = ShellClient::connect(&root);
+    c.send(3, "subscribe", json!({"topics": ["input", "status"]}));
+    std::thread::sleep(Duration::from_millis(300));
+    append_events(
+        &root,
+        1,
+        &[ev(EV_KEY, KEY_VOLUMEUP, 1), ev(EV_KEY, KEY_VOLUMEUP, 0)],
+    );
+    let t = Instant::now();
+    let mut got = None;
+    while got.is_none() && t.elapsed() < Duration::from_secs(5) {
+        let mut l = String::new();
+        if c.r.read_line(&mut l).is_ok() && !l.is_empty() {
+            let v: Value = serde_json::from_str(&l).unwrap();
+            if v["event"] == "audio" {
+                got = Some(v["data"].clone());
+            }
+        }
+    }
+    let a = got.expect("no audio event for the volume key");
+    assert_eq!(
+        (&a["volume"], &a["source"]),
+        (&json!(65), &json!("key")),
+        "{a}"
+    );
+    wait_for("walpad-volume apply 65", || {
+        read(&root, "vol-calls").contains("apply 65 0")
+    });
+    append_events(
+        &root,
+        1,
+        &[ev(EV_KEY, KEY_VOLUMEDOWN, 1), ev(EV_KEY, KEY_VOLUMEDOWN, 0)],
+    );
+    wait_for("walpad-volume apply 60", || {
+        read(&root, "vol-calls").contains("apply 60 0")
+    });
+}

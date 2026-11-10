@@ -21,4 +21,5 @@ pub mod panels;
 pub mod present;
 pub mod settings_screen;
 pub mod shell;
+pub mod volume_ui;
 pub mod window;

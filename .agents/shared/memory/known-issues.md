@@ -7,6 +7,11 @@
   (`scripts/deploy.sh` does this and verifies hashes and the live files).
 - `speaker-test`/raw `hw:0,0` at 48 kHz or default buffers hangs the tablet (hardware watchdog
   reboots it after minutes, sometimes not at all: then hold power 15 s).
+- Sound (owner request 2026-11-10): Firefox/apps play through a system-wide PulseAudio (`walpad-sound`,
+  `/etc/pulse/*`, socket /run/pulse/native) whose only sink is `walpad_out` (asound.conf, the 44.1 kHz plug).
+  Never add `pulseaudio-alsa`/`alsa-plugins-pulse` (they redirect ALSA `default` into pulse: a loop). Volume is
+  software (`walpad-volume`, owned by walpad-core); the codec PGA gain is only the no-pulse fallback. Idle pulse
+  suspends the card after 10 s, so `aplay`/`walpad-volume test` still work then.
 - Kernel threads have the boot ramdisk as root (chroot boot): firmware for request_firmware must be
   bind-mounted under `/proc/2/root` (done in walpad-init).
 - `/dev` is a bind of the ramdisk's: `/dev/pts` must be mounted in the chroot (walpad-init).

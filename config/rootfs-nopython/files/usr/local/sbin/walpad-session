@@ -4,7 +4,7 @@
 # Anything that cannot run ends in walpad-rescue (padui) and the session then idles, so init does
 # not restart it (restarting would put X and fbmirror back on top of padui).
 export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-export HOME=/root DISPLAY=:0 XDG_RUNTIME_DIR=/run/walpad
+export HOME=/root DISPLAY=:0 XDG_RUNTIME_DIR=/run/walpad PULSE_SERVER=unix:/run/pulse/native
 # software rendering only (no GPU user space) and no browser sandbox (no user namespaces in this kernel)
 export LIBGL_ALWAYS_SOFTWARE=1 MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 \
        MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_WEBRENDER=0 MOZ_ACCELERATED=0 GTK_A11Y=none NO_AT_BRIDGE=1

@@ -20,6 +20,7 @@ pub const CONTRACT_ENV: &[(&str, &str)] = &[
     ("MOZ_DISABLE_SOCKET_PROCESS_SANDBOX", "1"),
     ("MOZ_WEBRENDER", "0"),
     ("MOZ_ACCELERATED", "0"),
+    ("PULSE_SERVER", "unix:/run/pulse/native"),
     ("GTK_A11Y", "none"),
     ("NO_AT_BRIDGE", "1"),
     // the shell's XIM server: text-input focus shows and hides the system keyboard (owner request

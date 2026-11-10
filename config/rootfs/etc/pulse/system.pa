@@ -1,0 +1,10 @@
+# WalPad 8G: one ALSA sink on the safe plug "walpad_out" (asound.conf: 44.1 kHz S16 stereo onto
+# hw:0,0).  No hotplug detection module (the image has no hotplug daemon): the card is fixed.
+# tsched=0 (no timer-based scheduling), 4 fragments of 4408 bytes = 1102 frames (about 25 ms) = the
+# period/buffer the driver accepts; mmap=0 (plain read/write access); mixer_reset=0 and ignore_dB=1:
+# pulse never touches the codec's mixer (walpad-audio owns the amp switches), volume is software.
+load-module module-native-protocol-unix auth-anonymous=1 socket=/run/pulse/native
+load-module module-alsa-sink device=walpad_out sink_name=walpad tsched=0 fragments=4 fragment_size=4408 rate=44100 format=s16le channels=2 mmap=0 mixer_reset=0 ignore_dB=1
+set-default-sink walpad
+# release the card after 10 s of silence (an idle PCM must not stay open)
+load-module module-suspend-on-idle timeout=10

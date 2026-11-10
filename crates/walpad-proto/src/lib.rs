@@ -17,9 +17,10 @@ pub use command::{
 pub use devd::parse_devd_line;
 pub use secret::{redact_hex_ssid, Secret};
 pub use status::{
-    AppState, Battery, BatterySource, BluetoothController, BluetoothDevice, BluetoothStatus,
-    Hardware, HotspotInternet, HotspotState, HotspotStatus, LegacyStatus, MobileData, MobileReg,
-    MobileStatus, ModemState, ScreenState, SimState, Status, WifiRadio, WifiStatus,
+    AppState, AudioStatus, Battery, BatterySource, BluetoothController, BluetoothDevice,
+    BluetoothStatus, Hardware, HotspotInternet, HotspotState, HotspotStatus, LegacyStatus,
+    MobileData, MobileReg, MobileStatus, ModemState, ScreenState, SimState, Status, WifiRadio,
+    WifiStatus,
 };
 
 use serde::{Deserialize, Serialize};

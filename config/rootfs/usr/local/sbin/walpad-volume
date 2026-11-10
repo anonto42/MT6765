@@ -1,0 +1,128 @@
+#!/bin/sh
+# walpad-volume: output volume for walpad-core (owner request 2026-11-10).  Fixed verbs, every call
+# to pactl/amixer/paplay/aplay has a timeout.
+#   get              volume=N muted=0|1 available=0|1 backend=pulse|mixer|none
+#   set N            volume 0-100 (keeps the mute state)
+#   up [N] / down [N]  +-N (default 5), clamped to 0-100
+#   mute / unmute
+#   apply N 0|1      volume and mute in one call (what walpad-core runs)
+#   test             1 s 440 Hz tone at 44.1 kHz through the DEFAULT sink only (never raw hw)
+# Backend 1: the PulseAudio sink (software volume, any percentage).  Backend 2, when no sound server
+# answers: the codec's Lineout PGA gain (enumerated 0..19, 8 = 0 dB; we use 0..8, 0 = silent), which is
+# coarse.  Playback never goes through raw hw:0,0 at other rates (it hung the tablet): see asound.conf.
+PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PULSE_SERVER=${PULSE_SERVER:-unix:/run/pulse/native}
+STATE=${WALPAD_VOLUME_FILE:-${WALPAD_VOLUME_ROOT:-}/var/lib/walpad/volume}
+T=${WALPAD_VOLUME_TIMEOUT:-3}
+SINK=@DEFAULT_SINK@
+GAIN_MAX=8
+
+pa()  { timeout "$T" pactl "$@" 2>/dev/null; }
+mix() { timeout "$T" amixer -c 0 "$@" 2>/dev/null; }
+
+pa_get() {   # prints "volume muted"; fails without a sound server / sink
+  v=$(pa get-sink-volume "$SINK") || return 1
+  v=$(printf '%s\n' "$v" | grep -o '[0-9]*%' | head -n 1 | tr -d %)
+  [ -n "$v" ] || return 1
+  m=$(pa get-sink-mute "$SINK") || return 1
+  case $m in *yes*) m=1;; *) m=0;; esac
+  echo "$v $m"
+}
+
+gain_get() {   # current PGA index of the left line-out, empty when there is no mixer
+  mix cget name=Lineout_PGAL_GAIN | sed -n 's/.*: values=\([0-9][0-9]*\).*/\1/p' | head -n 1
+}
+gain_set() {
+  mix -q cset name=Lineout_PGAL_GAIN "$1" && mix -q cset name=Lineout_PGAR_GAIN "$1"
+}
+pct_to_gain() {   # 0 -> 0, 1..100 -> 1..8
+  g=$(( ($1 * GAIN_MAX + 50) / 100 ))
+  [ "$1" -gt 0 ] && [ "$g" -lt 1 ] && g=1
+  echo "$g"
+}
+
+report() {   # volume muted available backend
+  printf 'volume=%s\nmuted=%s\navailable=%s\nbackend=%s\n' "$1" "$2" "$3" "$4"
+}
+
+cmd_get() {
+  if r=$(pa_get); then set -- $r; report "$1" "$2" 1 pulse; return 0; fi
+  g=$(gain_get)
+  if [ -n "$g" ]; then
+    m=0; [ "$g" = 0 ] && m=1
+    report $(( g * 100 / GAIN_MAX )) "$m" 1 mixer; return 0
+  fi
+  report 0 0 0 none; return 1
+}
+
+# apply VOLUME MUTED (MUTED empty = leave the mute state alone)
+cmd_apply() {
+  vol=$1; mute=$2
+  if pa_get >/dev/null; then
+    pa set-sink-volume "$SINK" "${vol}%" || return 1
+    [ -n "$mute" ] && { pa set-sink-mute "$SINK" "$mute" || return 1; }
+    report "$vol" "${mute:-0}" 1 pulse; return 0
+  fi
+  g=$(gain_get)
+  if [ -n "$g" ]; then
+    if [ "$mute" = 1 ]; then n=0; else n=$(pct_to_gain "$vol"); fi
+    gain_set "$n" || return 1
+    report "$vol" "${mute:-0}" 1 mixer; return 0
+  fi
+  report "$vol" "${mute:-0}" 0 none; return 1
+}
+
+num() { case $1 in ''|*[!0-9]*) return 1;; esac; [ "$1" -le 100 ]; }
+
+make_tone() {   # WAV: mono, 16 bit, 44100 Hz, 1 s, 440 Hz at 30 %, 10 ms fades
+  out=$1
+  le32() { printf '\\%03o\\%03o\\%03o\\%03o' $(( $1 & 255 )) $(( ($1 >> 8) & 255 )) $(( ($1 >> 16) & 255 )) $(( ($1 >> 24) & 255 )); }
+  {
+    printf 'RIFF'; printf "$(le32 88236)"; printf 'WAVEfmt '; printf "$(le32 16)"
+    printf '\001\000\001\000'; printf "$(le32 44100)"; printf "$(le32 88200)"; printf '\002\000\020\000'
+    printf 'data'; printf "$(le32 88200)"
+    printf "$(awk 'BEGIN { pi = 3.14159265358979; n = 44100; f = 440
+      for (i = 0; i < n; i++) {
+        a = 0.3; if (i < 441) a = a * i / 441; if (i > n - 441) a = a * (n - i) / 441
+        v = int(a * 32767 * sin(2 * pi * f * i / n)); if (v < 0) v += 65536
+        printf "\\%03o\\%03o", v % 256, int(v / 256) }}')"
+  } > "$out"
+}
+
+cmd_test() {
+  d=$(mktemp -d "${TMPDIR:-/tmp}/walpad-tone.XXXXXX") || return 1
+  trap 'rm -rf "$d"' EXIT
+  make_tone "$d/tone.wav" || return 1
+  if pa info >/dev/null && pa get-sink-volume "$SINK" >/dev/null; then
+    timeout 6 paplay "$d/tone.wav"
+  else
+    timeout 6 aplay -q -D default "$d/tone.wav"
+  fi
+}
+
+case $1 in
+  get) cmd_get ;;
+  set)
+    num "$2" || { echo "usage: walpad-volume set 0-100" >&2; exit 2; }
+    cmd_apply "$2" "" ;;
+  up|down)
+    step=${2:-5}; num "$step" || { echo "usage: walpad-volume $1 [0-100]" >&2; exit 2; }
+    cur=$(cmd_get) || { echo "walpad-volume: no sound control" >&2; report 0 0 0 none; exit 1; }
+    v=$(printf '%s\n' "$cur" | sed -n 's/^volume=//p'); m=$(printf '%s\n' "$cur" | sed -n 's/^muted=//p')
+    if [ "$1" = up ]; then v=$((v + step)); [ "$v" -gt 100 ] && v=100; [ "$m" = 1 ] && m=0
+    else v=$((v - step)); [ "$v" -lt 0 ] && v=0; fi
+    cmd_apply "$v" "$m" ;;
+  mute|unmute)
+    cur=$(cmd_get) || { echo "walpad-volume: no sound control" >&2; report 0 0 0 none; exit 1; }
+    v=$(printf '%s\n' "$cur" | sed -n 's/^volume=//p')
+    # the mixer fallback has no real mute: unmute goes back to the level the core stored
+    if [ "$1" = unmute ] && [ "$(printf '%s\n' "$cur" | sed -n 's/^backend=//p')" = mixer ] && [ -r "$STATE" ]; then
+      s=$(cut -d' ' -f1 "$STATE" 2>/dev/null); num "$s" && v=$s
+    fi
+    if [ "$1" = mute ]; then cmd_apply "$v" 1; else cmd_apply "$v" 0; fi ;;
+  apply)
+    num "$2" && case $3 in 0|1) true;; *) false;; esac || { echo "usage: walpad-volume apply 0-100 0|1" >&2; exit 2; }
+    cmd_apply "$2" "$3" ;;
+  test) cmd_test ;;
+  *) echo "usage: walpad-volume get|set N|up [N]|down [N]|mute|unmute|apply N 0|1|test" >&2; exit 2 ;;
+esac
