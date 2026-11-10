@@ -730,7 +730,7 @@ mod tests {
     fn layout_top_level_and_subpage() {
         let f = Frame::new(800, 1280);
         let top = layout(&f, None, &[]);
-        assert_eq!(top.rows.len(), 11);
+        assert_eq!(top.rows.len(), 12);
         assert!(top.rows.iter().all(|(r, _)| r.h >= TOUCH_MIN) && top.back.is_none());
         let rows = vec![
             Row::Info("a".into(), "b".into(), Tone::Info),

@@ -268,6 +268,7 @@ pub struct Status {
     pub mobile: MobileStatus,
     #[serde(default)]
     pub bluetooth: BluetoothStatus,
+    #[serde(default)]
     pub audio: AudioStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
