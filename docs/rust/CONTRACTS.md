@@ -10,7 +10,7 @@
 - Xvfb :0 -screen 0 1280x1280x24 -fbdir /run/walpad/xfb -nolisten tcp -ac. No MIT-SHM (no SYSVIPC).
 - Visible: 0/180 deg x 0-799,y 0-1279; 90/270 deg x 0-1279,y 0-799.
 - Struts (window `walpad-strut`): portrait right 480 -> `[0,480,0,0, 0,0,0,1279, 0,0,0,0]`; landscape bottom 480 -> `[0,0,0,480, 0,0,0,0, 0,0,0,1279]`.
-- openbox with /etc/walpad/openbox-rc.xml (undecorated, maximised; matchbox-keyboard above).
+- openbox with /etc/walpad/openbox-rc.xml (undecorated, maximised; matchbox-keyboard above: Python runtime only, the Rust runtime uses the shell's system keyboard).
 - Backlight /sys/class/leds/lcd-backlight/brightness 0-255.
 
 ## /run/walpad/
@@ -20,6 +20,11 @@
 - `wifi-state` (walpad-wifi, 4 s): `<wpa_state> <ipv4>` or started/failed.
 - `xfb/Xvfb_screen0`: XWD, mmapped by fbmirror.
 - Wi-Fi: socket dir /run/wpa_supplicant, iface wlan0, /etc/wpa_supplicant/wpa_supplicant.conf (600, update_config=1).
+
+## Control socket `input` topic (core -> shell)
+- Events `{"kind": ...}`: `power_menu_open`, `volume_up`, `volume_down`, `power_short`; `keyboard_show`, `keyboard_hide` (owner request 2026-11-10: the shell's system keyboard replaces matchbox-keyboard).
+- `keyboard {mode: show|hide|toggle}` publishes `keyboard_show|keyboard_hide` (toggle is resolved against the state the shell last reported with `keyboard show|hide`) and answers `{"keyboard": "shown"|"hidden"|"unavailable"}` (unavailable = no client subscribed to `input`). The core never spawns matchbox-keyboard and no longer opens a keyboard on `launch terminal`; the shell shows it on the `apps` event `started` for app `terminal`.
+- System keyboard windows (shell): `walpad-keyboard` (override-redirect, full width, bottom 30 % of the visible area: 384 portrait, 240 landscape; WM_HINTS input=false; keys injected with XTEST) + managed 1x1 `walpad-keyboard-strut` (`_NET_WM_WINDOW_TYPE_DOCK`, bottom strut incl. the root below the panel: 384 / 720). The system dock sits directly above it while both are up.
 
 ## Input (discover by /sys/class/input/input*/name, never by event number; mknod missing nodes; no EVIOCGRAB)
 - HALL_DEV: EV_SW 1 = closed. mtk-kpd: KEY_VOLUMEDOWN 114, KEY_VOLUMEUP 115. mtk-pmic-keys: KEY_POWER 116. kxd-kxd: unused.

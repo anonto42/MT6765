@@ -780,3 +780,237 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
         px(&img, 1280, 5, 30) == (BG.r, BG.g, BG.b) && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
     });
 }
+
+// system keyboard (replaces matchbox-keyboard): override-redirect window at the bottom of the
+// visible area with a managed strut window, XTEST keys into the focused window, minimise, the
+// dock stacked above it, rotation. The test plays the window manager (_NET_ACTIVE_WINDOW, focus).
+
+fn strut_of(c: &XConn, w: Window) -> Vec<u32> {
+    c.conn
+        .get_property(
+            false,
+            w,
+            atom(c, "_NET_WM_STRUT_PARTIAL"),
+            AtomEnum::CARDINAL,
+            0,
+            12,
+        )
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect()
+}
+fn geom(c: &XConn, w: Window) -> (i16, i16, u16, u16) {
+    let g = c.conn.get_geometry(w).unwrap().reply().unwrap();
+    (g.x, g.y, g.width, g.height)
+}
+
+#[test]
+fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
+    use walpad_shell::keyboard::{keyboard_rect, KeyMap, XK_UP};
+    use walpad_ui::components::{system_keyboard_layout, SysKey};
+    use x11rb::protocol::xproto::{
+        CreateWindowAux, EventMask, InputFocus, KeyButMask, WindowClass,
+    };
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-kbd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("run/walpad")).unwrap();
+    let _sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let p = &probe.0;
+    let c = &p.conn;
+    let shell = probe.find_shell().expect("shell window");
+    let kbd = find_by_class(p, b"walpad-keyboard\0").expect("keyboard window exists");
+    let kstrut = find_by_class(p, b"walpad-keyboard-strut\0").expect("keyboard strut window");
+    let dock = find_by_class(p, b"walpad-dock\0").expect("dock window");
+    let dstrut = find_by_class(p, b"walpad-dock-strut\0").expect("dock strut window");
+    assert!(!is_mapped(p, kbd), "hidden until asked for");
+    assert!(
+        c.get_window_attributes(kbd)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .override_redirect,
+        "the window manager never moves or maximises it"
+    );
+    let hints = c
+        .get_property(false, kbd, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 0, 9)
+        .unwrap()
+        .reply()
+        .unwrap()
+        .value32()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(&hints[..2], &[1, 0], "WM_HINTS input=false");
+
+    // a foreign app (the terminal) in front, with the focus; it records its key presses
+    let app = c.generate_id().unwrap();
+    c.create_window(
+        0,
+        app,
+        p.root,
+        0,
+        0,
+        800,
+        800,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        0,
+        &CreateWindowAux::new()
+            .background_pixel(0x0033_6699)
+            .event_mask(EventMask::KEY_PRESS),
+    )
+    .unwrap();
+    c.change_property8(
+        xproto::PropMode::REPLACE,
+        app,
+        AtomEnum::WM_CLASS,
+        AtomEnum::STRING,
+        b"st\0St\0",
+    )
+    .unwrap();
+    c.map_window(app).unwrap();
+    c.flush().unwrap();
+    set_active(p, app);
+    c.set_input_focus(InputFocus::PARENT, app, x11rb::CURRENT_TIME)
+        .unwrap();
+    c.flush().unwrap();
+    wait_for("dock mapped", || is_mapped(p, dock));
+
+    // the dock's Keyboard button (middle third) shows the keyboard: 30 % of 1280 at the bottom,
+    // the dock moves directly above it, struts cover both
+    probe.click(400, 1250);
+    wait_for("keyboard mapped", || is_mapped(p, kbd));
+    assert_eq!(geom(p, kbd), (0, 896, 800, 384));
+    assert!(is_mapped(p, kstrut));
+    assert_eq!(
+        strut_of(p, kstrut),
+        [0, 0, 0, 384, 0, 0, 0, 0, 0, 0, 0, 799]
+    );
+    wait_for("dock above the keyboard", || {
+        geom(p, dock) == (0, 840, 800, 56)
+    });
+    assert_eq!(strut_of(p, dstrut)[3], 440, "dock + keyboard");
+    wait_for("keyboard painted", || {
+        let img = probe.image(kbd, 800, 384);
+        px(&img, 800, 3, 200) == (BG.r, BG.g, BG.b) && count(&img, 800, 0, 800, 0, 384, TEXT) > 500
+    });
+
+    // XTEST into the focused window
+    let setup = c.setup();
+    let km = c
+        .get_keyboard_mapping(setup.min_keycode, setup.max_keycode - setup.min_keycode + 1)
+        .unwrap()
+        .reply()
+        .unwrap();
+    let km = KeyMap {
+        min_keycode: setup.min_keycode,
+        per: km.keysyms_per_keycode as usize,
+        syms: km.keysyms,
+    };
+    let keys = system_keyboard_layout(walpad_ui::Rect::new(0, 0, 800, 384), false);
+    let tap = |k: SysKey| {
+        let r = keys.iter().find(|b| b.key == k).unwrap().rect;
+        let (cx, cy) = r.center();
+        probe.click(cx as i16, (896 + cy) as i16);
+    };
+    let next_press = |what: &str| -> (u8, KeyButMask) {
+        let mut got = None;
+        wait_for(what, || {
+            while let Some(ev) = c.poll_for_event().unwrap() {
+                if let x11rb::protocol::Event::KeyPress(e) = ev {
+                    if e.event == app {
+                        got = Some((e.detail, e.state));
+                        return true;
+                    }
+                }
+            }
+            false
+        });
+        got.unwrap()
+    };
+    // events with state: the last KeyPress of a stroke is the key itself (modifiers first)
+    let key_press = |what: &str, keysym: u32| -> KeyButMask {
+        let want = km.lookup(keysym).expect("keysym in the Xvfb keymap").0;
+        loop {
+            let (code, state) = next_press(what);
+            if code == want {
+                return state;
+            }
+        }
+    };
+    tap(SysKey::Char('a'));
+    let st = key_press("KeyPress a", 'a' as u32);
+    assert!(!st.contains(KeyButMask::CONTROL) && !st.contains(KeyButMask::SHIFT));
+    tap(SysKey::Ctrl);
+    tap(SysKey::Char('c'));
+    let st = key_press("KeyPress ctrl+c", 'c' as u32);
+    assert!(st.contains(KeyButMask::CONTROL), "ctrl is held: {st:?}");
+    tap(SysKey::Shift);
+    tap(SysKey::Char('q'));
+    let st = key_press("KeyPress Q", 'q' as u32);
+    assert!(st.contains(KeyButMask::SHIFT), "shift is held: {st:?}");
+    tap(SysKey::Up);
+    let st = key_press("KeyPress Up", XK_UP);
+    assert!(
+        !st.contains(KeyButMask::CONTROL) && !st.contains(KeyButMask::SHIFT),
+        "one-shot"
+    );
+    // taps on the keyboard did not move the focus away from the app
+    assert_eq!(c.get_input_focus().unwrap().reply().unwrap().focus, app);
+
+    // minimise: the keyboard and its strut go away, the dock returns to the bottom
+    tap(SysKey::Hide);
+    wait_for("keyboard unmapped", || !is_mapped(p, kbd));
+    assert!(!is_mapped(p, kstrut));
+    wait_for("dock back at the bottom", || {
+        geom(p, dock) == (0, 1224, 800, 56)
+    });
+    assert_eq!(strut_of(p, dstrut)[3], 56);
+
+    // rotation: landscape keyboard is 240 high (30 % of 800), the dock sits on top of it
+    c.configure_window(shell, &ConfigureWindowAux::new().width(1280).height(800))
+        .unwrap();
+    c.flush().unwrap();
+    wait_for("dock moved for landscape", || {
+        geom(p, dock) == (0, 744, 1280, 56)
+    });
+    probe.click(640, 772);
+    wait_for("landscape keyboard mapped", || is_mapped(p, kbd));
+    let r = keyboard_rect((1280, 800));
+    assert_eq!(geom(p, kbd), (0, 560, 1280, 240));
+    assert_eq!((r.y, r.h), (560, 240));
+    assert_eq!(strut_of(p, kstrut)[3], 720, "480 below the panel + 240");
+    wait_for("landscape dock above the keyboard", || {
+        geom(p, dock) == (0, 504, 1280, 56)
+    });
+    assert_eq!(strut_of(p, dstrut)[3], 776);
+
+    // Home (dock) puts the keyboard away
+    probe.click(100, 530);
+    wait_for("keyboard hidden by Home", || !is_mapped(p, kbd));
+
+    // shown again, then the shell comes to the front (the user went Home another way): hidden.
+    // Home raised the shell over the dock: the window manager reports the shell, then the app
+    set_active(p, shell);
+    wait_for("dock unmapped for the shell", || !is_mapped(p, dock));
+    set_active(p, app);
+    wait_for("dock mapped again", || is_mapped(p, dock));
+    wait_for("dock at the landscape bottom", || {
+        geom(p, dock) == (0, 744, 1280, 56)
+    });
+    probe.click(640, 772);
+    wait_for("keyboard shown again", || is_mapped(p, kbd));
+    set_active(p, shell);
+    wait_for("keyboard hidden when the shell is active", || {
+        !is_mapped(p, kbd)
+    });
+}

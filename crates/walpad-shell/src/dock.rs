@@ -51,30 +51,17 @@ pub fn visible_area(shell_w: i32, shell_h: i32) -> (i32, i32) {
     }
 }
 
-/// The dock window: full width, flush with the bottom of the visible area.
-pub fn dock_rect(area: (i32, i32)) -> Rect {
-    Rect::new(0, area.1 - DOCK_H, area.0, DOCK_H)
+/// The dock window: full width, flush with the bottom of the visible area, or directly above the
+/// system keyboard while it is up (`kbd_h` = its height, 0 when hidden).
+pub fn dock_rect(area: (i32, i32), kbd_h: i32) -> Rect {
+    Rect::new(0, area.1 - kbd_h - DOCK_H, area.0, DOCK_H)
 }
 
 /// `_NET_WM_STRUT_PARTIAL`: struts count from the screen edge, so the part of the root below the
-/// visible area is included (landscape: 480 + 56).
-pub fn strut_partial(area: (i32, i32), root_h: i32) -> [u32; 12] {
-    let r = dock_rect(area);
-    let bottom = (root_h - r.y).max(0) as u32;
-    [
-        0,
-        0,
-        0,
-        bottom,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        r.x as u32,
-        (r.right() - 1).max(0) as u32,
-    ]
+/// visible area is included (landscape: 480 + 56), and so is the keyboard under the dock (the
+/// combined strut; the keyboard's own strut is smaller, the window manager takes the largest).
+pub fn strut_partial(area: (i32, i32), kbd_h: i32, root_h: i32) -> [u32; 12] {
+    crate::keyboard::bottom_strut(dock_rect(area, kbd_h), root_h)
 }
 
 /// Hit areas of the three buttons (equal thirds of the strip, strip-local coordinates).
@@ -198,6 +185,8 @@ pub struct Dock {
     apps: Vec<(String, String)>,
     root_h: i32,
     area: (i32, i32),
+    /// Height of the system keyboard below the dock (0 while it is hidden).
+    kbd_h: i32,
     mapped: bool,
     active: u32,
     pressed: Option<DockButton>,
@@ -229,7 +218,7 @@ impl Dock {
         let depth = setup.roots.first().map(|s| s.root_depth).unwrap_or(24);
         let root_h = conn.get_geometry(xc.root)?.reply()?.height as i32;
         let area = visible_area(shell_size.0, shell_size.1);
-        let r = dock_rect(area);
+        let r = dock_rect(area, 0);
         let win = conn.generate_id()?;
         let aux = CreateWindowAux::new()
             .event_mask(
@@ -347,6 +336,7 @@ impl Dock {
             apps,
             root_h,
             area,
+            kbd_h: 0,
             mapped: false,
             active: 0,
             pressed: None,
@@ -374,7 +364,7 @@ impl Dock {
     }
 
     fn write_strut(&self) -> Result<(), XError> {
-        let s = strut_partial(self.area, self.root_h);
+        let s = strut_partial(self.area, self.kbd_h, self.root_h);
         let c = &self.xc.conn;
         c.change_property32(
             PropMode::REPLACE,
@@ -433,8 +423,22 @@ impl Dock {
             return Ok(());
         }
         self.area = area;
-        let r = dock_rect(area);
+        let r = dock_rect(area, self.kbd_h);
         self.canvas = Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?;
+        self.place(r)
+    }
+
+    /// The system keyboard appeared (its height) or went away (0): stack the strip directly above
+    /// it and extend the strut over both.
+    pub fn set_keyboard_height(&mut self, kbd_h: i32) -> Result<(), XError> {
+        if kbd_h == self.kbd_h {
+            return Ok(());
+        }
+        self.kbd_h = kbd_h;
+        self.place(dock_rect(self.area, kbd_h))
+    }
+
+    fn place(&mut self, r: Rect) -> Result<(), XError> {
         self.xc.conn.configure_window(
             self.win,
             &ConfigureWindowAux::new()
@@ -467,7 +471,7 @@ impl Dock {
             // openbox places a newly mapped window itself (it ended up at the top of the screen,
             // covering the app): ask for our place again once mapped, and put the strip on top
             // (a remapped window keeps its old place in the stack)
-            let r = dock_rect(self.area);
+            let r = dock_rect(self.area, self.kbd_h);
             self.xc.conn.configure_window(
                 self.win,
                 &ConfigureWindowAux::new()
@@ -552,6 +556,8 @@ impl Dock {
                     if let (Some(b), true) = (hit, hit == down) {
                         if b == DockButton::Home {
                             self.raise_shell()?;
+                            // going Home puts the system keyboard away
+                            cmds.push(Cmd::KeyboardHide);
                         } else {
                             let class = self.class_of(self.active);
                             cmds.extend(command_for(b, &self.apps, &class));
@@ -583,8 +589,11 @@ mod tests {
 
     #[test]
     fn strip_sits_at_the_bottom_of_the_visible_area_in_both_orientations() {
-        assert_eq!(dock_rect((800, 1280)), Rect::new(0, 1224, 800, 56));
-        assert_eq!(dock_rect((1280, 800)), Rect::new(0, 744, 1280, 56));
+        assert_eq!(dock_rect((800, 1280), 0), Rect::new(0, 1224, 800, 56));
+        assert_eq!(dock_rect((1280, 800), 0), Rect::new(0, 744, 1280, 56));
+        // directly above the system keyboard while it is up
+        assert_eq!(dock_rect((800, 1280), 384), Rect::new(0, 840, 800, 56));
+        assert_eq!(dock_rect((1280, 800), 240), Rect::new(0, 504, 1280, 56));
     }
 
     #[test]
@@ -602,10 +611,13 @@ mod tests {
     #[test]
     fn strut_counts_from_the_screen_edge() {
         // Xvfb is 1280x1280: portrait leaves 0 below the panel, landscape 480
-        let p = strut_partial((800, 1280), 1280);
+        let p = strut_partial((800, 1280), 0, 1280);
         assert_eq!((p[3], p[10], p[11]), (56, 0, 799));
-        let l = strut_partial((1280, 800), 1280);
+        let l = strut_partial((1280, 800), 0, 1280);
         assert_eq!((l[3], l[10], l[11]), (536, 0, 1279));
+        // combined with the keyboard: dock + keyboard (+ 480 below the panel in landscape)
+        assert_eq!(strut_partial((800, 1280), 384, 1280)[3], 440);
+        assert_eq!(strut_partial((1280, 800), 240, 1280)[3], 776);
         assert!(p[..3].iter().chain(&p[4..10]).all(|v| *v == 0));
     }
 

@@ -28,7 +28,6 @@ const X_RETRY: Duration = Duration::from_secs(2);
 const X_PING_EVERY: Duration = Duration::from_secs(5);
 const APPS_X_EVERY: Duration = Duration::from_millis(700);
 const MAX_OUT: usize = 256 * 1024;
-const KEYBOARD_DOCK_DELAY_MS: u64 = 1500;
 /// Safety net: the shell closes its power menu after 20 s and says so (`power_menu` closed); if it
 /// never does (crash), the core stops routing keys to it after this long.
 const SHELL_MENU_MAX_MS: u64 = 25_000;
@@ -105,7 +104,8 @@ pub struct Daemon {
     xb: Option<XBridge>,
     x_retry: Instant,
     x_ping: Instant,
-    dock_at: Option<u64>,
+    /// The shell's system keyboard is up (what the shell last reported or we last asked for).
+    keyboard_shown: bool,
     apps_x_at: Instant,
     ext_close: Vec<ExtClose>,
     close_grace: Duration,
@@ -207,7 +207,7 @@ impl Daemon {
             xb: None,
             x_retry: now,
             x_ping: now,
-            dock_at: None,
+            keyboard_shown: false,
             apps_x_at: now,
             ext_close: Vec::new(),
             close_grace: Duration::from_secs(3),
@@ -355,21 +355,26 @@ impl Daemon {
         n
     }
 
+    /// The on-screen keyboard is the shell's system keyboard (owner request 2026-11-10: replaces
+    /// matchbox-keyboard): ask the shell over the `input` topic. The shell reports its own changes
+    /// (dock button, minimise key, Home) with `keyboard show|hide`, so `toggle` resolves against
+    /// its real state. "unavailable" when no shell listens.
     fn keyboard(&mut self, mode: KeyboardMode) -> &'static str {
-        let running = !self.pids_by_comm("matchbox-keyb").is_empty();
+        if !self.shell_listening() {
+            return "unavailable";
+        }
         let show = match mode {
             KeyboardMode::Show => true,
             KeyboardMode::Hide => false,
-            KeyboardMode::Toggle => !running,
+            KeyboardMode::Toggle => !self.keyboard_shown,
         };
-        if show && !running {
-            self.spawn_simple("matchbox-keyboard", &[]);
-            self.dock_at = Some(self.now_ms() + KEYBOARD_DOCK_DELAY_MS);
-            "shown"
-        } else if !show && running {
-            self.terminate("matchbox-keyb");
-            "hidden"
-        } else if show {
+        self.keyboard_shown = show;
+        self.publish_input(if show {
+            ShellInput::KeyboardShow
+        } else {
+            ShellInput::KeyboardHide
+        });
+        if show {
             "shown"
         } else {
             "hidden"
@@ -405,11 +410,6 @@ impl Daemon {
             "apps",
             json!({"kind": "started", "app": id, "pid": pid}),
         );
-        // a terminal is useless without keys: open the on-screen keyboard with it (the dock's
-        // Keyboard button minimises it again)
-        if id == "terminal" {
-            self.keyboard(KeyboardMode::Show);
-        }
         Ok("launched")
     }
 
@@ -691,6 +691,9 @@ impl Daemon {
             Action::Run(c) => eprintln!("walpad-core: run:{c} rejected (use launch:<app-id>)"),
             Action::Home => {
                 self.x_try(|b| b.focus_title("WalPad Home"));
+                if self.keyboard_shown {
+                    self.keyboard(KeyboardMode::Hide);
+                }
             }
             Action::Keyboard => {
                 self.keyboard(KeyboardMode::Toggle);
@@ -1015,13 +1018,6 @@ impl Daemon {
         let mut b = || read_battery(&root);
         fx.extend(self.brain.tick(now, &mut g, &mut b));
         self.apply(fx, false);
-        if let Some(t) = self.dock_at {
-            if now >= t {
-                self.dock_at = None;
-                let o = self.brain.orientation();
-                self.x_try(|b| b.dock_keyboard(o).map(|_| ()));
-            }
-        }
         self.x_maintain();
     }
 

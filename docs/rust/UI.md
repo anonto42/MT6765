@@ -111,6 +111,14 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   the menu closes after 20 s.
 - **System dock (D3)**: 56 px charcoal strip with a top divider and three outlined pill buttons
   (Home, Keyboard, Close app in danger), bottom strut only while another app is in front.
+- **System keyboard** (replaces matchbox-keyboard): override-redirect strip, full width, 30 % of
+  the visible height at the bottom (384 portrait, 240 landscape), BG with a top divider, outlined
+  keys (radius 8), pressed or latched = 10 % fill + white outline. Five rows, 12 key units wide:
+  Esc Tab 1-0 / q-p Backspace / Ctrl a-l Enter / Shift z-m . Up / / ?123, minimise, space,
+  Left Down Right (symbols layer: ! @ # ... and < > ` ~ \ ; : ' " , ?). Shift and Ctrl are
+  one-shot. Toggled by the dock and Quick Settings Keyboard buttons, the core's `keyboard`
+  command; shown when the terminal starts; hidden by the minimise key or going Home. The dock
+  moves directly above it.
 
 ## Components and states
 Outline box / icon box / round button (rest, active, pressed); Button primary (2 px white outline),

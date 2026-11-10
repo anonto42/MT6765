@@ -14,7 +14,7 @@ walpad-x = { path = "../walpad-x" }
 walpad-proto = { path = "../walpad-proto" }
 serde_json = "1"
 jiff = "0.2"
-x11rb = { version = "0.13", default-features = false }
+x11rb = { version = "0.13", default-features = false, features = ["xtest"] }
 
 [dev-dependencies]
 walpad-core = { path = "../walpad-core" }

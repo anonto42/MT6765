@@ -6,12 +6,14 @@ use crate::config::read_devd;
 use crate::core_client::{CoreClient, CoreEvent};
 use crate::dock::{load_wm_classes, Dock};
 use crate::gesture::{Gesture, Recogniser};
+use crate::keyboard::SysKeyboard;
 use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use walpad_hw::Root;
+use walpad_proto::ShellInput;
 use walpad_ui::components::Painter;
 use walpad_ui::tokens::BG;
 use walpad_ui::{Canvas, Fonts};
@@ -29,6 +31,8 @@ pub struct Shell {
     win: Window,
     /// The system dock (None when its X connection could not be opened or died).
     dock: Option<Dock>,
+    /// The system keyboard (None when its X connection could not be opened or died).
+    kbd: Option<SysKeyboard>,
     core: CoreClient,
     canvas: Canvas,
     fonts: Fonts,
@@ -77,6 +81,13 @@ impl Shell {
                 None
             }
         };
+        let kbd = match SysKeyboard::open(&sock, win.win, (w, h)) {
+            Ok(k) => Some(k),
+            Err(e) => {
+                eprintln!("walpad-shell: system keyboard disabled: {}", e.0);
+                None
+            }
+        };
         let canvas =
             Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
         let clock_24h = read_clock_24h(&opts.root);
@@ -89,6 +100,7 @@ impl Shell {
         Ok(Shell {
             win,
             dock,
+            kbd,
             core,
             canvas,
             fonts,
@@ -112,11 +124,68 @@ impl Shell {
 
     fn send(&mut self, cmds: Vec<Cmd>) {
         for c in cmds {
+            // the system keyboard is ours: apply locally, then report the state to the core
+            let kbd = match c {
+                Cmd::KeyboardToggle => Some(!self.keyboard_visible()),
+                Cmd::KeyboardShow => Some(true),
+                Cmd::KeyboardHide => Some(false),
+                _ => None,
+            };
+            if let Some(on) = kbd {
+                self.set_keyboard(on, true);
+                continue;
+            }
             let (name, args) = c.request();
             if let Some(id) = self.core.send(name, args) {
                 self.app.note_sent(id, &c);
             }
         }
+    }
+
+    pub fn keyboard_visible(&self) -> bool {
+        self.kbd.as_ref().is_some_and(|k| k.visible())
+    }
+
+    /// Show/hide the system keyboard, move the dock above it, and (`report`) tell the core, so
+    /// its `keyboard toggle` (hardware keys, walpad-ctl) knows the real state. Requests that came
+    /// from the core are not reported back.
+    fn set_keyboard(&mut self, on: bool, report: bool) {
+        let Some(mut k) = self.kbd.take() else {
+            return;
+        };
+        match k.set_visible(on, &mut self.fonts) {
+            Ok(()) => {
+                let h = if on { k.height() } else { 0 };
+                self.kbd = Some(k);
+                self.keyboard_changed(h);
+            }
+            Err(e) => {
+                eprintln!("walpad-shell: system keyboard disabled: {}", e.0);
+                self.keyboard_changed(0);
+            }
+        }
+        if report {
+            self.report_keyboard();
+        }
+    }
+
+    /// The keyboard's height changed (shown, hidden, rotated): the dock sits directly above it.
+    fn keyboard_changed(&mut self, kbd_h: i32) {
+        if let Some(d) = &mut self.dock {
+            if let Err(e) = d.set_keyboard_height(kbd_h) {
+                eprintln!("walpad-shell: system dock: {}", e.0);
+            }
+        }
+    }
+
+    fn report_keyboard(&mut self) {
+        let c = if self.keyboard_visible() {
+            Cmd::KeyboardShow
+        } else {
+            Cmd::KeyboardHide
+        };
+        let (name, args) = c.request();
+        self.core.send(name, args);
     }
 
     fn apply_gestures(&mut self, gs: Vec<Gesture>) {
@@ -152,6 +221,16 @@ impl Shell {
             self.canvas = c;
             self.app.resize(w, h);
             self.dirty = true;
+            if let Some(mut k) = self.kbd.take() {
+                match k.set_shell_size(w, h, &mut self.fonts) {
+                    Ok(()) => {
+                        let kh = if k.visible() { k.height() } else { 0 };
+                        self.kbd = Some(k);
+                        self.keyboard_changed(kh);
+                    }
+                    Err(e) => eprintln!("walpad-shell: system keyboard disabled: {}", e.0),
+                }
+            }
             if let Some(d) = &mut self.dock {
                 if let Err(e) = d.set_shell_size(w, h) {
                     eprintln!("walpad-shell: system dock: {}", e.0);
@@ -205,11 +284,38 @@ impl Shell {
                 Err(e) => eprintln!("walpad-shell: system dock disabled: {}", e.0),
             }
         }
+        if let Some(mut k) = self.kbd.take() {
+            match k.poll(&mut self.fonts) {
+                Ok(hid) => {
+                    self.kbd = Some(k);
+                    if hid {
+                        // minimise key, or the user went Home
+                        self.keyboard_changed(0);
+                        self.report_keyboard();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("walpad-shell: system keyboard disabled: {}", e.0);
+                    self.keyboard_changed(0);
+                }
+            }
+        }
 
         let now = self.now_ms();
         for ev in self.core.tick(Instant::now()) {
-            if let CoreEvent::Connected = ev {
-                self.clock_24h = read_clock_24h(&self.root);
+            match &ev {
+                CoreEvent::Connected => {
+                    self.clock_24h = read_clock_24h(&self.root);
+                    // a (re)started core learns the keyboard state from us
+                    self.report_keyboard();
+                }
+                CoreEvent::Input(ShellInput::KeyboardShow) => self.set_keyboard(true, false),
+                CoreEvent::Input(ShellInput::KeyboardHide) => self.set_keyboard(false, false),
+                // a terminal is useless without keys: the keyboard comes up with it
+                CoreEvent::Apps(v) if v["kind"] == "started" && v["app"] == "terminal" => {
+                    self.set_keyboard(true, true)
+                }
+                _ => {}
             }
             let out = self.app.on_core(&ev, now);
             self.dirty |= out.dirty;
@@ -253,6 +359,7 @@ impl Shell {
         let mut fds = vec![&self.win.xc.wait_fd];
         fds.extend(self.core.fd());
         fds.extend(self.dock.as_ref().map(|d| d.wait_fd()));
+        fds.extend(self.kbd.as_ref().map(|k| k.wait_fd()));
         walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }

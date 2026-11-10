@@ -19,8 +19,11 @@ pub enum CoreEvent {
     Wifi(Value),
     /// A `notice` event payload ({"kind":"app_crashed","app":..,"name":..}).
     Notice(Value),
-    /// A hardware-key event for the shell (`input` topic): long power press, volume keys, power.
+    /// A hardware-key event for the shell (`input` topic): long power press, volume keys, power,
+    /// system keyboard show/hide.
     Input(ShellInput),
+    /// An `apps` event payload ({"kind":"started","app":"terminal","pid":..}, exited, ...).
+    Apps(Value),
     /// The response to a request we sent (handshake replies are not reported).
     Reply {
         id: u64,
@@ -130,7 +133,7 @@ impl CoreClient {
                     self.queue(
                         2,
                         "subscribe",
-                        json!({"topics": ["status", "wifi", "notice", "input"]}),
+                        json!({"topics": ["status", "wifi", "notice", "input", "apps"]}),
                     );
                 }
                 _ => return out,
@@ -181,6 +184,7 @@ impl CoreClient {
                 }
                 "wifi" => out.push(CoreEvent::Wifi(v["data"].clone())),
                 "notice" => out.push(CoreEvent::Notice(v["data"].clone())),
+                "apps" => out.push(CoreEvent::Apps(v["data"].clone())),
                 "input" => {
                     if let Ok(k) = serde_json::from_value::<ShellInput>(v["data"].clone()) {
                         out.push(CoreEvent::Input(k));

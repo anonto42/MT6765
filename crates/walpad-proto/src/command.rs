@@ -183,6 +183,10 @@ pub enum ShellInput {
     VolumeDown,
     /// Short power press while the power menu is open: activate the focused item.
     PowerShort,
+    /// Show / hide the shell's system keyboard (the `keyboard` command, the `keyboard` key
+    /// action, Home). The core resolves `toggle` against the state the shell last reported.
+    KeyboardShow,
+    KeyboardHide,
 }
 
 impl Command {

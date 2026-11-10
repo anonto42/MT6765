@@ -194,7 +194,11 @@ pub enum Target {
 pub enum Cmd {
     SetBrightness(u8),
     RotateToggle,
+    /// Toggle / show / hide the shell's system keyboard. Handled by the shell loop itself; the
+    /// resulting state is reported to the core as `keyboard show|hide`.
     KeyboardToggle,
+    KeyboardShow,
+    KeyboardHide,
     ScreenOff,
     Launch(String),
     CloseApp(String),
@@ -241,6 +245,8 @@ impl Cmd {
             Cmd::SetBrightness(v) => ("set_brightness", json!({"value": v})),
             Cmd::RotateToggle => ("rotate", json!({"mode": "toggle"})),
             Cmd::KeyboardToggle => ("keyboard", json!({"mode": "toggle"})),
+            Cmd::KeyboardShow => ("keyboard", json!({"mode": "show"})),
+            Cmd::KeyboardHide => ("keyboard", json!({"mode": "hide"})),
             Cmd::ScreenOff => ("screen", json!({"mode": "off"})),
             Cmd::Launch(id) => ("launch", json!({"app": id})),
             Cmd::CloseApp(id) => ("close_app", json!({"app": id})),
@@ -592,6 +598,8 @@ impl App {
                 }
             }
             CoreEvent::Input(k) => self.on_hw_key(*k, &mut out),
+            // app lifecycle events drive the system keyboard (shell loop), nothing to draw here
+            CoreEvent::Apps(_) => {}
             CoreEvent::Reply {
                 id,
                 ok,
@@ -1204,7 +1212,10 @@ impl App {
                 let i = *focus;
                 self.power_item(i, out);
             }
-            ShellInput::PowerMenuOpen => {}
+            // the system keyboard is the shell loop's (keyboard.rs)
+            ShellInput::PowerMenuOpen | ShellInput::KeyboardShow | ShellInput::KeyboardHide => {
+                return
+            }
         }
         out.dirty = true;
     }

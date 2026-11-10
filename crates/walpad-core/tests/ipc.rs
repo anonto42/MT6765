@@ -346,3 +346,54 @@ fn settings_launch_screenshot_power_and_restart_shell() {
     );
     assert_eq!(c.call(16, "home", Value::Null)["data"]["focused"], false);
 }
+
+/// The `keyboard` command no longer spawns matchbox-keyboard: it asks the shell's system keyboard
+/// over the `input` topic (owner request 2026-11-10); `toggle` follows what the shell reported.
+#[test]
+fn keyboard_command_reaches_the_shell_on_the_input_topic() {
+    let h = Harness::start("keyboard");
+    let mut ctl = Conn::new(&h);
+    ctl.hello();
+    // nobody listens for input yet: nothing can show a keyboard
+    let r = ctl.call(2, "keyboard", json!({"mode":"show"}));
+    assert_eq!(r["data"]["keyboard"], "unavailable");
+
+    let mut shell = Conn::new(&h);
+    shell.hello();
+    let r = shell.call(2, "subscribe", json!({"topics":["input"]}));
+    assert_eq!(r["ok"], true);
+    // the next line on the shell's connection that is an `input` event
+    let next_input = |c: &mut Conn| loop {
+        let v = c.recv();
+        if v["event"] == "input" {
+            return v["data"]["kind"].as_str().unwrap().to_string();
+        }
+    };
+
+    let r = ctl.call(3, "keyboard", json!({"mode":"toggle"}));
+    assert_eq!(r["data"]["keyboard"], "shown");
+    assert_eq!(next_input(&mut shell), "keyboard_show");
+    let r = ctl.call(4, "keyboard", json!({"mode":"toggle"}));
+    assert_eq!(r["data"]["keyboard"], "hidden");
+    assert_eq!(next_input(&mut shell), "keyboard_hide");
+
+    // the shell reports a local change (dock button); it hears its own report echoed (applying
+    // it again is a no-op), then the next toggle hides
+    shell.send(json!({"v":1,"id":3,"cmd":"keyboard","args":{"mode":"show"}}));
+    let (mut reply, mut echo) = (None, None);
+    while reply.is_none() || echo.is_none() {
+        let v = shell.recv();
+        if v["event"] == "input" {
+            echo = Some(v["data"]["kind"].clone());
+        } else if v["id"] == 3 {
+            reply = Some(v["data"]["keyboard"].clone());
+        }
+    }
+    assert_eq!(
+        (reply.unwrap(), echo.unwrap()),
+        (json!("shown"), json!("keyboard_show"))
+    );
+    let r = ctl.call(5, "keyboard", json!({"mode":"toggle"}));
+    assert_eq!(r["data"]["keyboard"], "hidden");
+    assert_eq!(next_input(&mut shell), "keyboard_hide");
+}
