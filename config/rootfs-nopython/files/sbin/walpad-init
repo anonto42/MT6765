@@ -12,6 +12,11 @@ mkdir -p /var/log /var/lib/walpad /run/walpad /tmp/.X11-unix /root/.ssh /etc/dro
 walpad-logcap    # trim logs left by earlier boots (they live on the ext4 rootfs); then every 5 min below
 chmod 1777 /tmp /tmp/.X11-unix
 ip link set lo up 2>/dev/null
+# Terminals need devpts: the ramdisk bind-mounts its /dev here without the /dev/pts submount, so
+# openpty() failed with ENODEV and st/xterm exited at once.  Mount a devpts instance inside this root.
+mkdir -p /dev/pts
+mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts -o gid=5,mode=620,ptmxmode=666 2>/dev/null || klog "could not mount /dev/pts"
+[ -c /dev/ptmx ] || ln -sf pts/ptmx /dev/ptmx
 # Safe mode (card M9.2): Volume Down held at start.  It is decided FIRST (the key is only held for a few seconds
 # after power-on); SSH and Wi-Fi still start below; the core and the graphical session are skipped and show the rescue UI (padui, from the rootfs) instead.  The
 # marker /run/walpad-ok tells the ramdisk the session is "healthy", so its 150 s fallback does not

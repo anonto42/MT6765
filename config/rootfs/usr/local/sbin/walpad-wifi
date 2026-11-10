@@ -88,7 +88,11 @@ while true; do
   ip=$(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
   if [ "$state" = "COMPLETED" ] && [ -z "$ip" ]; then
     say "associated, requesting DHCP"
-    udhcpc -i $IFACE -n -q -t 6 -s /run/walpad/udhcpc.script > /dev/null 2>&1
+    if udhcpc -i $IFACE -n -q -t 6 -s /run/walpad/udhcpc.script > /dev/null 2>&1; then
+      say "DHCP ok: $(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)"
+    else
+      say "DHCP got no answer (will retry)"
+    fi
   fi
   echo "${state:-none} ${ip:-}" > /run/walpad/wifi-state
   sleep 4
