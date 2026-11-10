@@ -26,6 +26,8 @@ static long sc6(long n, long a, long b, long c, long d, long e, long f) {
 #define SYS_nanosleep 101
 #define SYS_clock_gettime 113
 #define SYS_mmap 222
+#define SYS_mknodat 33
+#define SYS_ppoll 73
 #define AT_FDCWD (-100)
 void *memcpy(void *d, const void *s, unsigned long n) { u8 *a = d; const u8 *b = s; while (n--) { *a++ = *b++; __asm__ volatile(""); } return d; }
 void *memset(void *d, int c, unsigned long n) { u8 *a = d; while (n--) { *a++ = (u8)c; __asm__ volatile(""); } return d; }
@@ -52,6 +54,22 @@ static int read_screen_off(void) {
 }
 static int slen(const char *s) { int n = 0; while (s[n]) n++; return n; }
 static void write_file(const char *p, const char *s) { long fd = sc3(SYS_openat, AT_FDCWD, p, 1); if (fd < 0) return; sc3(SYS_write, fd, s, slen(s)); sc3(SYS_close, fd, 0, 0); }
+/* Wake FIFO: walpad-core writes a byte on every touch/key batch; waiting on it (ppoll) instead of a
+ * plain sleep ends the idle back-off at once, so the first reaction to a touch is not delayed. */
+static long wakefd = -1;
+static void wake_open(void) {
+    sc6(SYS_mknodat, AT_FDCWD, (long)"/run/walpad/fbwake", 0010000 | 0600, 0, 0, 0);   /* S_IFIFO; EEXIST ok */
+    wakefd = sc3(SYS_openat, AT_FDCWD, "/run/walpad/fbwake", 02 | 04000);              /* O_RDWR|O_NONBLOCK */
+}
+/* Sleep up to ms; returns 1 when woken by the FIFO (drained), 0 on timeout or without a FIFO. */
+static int wait_ms(long ms) {
+    if (wakefd < 0) { struct { long s, ns; } ts = { ms / 1000, (ms % 1000) * 1000000L }; sc3(SYS_nanosleep, &ts, 0, 0); return 0; }
+    struct { int fd; short ev, rev; } p = { (int)wakefd, 1, 0 };          /* POLLIN */
+    struct { long s, ns; } ts = { ms / 1000, (ms % 1000) * 1000000L };
+    long r = sc6(SYS_ppoll, (long)&p, 1, (long)&ts, 0, 0, 0);
+    if (r > 0 && (p.rev & 1)) { char b[64]; while (sc3(SYS_read, wakefd, b, sizeof b) > 0) {} return 1; }
+    return 0;
+}
 static void msleep(long ms) { struct { long s, ns; } ts = { ms / 1000, (ms % 1000) * 1000000L }; sc3(SYS_nanosleep, &ts, 0, 0); }
 static u32 shadow[PAGE_PX];
 /* raw copy of the visible part of the X frame, compared in memory order (cheap) before the rotated pass */
@@ -82,6 +100,7 @@ int cmain(long *sp) {
     const u32 *src = (const u32 *)((u8 *)xm + off);
     int inited = 0, woke = 0, cur = 0, ori = -1, tick = 0;
     fbgate gate = { 0, 0, 0 }; long slept = 0; int idle = 0;   /* ticks since the last change */
+    wake_open();
     for (;;) {
         if (gate_poll_due(&gate, slept)) gate_update(&gate, read_screen_off());
         if (gate.paused) { slept = gate_sleep_ms(&gate); msleep(slept); continue; }   /* screen off: no compare, no copy */
@@ -95,7 +114,7 @@ int cmain(long *sp) {
                 while (x < rw && p[x] == r[x]) x++;
                 if (x < rw) { diff = 1; for (; x < rw; x++) p[x] = r[x]; }
             }
-            if (!diff && inited) { idle++; slept = idle_sleep_ms(gate_sleep_ms(&gate), idle); msleep(slept); continue; }
+            if (!diff && inited) { idle++; slept = idle_sleep_ms(gate_sleep_ms(&gate), idle); if (wait_ms(slept)) idle = 0; continue; }
             idle = 0;
             /* settle: X (Firefox especially) paints a frame in several pieces; showing the first piece makes
              * scrolling look like the page arrives "part by part".  Keep comparing every SETTLE_STEP_MS
@@ -128,7 +147,7 @@ int cmain(long *sp) {
             if (!woke) { write_file("/sys/class/graphics/fb0/blank", "1"); msleep(40); write_file("/sys/class/graphics/fb0/blank", "0"); woke = 1; }
             inited = 1;
         }
-        slept = gate_sleep_ms(&gate); msleep(slept);
+        slept = gate_sleep_ms(&gate); if (wait_ms(slept)) idle = 0;
     }
     return 0;
 }

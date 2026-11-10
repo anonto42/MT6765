@@ -1087,6 +1087,20 @@ impl Daemon {
         }
     }
 
+    /// Poke fbmirror through its FIFO so it leaves its idle polling at once and the reaction to a
+    /// touch reaches the panel without the idle delay. Never blocks: non-blocking open/write, every
+    /// error (no fbmirror, FIFO full) is ignored.
+    fn wake_display(&self) {
+        use rustix::fs::{Mode, OFlags};
+        if let Ok(fd) = rustix::fs::open(
+            self.root.p("/run/walpad/fbwake"),
+            OFlags::WRONLY | OFlags::NONBLOCK | OFlags::CLOEXEC,
+            Mode::empty(),
+        ) {
+            let _ = rustix::io::write(&fd, &[1u8]);
+        }
+    }
+
     /// Feed real input and timers to the Brain and execute what it decides (live mode).
     fn pump_live(&mut self) {
         let now = self.now_ms();
@@ -1097,6 +1111,9 @@ impl Daemon {
             Some(l) => l.inputs.poll(&self.root),
             None => return,
         };
+        if !evs.is_empty() {
+            self.wake_display();
+        }
         let mut fx = Vec::new();
         for (role, ev) in evs {
             fx.extend(self.brain.on_event(role, &ev, now));

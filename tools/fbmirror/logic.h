@@ -5,7 +5,7 @@
 #define FBMIRROR_LOGIC_H
 
 #define GATE_POLL_MS 250        /* how often status.json is read while copying (paused: every loop, see below) */
-#define GATE_RUN_SLEEP_MS 40    /* normal loop sleep */
+#define GATE_RUN_SLEEP_MS 20    /* normal loop sleep while the picture changes (50 checks/s) */
 #define GATE_PAUSE_SLEEP_MS 200 /* loop sleep while the screen is off (<= GATE_POLL_MS, so resume latency is one poll) */
 #define GATE_STALE_S 10         /* status.json is written every 2 s; older (or from the future) = not trusted */
 
@@ -56,8 +56,8 @@ static long gate_sleep_ms(const fbgate *g) { return g->paused ? GATE_PAUSE_SLEEP
 #define IDLE_AFTER_TICKS 25
 #define IDLE_SLEEP_MS 100
 /* wait for a frame to stop changing before presenting it (no half-painted frames), at most this long */
-#define SETTLE_STEP_MS 12
-#define SETTLE_MAX_MS 72
+#define SETTLE_STEP_MS 8
+#define SETTLE_MAX_MS 16   /* short: a long settle made continuous scrolling run at ~12 frames/s */
 static long idle_sleep_ms(long normal, int idle_ticks) { return idle_ticks >= IDLE_AFTER_TICKS && normal < IDLE_SLEEP_MS ? IDLE_SLEEP_MS : normal; }
 
 #endif

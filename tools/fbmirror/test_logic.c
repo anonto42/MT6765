@@ -36,7 +36,7 @@ int main(void) {
     fbgate g = {0, 0, 0};
     CHECK(gate_sleep_ms(&g) == GATE_RUN_SLEEP_MS);
     int polls = 0;
-    for (int i = 0; i < 25; i++) polls += gate_poll_due(&g, GATE_RUN_SLEEP_MS);   /* 1000 ms: a poll every 7 loops = 280 ms */
+    for (int i = 0; i < 1000 / GATE_RUN_SLEEP_MS; i++) polls += gate_poll_due(&g, GATE_RUN_SLEEP_MS);   /* 1000 ms of loops: a poll every >= 250 ms */
     CHECK(polls == 3);
     gate_update(&g, 0); CHECK(!g.paused && !g.refresh);
     gate_update(&g, 1); CHECK(g.paused && !g.refresh);
