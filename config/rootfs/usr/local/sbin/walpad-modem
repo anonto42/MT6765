@@ -65,6 +65,14 @@ case ${1:-status} in
     if command -v socat >/dev/null 2>&1 && [ ! -S /dev/socket/logdw ]; then
       ( setsid socat -u UNIX-RECV:/dev/socket/logdw OPEN:/var/log/walpad-android.log,creat,append >/dev/null 2>&1 & )
     fi
+    # Android's init loads the build properties first; the modem daemons read them (e.g.
+    # ro.vendor.mtk_md1_support selects /dev/ttyC0 instead of an external USB modem)
+    if ! grep -q "^ro.vendor.mtk_md1_support=" $PROPS 2>/dev/null; then
+      for f in /system/system/build.prop /vendor/build.prop /vendor/default.prop; do
+        [ -f "$f" ] && grep -E '^[a-zA-Z0-9_.-]+=' "$f" >> $PROPS
+      done
+      echo "ro.boot.opt_sim_count=2" >> $PROPS
+    fi
     vendor_daemon nvram_daemon
     i=0; while [ $i -lt 30 ] && ! grep -q "^vendor.service.nvram_init=Ready" $PROPS 2>/dev/null; do sleep 1; i=$((i+1)); done
     say "nvram_init: $(grep "^vendor.service.nvram_init=" $PROPS 2>/dev/null | tail -1)"
@@ -75,11 +83,16 @@ case ${1:-status} in
       [ -c /dev/ttyC0 ] && grep -q "ready" /sys/kernel/ccci/md_en 2>/dev/null && break
       sleep 1; i=$((i+1))
     done
-    say "after ${i}s: md_en=$(md_state | tr '\n' ' ')"
+    say "after ${i}s: md1 status $(grep "^vendor.mtk.md1.status=" $PROPS | tail -1)"
+    # AT channels: gsm0710muxd multiplexes /dev/ttyC0 into /dev/radio/pttycmd1.. (pseudo-terminals)
+    mkdir -p /dev/radio
+    vendor_daemon gsm0710muxd -s /dev/ttyC0 -f 512 -n 8 -m basic
+    i=0; while [ $i -lt 20 ] && [ ! -e /dev/radio/pttycmd1 ]; do sleep 1; i=$((i+1)); done
+    say "AT channels: $(ls /dev/radio 2>/dev/null | tr '\n' ' ')"
     ;;
   status)
     echo "md_en: $(md_state | tr '\n' ' ')"
-    for n in nvram_daemon ccci_fsd ccci_mdinit; do printf '%s: %s\n' "$n" "$(running "$n" && echo running || echo stopped)"; done
+    for n in nvram_daemon ccci_fsd ccci_mdinit gsm0710muxd; do printf '%s: %s\n' "$n" "$(running "$n" && echo running || echo stopped)"; done
     grep -E "^(vendor\.service\.nvram_init|vendor\.mtk\.md1\.status|mtk\.md1\.status)=" $PROPS 2>/dev/null | tail -3
     ;;
   *) echo "usage: $0 start|status" >&2; exit 2 ;;
