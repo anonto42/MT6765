@@ -191,9 +191,7 @@ impl Hotspot {
         self.restart = false;
         if on {
             if !self.st.has_secret {
-                return Err(HotspotError::Invalid(
-                    "set a hotspot password first".into(),
-                ));
+                return Err(HotspotError::Invalid("set a hotspot password first".into()));
             }
             if self.st.state == HotspotState::On {
                 return Ok(HotspotState::On);
@@ -366,10 +364,8 @@ impl Hotspot {
                         Verb::Start | Verb::Stop => {
                             self.restart = false;
                             self.st.state = HotspotState::Failed;
-                            self.st.reason = Some(format!(
-                                "walpad-hotspot {} timed out",
-                                verb.arg()
-                            ));
+                            self.st.reason =
+                                Some(format!("walpad-hotspot {} timed out", verb.arg()));
                             self.st.clients = None;
                             if verb == Verb::Start {
                                 // tear down whatever the start left behind
@@ -381,10 +377,11 @@ impl Hotspot {
                 Ok(None) => self.run = Some(r),
                 Err(_) => Self::kill(r),
             }
-        } else if self.st.state == HotspotState::On && now >= self.next_status {
-            if self.spawn(Verb::Status, now, false).is_err() {
-                self.next_status = now + STATUS_EVERY;
-            }
+        } else if self.st.state == HotspotState::On
+            && now >= self.next_status
+            && self.spawn(Verb::Status, now, false).is_err()
+        {
+            self.next_status = now + STATUS_EVERY;
         }
         self.st != before
     }

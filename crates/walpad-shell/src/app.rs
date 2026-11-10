@@ -7,7 +7,7 @@ use crate::device_screen;
 use crate::gesture::Gesture;
 use crate::home;
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
-use crate::overlay::{self, AppSheet, Overlay, PasswordSheet};
+use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
 use serde_json::{json, Value};
@@ -158,6 +158,13 @@ pub enum Target {
     Dismiss,
     /// Inside a popover but not on a control: nothing happens.
     PanelBody,
+    // Wi-Fi switch and hotspot (Network screen and Quick Settings; owner request 2026-11-10)
+    WifiSwitch,
+    HotspotSwitch,
+    /// Quick Settings Hotspot row (opens Network).
+    HotspotCard,
+    HotspotName,
+    HotspotPassword,
     // Network
     Scan,
     Disconnect,
@@ -218,6 +225,14 @@ pub enum Cmd {
     },
     WifiDisconnect,
     WifiForget(u32),
+    /// The Wi-Fi client switch.
+    WifiEnable(bool),
+    Hotspot(bool),
+    /// `secret` is never printed: `Secret`'s Debug is `***`.
+    HotspotConfig {
+        ssid: Option<String>,
+        secret: Option<Secret>,
+    },
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `set_setting` with an allowlisted key.
@@ -240,6 +255,7 @@ pub enum Purpose {
     Forget,
     Close,
     Setting,
+    HotspotConfig,
     Other,
 }
 
@@ -284,6 +300,22 @@ impl Cmd {
             }
             Cmd::WifiDisconnect => ("wifi_disconnect", Value::Null),
             Cmd::WifiForget(id) => ("wifi_forget", json!({"saved_id": id})),
+            Cmd::WifiEnable(on) => ("wifi_enable", json!({"on": on})),
+            Cmd::Hotspot(on) => ("hotspot", json!({"on": on})),
+            Cmd::HotspotConfig { ssid, secret } => {
+                let mut a = serde_json::Map::new();
+                if let Some(n) = ssid {
+                    a.insert("ssid".into(), json!(n));
+                }
+                if let Some(s) = secret {
+                    // serialized onto the control socket only, never a log
+                    a.insert(
+                        "secret".into(),
+                        serde_json::to_value(s).unwrap_or(Value::Null),
+                    );
+                }
+                ("hotspot_config", Value::Object(a))
+            }
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
@@ -301,6 +333,7 @@ impl Cmd {
             Cmd::WifiScan => Purpose::Scan,
             Cmd::WifiConnect { .. } => Purpose::Connect,
             Cmd::WifiForget(_) => Purpose::Forget,
+            Cmd::HotspotConfig { .. } => Purpose::HotspotConfig,
             Cmd::CloseApp(_) => Purpose::Close,
             Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
@@ -674,6 +707,20 @@ impl App {
                 self.toast("Wi-Fi disconnected", Tone::Warning);
                 out.dirty = true;
             }
+            Some("hotspot") => {
+                match v["state"].as_str() {
+                    Some("on") if v["exclusive"] == true => {
+                        self.toast("Hotspot on, Wi-Fi client paused", Tone::Warning)
+                    }
+                    Some("on") => self.toast("Hotspot on", Tone::Info),
+                    Some("failed") => {
+                        let why = v["reason"].as_str().unwrap_or("unknown error");
+                        self.toast(format!("Hotspot failed: {why}"), Tone::Danger)
+                    }
+                    _ => {}
+                }
+                out.dirty = true;
+            }
             _ => {}
         }
     }
@@ -728,6 +775,34 @@ impl App {
                 }
             }
             (Purpose::Forget, true) => out.cmd(Cmd::WifiListSaved),
+            (Purpose::HotspotConfig, ok) => {
+                let sheet = matches!(&self.model.overlay,
+                    Some(Overlay::Password(s)) if s.purpose != SheetPurpose::WifiJoin);
+                if ok {
+                    if sheet {
+                        self.close_overlay();
+                    }
+                    self.toast(
+                        if data["restarting"] == true {
+                            "Saved, restarting the hotspot"
+                        } else {
+                            "Hotspot settings saved"
+                        },
+                        Tone::Info,
+                    );
+                } else {
+                    let msg = error
+                        .map(friendly)
+                        .unwrap_or_else(|| "Could not save".into());
+                    match &mut self.model.overlay {
+                        Some(Overlay::Password(s)) if sheet => {
+                            s.connecting = false;
+                            s.error = Some(msg);
+                        }
+                        _ => self.toast(msg, Tone::Danger),
+                    }
+                }
+            }
             (Purpose::Setting, ok) => {
                 // the core wrote (or refused) the file: show what is really configured
                 out.refresh = true;
@@ -1015,7 +1090,31 @@ impl App {
                     }
                 }
             }
-            Target::WifiCard => self.go(Tab::Network, out),
+            Target::WifiCard | Target::HotspotCard => self.go(Tab::Network, out),
+            Target::WifiSwitch if interactive && self.model.status.is_some() => {
+                out.cmd(Cmd::WifiEnable(!network::wifi_enabled(&self.model.status)))
+            }
+            Target::HotspotSwitch if interactive && self.model.status.is_some() => {
+                self.hotspot_switch(out)
+            }
+            Target::HotspotName if interactive => {
+                let name = self
+                    .model
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.hotspot.ssid.clone())
+                    .unwrap_or_else(|| "WalPad".into());
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::hotspot(
+                    SheetPurpose::HotspotName,
+                    &name,
+                )));
+            }
+            Target::HotspotPassword if interactive => {
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::hotspot(
+                    SheetPurpose::HotspotPassword,
+                    "",
+                )));
+            }
             Target::BatteryCard => self.go(Tab::Device, out),
             Target::Tile(i) => {
                 if let Some(id) = self.model.tiles.get(i).map(|t| t.id.clone()) {
@@ -1037,7 +1136,11 @@ impl App {
             }
             Target::Rotation if interactive => out.cmd(Cmd::RotateToggle),
             Target::ScreenOff if interactive => out.cmd(Cmd::ScreenOff),
-            Target::Scan if interactive && !self.model.net.scanning => {
+            Target::Scan
+                if interactive
+                    && !self.model.net.scanning
+                    && !network::client_off(&self.model.status) =>
+            {
                 self.model.net.scanning = true;
                 self.model.net.error = None;
                 out.cmd(Cmd::WifiScan);
@@ -1307,8 +1410,46 @@ impl App {
         }
     }
 
+    /// Hotspot switch: off when it runs or starts; on needs a password (opens the sheet first).
+    fn hotspot_switch(&mut self, out: &mut Outcome) {
+        let Some(has_secret) = self.model.status.as_ref().map(|s| s.hotspot.has_secret) else {
+            return;
+        };
+        if network::hotspot_on(&self.model.status) {
+            out.cmd(Cmd::Hotspot(false));
+        } else if !has_secret {
+            if self.model.overlay.as_ref().is_some_and(Overlay::is_popover) {
+                self.go(Tab::Network, out);
+            }
+            let mut s = PasswordSheet::hotspot(SheetPurpose::HotspotPassword, "");
+            s.error = Some("Set a password first".into());
+            self.model.overlay = Some(Overlay::Password(s));
+        } else {
+            out.cmd(Cmd::Hotspot(true));
+        }
+    }
+
     fn try_connect(&mut self, out: &mut Outcome) {
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
+            if s.purpose != SheetPurpose::WifiJoin {
+                if s.valid() && !s.connecting {
+                    s.connecting = true;
+                    s.error = None;
+                    let text = s.secret.clone();
+                    out.cmd(if s.purpose == SheetPurpose::HotspotName {
+                        Cmd::HotspotConfig {
+                            ssid: Some(text),
+                            secret: None,
+                        }
+                    } else {
+                        Cmd::HotspotConfig {
+                            ssid: None,
+                            secret: Some(Secret::new(text)),
+                        }
+                    });
+                }
+                return;
+            }
             if s.valid() && !s.connecting {
                 s.connecting = true;
                 s.error = None;
@@ -1332,7 +1473,7 @@ impl App {
         };
         match key {
             Key::Char(c) => {
-                if s.secret.len() < 64 {
+                if s.secret.len() + c.len_utf8() <= s.max_len() {
                     s.secret.push(c);
                     s.error = None;
                 }
@@ -1342,7 +1483,7 @@ impl App {
                 }
             }
             Key::Space => {
-                if s.secret.len() < 64 {
+                if s.secret.len() < s.max_len() {
                     s.secret.push(' ');
                     s.error = None;
                 }

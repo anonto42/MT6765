@@ -2,11 +2,12 @@
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use walpad_proto::{
-    AppState, Battery, BatterySource, Hardware, ScreenState, Status, WifiRadio, WifiStatus,
+    AppState, Battery, BatterySource, Hardware, HotspotInternet, HotspotState, HotspotStatus,
+    ScreenState, Status, WifiRadio, WifiStatus,
 };
 use walpad_shell::app::{App, AppEntry, Cmd, WallTime};
 use walpad_shell::core_client::CoreEvent;
-use walpad_shell::overlay::{AppSheet, Overlay, PasswordSheet};
+use walpad_shell::overlay::{AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use walpad_ui::components::{Painter, Tab, Tone};
 use walpad_ui::snapshot::assert_snapshot_in;
 use walpad_ui::tokens::BG;
@@ -251,6 +252,120 @@ fn forget_dialog_and_toast() {
     b.on_core(&CoreEvent::Wifi(json!({"kind":"connect","ok":false,"error":"timeout","ssid_hex":"00","ssid":"Cafe Open"})), 0);
     assert_eq!(b.model.toast.as_ref().map(|t| t.tone), Some(Tone::Danger));
     shot("network_toast_failed", 800, 1280, &mut b);
+}
+
+// ------------------------------------------------- Wi-Fi switch and hotspot (owner request 2026-11-10)
+
+fn hotspot_on(s: &mut Status, exclusive: bool) {
+    s.hotspot = HotspotStatus {
+        state: HotspotState::On,
+        reason: None,
+        ssid: Some("WalPad Tab".into()),
+        has_secret: true,
+        clients: Some(2),
+        internet: Some(if exclusive {
+            HotspotInternet::NoUplink
+        } else {
+            HotspotInternet::Shared
+        }),
+        exclusive,
+    };
+    if exclusive {
+        s.wifi.radio = WifiRadio::Down;
+        s.wifi.state = Some("hotspot".into());
+        s.wifi.ssid = None;
+        s.wifi.ip = None;
+        s.wifi.signal_dbm = None;
+    }
+}
+
+#[test]
+fn network_wifi_switched_off() {
+    let mut s = status();
+    s.wifi = WifiStatus {
+        radio: WifiRadio::Down,
+        state: Some("disabled".into()),
+        ssid: None,
+        ip: None,
+        signal_dbm: None,
+        enabled: false,
+    };
+    let mut a = app(800, 1280, Tab::Network, false);
+    a.on_core(&CoreEvent::Status(Box::new(s.clone())), 0);
+    saved(&mut a);
+    shot("network_wifi_off", 800, 1280, &mut a);
+    let mut q = app(800, 1280, Tab::Home, false);
+    q.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    q.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_wifi_off", 800, 1280, &mut q);
+}
+
+#[test]
+fn network_hotspot_states() {
+    // running next to the client (shared internet), scrolled to the hotspot section
+    let mut s = status();
+    hotspot_on(&mut s, false);
+    let mut a = app(800, 1280, Tab::Network, false);
+    a.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    scan(&mut a);
+    saved(&mut a);
+    a.scroll = 10_000;
+    shot("network_hotspot_on_shared", 800, 1280, &mut a);
+    // exclusive: the client is paused, local network only
+    let mut s = status();
+    hotspot_on(&mut s, true);
+    let mut b = app(800, 1280, Tab::Network, false);
+    b.on_core(&CoreEvent::Status(Box::new(s.clone())), 0);
+    saved(&mut b);
+    shot("network_hotspot_on_exclusive", 800, 1280, &mut b);
+    let mut l = app(1280, 800, Tab::Network, false);
+    l.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    saved(&mut l);
+    l.scroll = 10_000;
+    shot("network_hotspot_landscape", 1280, 800, &mut l);
+    // failed, no password yet
+    let mut s = status();
+    s.hotspot.state = HotspotState::Failed;
+    s.hotspot.reason = Some("hostapd could not start the access point".into());
+    s.hotspot.has_secret = true;
+    let mut c = app(800, 1280, Tab::Network, false);
+    c.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    saved(&mut c);
+    shot("network_hotspot_failed", 800, 1280, &mut c);
+}
+
+#[test]
+fn quick_settings_with_hotspot() {
+    let mut s = status();
+    hotspot_on(&mut s, true);
+    let mut a = app(800, 1280, Tab::Home, false);
+    a.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    a.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_hotspot_on", 800, 1280, &mut a);
+    let mut s = status();
+    s.hotspot.state = HotspotState::Starting;
+    s.hotspot.has_secret = true;
+    let mut l = app(1280, 800, Tab::Home, false);
+    l.on_core(&CoreEvent::Status(Box::new(s)), 0);
+    l.model.overlay = Some(Overlay::QuickSettings);
+    shot(
+        "quick_settings_hotspot_starting_landscape",
+        1280,
+        800,
+        &mut l,
+    );
+}
+
+#[test]
+fn hotspot_sheets() {
+    let mut a = app(800, 1280, Tab::Network, true);
+    let mut s = PasswordSheet::hotspot(SheetPurpose::HotspotPassword, "");
+    s.error = Some("Set a password first".into());
+    a.model.overlay = Some(Overlay::Password(s));
+    shot("hotspot_password_sheet", 800, 1280, &mut a);
+    let s = PasswordSheet::hotspot(SheetPurpose::HotspotName, "WalPad Tab");
+    a.model.overlay = Some(Overlay::Password(s));
+    shot("hotspot_name_sheet", 800, 1280, &mut a);
 }
 
 // ---------------------------------------------------------------------------------- M5.6

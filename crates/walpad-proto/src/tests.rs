@@ -197,9 +197,7 @@ fn hotspot_config_is_validated_and_redacted() {
     .unwrap();
     assert!(!format!("{c:?}").contains("hunter2"));
     assert!(req(r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"Tab"}}"#).is_ok());
-    assert!(
-        req(r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"secret":"12345678"}}"#).is_ok()
-    );
+    assert!(req(r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"secret":"12345678"}}"#).is_ok());
     let long = "x".repeat(63);
     assert!(req(&format!(
         r#"{{"v":1,"id":1,"cmd":"hotspot_config","args":{{"secret":"{long}"}}}}"#
@@ -217,7 +215,11 @@ fn hotspot_config_is_validated_and_redacted() {
         let r = req(bad);
         assert_eq!(code(r.clone()), ErrorCode::InvalidArgs, "{bad}");
         // the refusal never echoes the secret
-        let msg = r.err().and_then(|e| e.error).map(|e| e.msg).unwrap_or_default();
+        let msg = r
+            .err()
+            .and_then(|e| e.error)
+            .map(|e| e.msg)
+            .unwrap_or_default();
         assert!(!msg.contains("short") && !msg.contains("break"), "{msg}");
     }
     let long = "x".repeat(64);

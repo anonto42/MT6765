@@ -7,18 +7,33 @@ use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
 use walpad_ui::Rect;
 
+/// What the text sheet (field + keyboard) edits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SheetPurpose {
+    /// Join the Wi-Fi network `ssid` with a password.
+    WifiJoin,
+    /// The hotspot name (shown in clear, 1-32 bytes).
+    HotspotName,
+    /// The hotspot WPA2 password (8-63 printable ASCII).
+    HotspotPassword,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PasswordSheet {
     pub ssid_hex: String,
+    /// Sheet title: the network name (Wi-Fi) or "Hotspot name" / "Hotspot password".
     pub ssid: String,
+    /// The text being typed (a password, or the hotspot name).
     pub secret: String,
     pub shown: bool,
     pub layer: KeyboardLayer,
     /// One-shot shift: the next letter is upper case.
     pub shift: bool,
     pub error: Option<String>,
+    /// Waiting for the core (connecting / saving).
     pub connecting: bool,
     pub pressed_key: Option<usize>,
+    pub purpose: SheetPurpose,
 }
 
 impl PasswordSheet {
@@ -33,12 +48,42 @@ impl PasswordSheet {
             error: None,
             connecting: false,
             pressed_key: None,
+            purpose: SheetPurpose::WifiJoin,
         }
     }
-    /// WPA2: 8-63 characters, or a 64-digit hex key.
+    /// The hotspot name or password sheet; `initial` pre-fills the field (the name only).
+    pub fn hotspot(purpose: SheetPurpose, initial: &str) -> Self {
+        let title = match purpose {
+            SheetPurpose::HotspotName => "Hotspot name",
+            _ => "Hotspot password",
+        };
+        PasswordSheet {
+            secret: initial.to_string(),
+            shown: purpose == SheetPurpose::HotspotName,
+            purpose,
+            ..PasswordSheet::new(String::new(), title.into())
+        }
+    }
+    /// WPA2: 8-63 characters, or a 64-digit hex key; the hotspot takes 8-63 printable ASCII and a
+    /// name of 1-32 bytes.
     pub fn valid(&self) -> bool {
-        let n = self.secret.len();
-        (8..=63).contains(&n) || (n == 64 && self.secret.bytes().all(|b| b.is_ascii_hexdigit()))
+        match self.purpose {
+            SheetPurpose::WifiJoin => {
+                let n = self.secret.len();
+                (8..=63).contains(&n)
+                    || (n == 64 && self.secret.bytes().all(|b| b.is_ascii_hexdigit()))
+            }
+            SheetPurpose::HotspotName => walpad_proto::valid_hotspot_ssid(&self.secret),
+            SheetPurpose::HotspotPassword => walpad_proto::valid_hotspot_secret(&self.secret),
+        }
+    }
+    /// Longest text the field takes (bytes).
+    pub fn max_len(&self) -> usize {
+        match self.purpose {
+            SheetPurpose::WifiJoin => 64,
+            SheetPurpose::HotspotName => 32,
+            SheetPurpose::HotspotPassword => 63,
+        }
     }
 }
 
@@ -143,11 +188,16 @@ pub fn render_password(
     let g = password_geom(frame);
     let mut hits = Vec::new();
     p.sheet(g.sheet, &s.ssid);
+    let (placeholder, secret_field, confirm) = match s.purpose {
+        SheetPurpose::WifiJoin => ("Password", true, "Connect"),
+        SheetPurpose::HotspotName => ("Name", false, "Save"),
+        SheetPurpose::HotspotPassword => ("8-63 characters", true, "Save"),
+    };
     if let Some(eye) = p.text_field(
         g.field,
         &s.secret,
-        "Password",
-        true,
+        placeholder,
+        secret_field,
         s.shown,
         true,
         s.error.as_deref(),
@@ -172,7 +222,7 @@ pub fn render_password(
     } else {
         ButtonState::Disabled
     };
-    p.button(g.connect, "Connect", ButtonKind::Primary, cs, None);
+    p.button(g.connect, confirm, ButtonKind::Primary, cs, None);
     hits.push((g.cancel, Target::SheetCancel));
     hits.push((g.connect, Target::SheetConnect));
     hits

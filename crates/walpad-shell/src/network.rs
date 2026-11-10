@@ -1,11 +1,11 @@
 //! Network screen: model, layout (pure) and rendering. Content coordinates: x is absolute, y starts
 //! at 0 at the top of the scrollable content.
 use crate::app::Target;
-use walpad_proto::{Status, WifiRadio};
+use walpad_proto::{HotspotInternet, HotspotState, Status, WifiRadio};
 use walpad_ui::components::{Accessory, ButtonKind, ButtonState, NetState, Painter};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
-use walpad_ui::{Align, Face, Icon, Rect, Style};
+use walpad_ui::{Align, Color, Face, Icon, Rect, Style};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NetEntry {
@@ -47,11 +47,87 @@ const TITLE_H: i32 = 40;
 const CARD_H: i32 = 112;
 const LABEL_H: i32 = 24;
 const FORGET_W: i32 = 120;
+const SWITCH_W: i32 = 56;
+/// Hotspot status lines under its card (up to three 22 px lines).
+const NOTE_H: i32 = 72;
+
+/// Touch area around a 56x32 toggle (>= 56 high).
+pub fn switch_hit(t: Rect) -> Rect {
+    Rect::new(t.x - SP_2, t.y - 12, t.w + SP_4, t.h + 24)
+}
+
+/// The Wi-Fi client switch as the core reports it (unknown = off).
+pub fn wifi_enabled(st: &Option<Status>) -> bool {
+    st.as_ref().is_some_and(|s| s.wifi.enabled)
+}
+
+/// The Wi-Fi client is switched off or paused for the hotspot (known status only).
+pub fn client_off(st: &Option<Status>) -> bool {
+    st.as_ref()
+        .is_some_and(|s| !s.wifi.enabled || s.wifi.state.as_deref() == Some("hotspot"))
+}
+
+/// The hotspot switch shows "on" while it runs or starts.
+pub fn hotspot_on(st: &Option<Status>) -> bool {
+    st.as_ref()
+        .is_some_and(|s| matches!(s.hotspot.state, HotspotState::On | HotspotState::Starting))
+}
+
+/// Status lines of the hotspot (text, colour), most important first.
+pub fn hotspot_lines(st: &Option<Status>) -> Vec<(String, Color)> {
+    let Some(s) = st else {
+        return vec![("Unknown".into(), TEXT_DISABLED)];
+    };
+    let h = &s.hotspot;
+    let mut v = Vec::new();
+    match h.state {
+        HotspotState::Off => {
+            v.push(("Off".to_string(), TEXT_SECONDARY));
+            if !h.has_secret {
+                v.push(("Set a password to use the hotspot".into(), WARNING));
+            }
+        }
+        HotspotState::Starting => v.push(("Starting...".into(), WARNING)),
+        HotspotState::Stopping => v.push(("Stopping...".into(), TEXT_SECONDARY)),
+        HotspotState::Failed => v.push((
+            format!("Failed: {}", h.reason.as_deref().unwrap_or("unknown error")),
+            DANGER,
+        )),
+        HotspotState::On => {
+            let n = h.clients.unwrap_or(0);
+            let devices = if n == 1 { "device" } else { "devices" };
+            v.push((format!("On, {n} {devices} connected"), SUCCESS));
+            v.push(match h.internet {
+                Some(HotspotInternet::Shared) => (
+                    "Sharing this tablet's internet connection".into(),
+                    TEXT_SECONDARY,
+                ),
+                Some(HotspotInternet::Unavailable) => (
+                    "Internet sharing is not available: local network only".into(),
+                    WARNING,
+                ),
+                _ => (
+                    "No internet to share: local network only".into(),
+                    TEXT_SECONDARY,
+                ),
+            });
+            if h.exclusive {
+                v.push((
+                    "Wi-Fi client paused while the hotspot is on".into(),
+                    WARNING,
+                ));
+            }
+        }
+    }
+    v
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NetLayout {
     pub title: Rect,
     pub chip: Rect,
+    /// The Wi-Fi client switch (the toggle itself; hit area via `switch_hit`).
+    pub switch: Rect,
     pub hint: Option<Rect>,
     pub connected: Option<(Rect, Rect)>,
     pub avail_label: Rect,
@@ -63,18 +139,27 @@ pub struct NetLayout {
     pub saved_card: Rect,
     pub saved_rows: Vec<(Rect, Rect)>,
     pub saved_empty: Option<Rect>,
+    pub hotspot_label: Rect,
+    pub hotspot_switch: Rect,
+    pub hotspot_card: Rect,
+    pub hotspot_name: Rect,
+    pub hotspot_pass: Rect,
+    pub hotspot_note: Rect,
     pub total: i32,
 }
 
 pub fn is_connected(st: &Option<Status>) -> Option<&str> {
-    st.as_ref().and_then(|s| s.wifi.ssid.as_deref())
+    st.as_ref()
+        .filter(|s| s.wifi.enabled)
+        .and_then(|s| s.wifi.ssid.as_deref())
 }
 
 pub fn layout(frame: &Frame, st: &Option<Status>, net: &NetModel) -> NetLayout {
     let c = frame.padded();
     let mut y = SP_4;
-    let title = Rect::new(c.x, y, c.w - 140, TITLE_H);
-    let chip = Rect::new(c.right() - 120, y + 4, 120, 32);
+    let switch = Rect::new(c.right() - SWITCH_W, y + 4, SWITCH_W, 32);
+    let chip = Rect::new(switch.x - SP_5 - 120, y + 4, 120, 32);
+    let title = Rect::new(c.x, y, chip.x - SP_3 - c.x, TITLE_H);
     y += TITLE_H + SP_2;
     let failed = st
         .as_ref()
@@ -136,9 +221,26 @@ pub fn layout(frame: &Frame, st: &Option<Status>, net: &NetModel) -> NetLayout {
         saved_empty = None;
         y += h;
     }
+    y += SP_5;
+    let hotspot_label = Rect::new(c.x, y, c.w - SWITCH_W - SP_4, LABEL_H);
+    let hotspot_switch = Rect::new(c.right() - SWITCH_W, y - 4, SWITCH_W, 32);
+    y += LABEL_H + SP_3;
+    let hotspot_card = Rect::new(c.x, y, c.w, 2 * ROW_H);
+    let hotspot_name = Rect::new(c.x, y, c.w, ROW_H);
+    let hotspot_pass = Rect::new(c.x, y + ROW_H, c.w, ROW_H);
+    y += 2 * ROW_H + SP_3;
+    let hotspot_note = Rect::new(c.x + SP_1, y, c.w - SP_1, NOTE_H);
+    y += NOTE_H;
     NetLayout {
         title,
         chip,
+        switch,
+        hotspot_label,
+        hotspot_switch,
+        hotspot_card,
+        hotspot_name,
+        hotspot_pass,
+        hotspot_note,
         hint,
         connected,
         avail_label,
@@ -170,14 +272,29 @@ pub fn render(
     let pr = |t: Target| pressed == Some(t);
     p.screen_title("Wi-Fi", l.title);
 
-    // radio chip
+    // radio chip and the Wi-Fi switch
+    let enabled = wifi_enabled(st);
+    let paused = st
+        .as_ref()
+        .is_some_and(|s| s.wifi.state.as_deref() == Some("hotspot"));
     let (chip_text, chip_col) = match st.as_ref().map(|s| s.wifi.radio) {
+        Some(WifiRadio::Failed) => ("Failed", DANGER),
+        Some(_) if !enabled => ("Off", TEXT_SECONDARY),
+        Some(_) if paused => ("Paused", WARNING),
         Some(WifiRadio::Up) => ("Up", SUCCESS),
         Some(WifiRadio::Starting) => ("Starting", WARNING),
-        Some(WifiRadio::Failed) => ("Failed", DANGER),
         Some(WifiRadio::Down) => ("Down", TEXT_SECONDARY),
         None => ("Unknown", TEXT_DISABLED),
     };
+    let sw_off = !connected_core || st.is_none();
+    p.toggle(
+        l.switch.x,
+        l.switch.y,
+        enabled,
+        pr(Target::WifiSwitch),
+        sw_off,
+    );
+    hits.push((switch_hit(l.switch), Target::WifiSwitch));
     p.outline_box(l.chip, 16, false, false, false);
     p.cv.circle(
         (l.chip.x + 16) as f32,
@@ -243,9 +360,10 @@ pub fn render(
 
     // available networks
     p.section_label("Available networks", l.avail_label);
+    let client_off = client_off(st);
     let scan_state = if net.scanning {
         ButtonState::Loading(spinner_deg)
-    } else if !connected_core {
+    } else if !connected_core || client_off {
         ButtonState::Disabled
     } else if pr(Target::Scan) {
         ButtonState::Pressed
@@ -263,6 +381,8 @@ pub fn render(
     p.card(l.avail_card, false);
     if let Some(r) = l.avail_empty {
         let (title, hint) = match (&net.error, net.scanned, net.scanning) {
+            _ if client_off && !enabled => ("Wi-Fi is off", "Turn Wi-Fi on to see networks"),
+            _ if client_off => ("Wi-Fi is paused", "The hotspot is using the radio"),
             (Some(e), _, _) => ("Cannot scan", e.as_str()),
             (None, _, true) => ("Looking for networks", "This takes a few seconds"),
             (None, true, false) => ("No networks found", "Tap Scan to look again"),
@@ -313,6 +433,63 @@ pub fn render(
         );
         hits.push((*r, Target::Saved(i)));
         hits.push((*forget, Target::Forget(i))); // later entries win: the Forget zone sits on top of the row
+    }
+
+    // hotspot (owner request 2026-11-10)
+    p.section_label("Hotspot", l.hotspot_label);
+    let hs = st.as_ref().map(|s| &s.hotspot);
+    let busy =
+        hs.is_some_and(|h| matches!(h.state, HotspotState::Starting | HotspotState::Stopping));
+    p.toggle(
+        l.hotspot_switch.x,
+        l.hotspot_switch.y,
+        hotspot_on(st),
+        pr(Target::HotspotSwitch),
+        sw_off || busy,
+    );
+    hits.push((switch_hit(l.hotspot_switch), Target::HotspotSwitch));
+    p.card(l.hotspot_card, false);
+    let rows_off = sw_off || busy;
+    let name = hs
+        .and_then(|h| h.ssid.clone())
+        .unwrap_or_else(|| "WalPad".into());
+    let pass = if hs.is_some_and(|h| h.has_secret) {
+        "Set"
+    } else {
+        "Not set"
+    };
+    for (r, title, value, t) in [
+        (l.hotspot_name, "Name", name, Target::HotspotName),
+        (
+            l.hotspot_pass,
+            "Password",
+            pass.to_string(),
+            Target::HotspotPassword,
+        ),
+    ] {
+        p.list_row(
+            r,
+            None,
+            title,
+            None,
+            &Accessory::Value(value),
+            pr(t),
+            rows_off,
+        );
+        hits.push((r, t));
+    }
+    for (i, (text, col)) in hotspot_lines(st).iter().take(3).enumerate() {
+        p.text(
+            text,
+            Style::new(Face::Regular, SIZE_SECONDARY, *col),
+            Rect::new(
+                l.hotspot_note.x,
+                l.hotspot_note.y + i as i32 * 24,
+                l.hotspot_note.w,
+                22,
+            ),
+            Align::Left,
+        );
     }
     hits
 }
@@ -368,6 +545,12 @@ mod tests {
                 l.avail_card,
                 l.saved_label,
                 l.saved_card,
+                l.chip,
+                l.switch,
+                l.hotspot_label,
+                l.hotspot_switch,
+                l.hotspot_card,
+                l.hotspot_note,
             ];
             rs.retain(|r| r.h > 0);
             // the scan button sits on the label row, to the right of the label
@@ -389,6 +572,13 @@ mod tests {
             );
             assert!(l.scan_btn.h >= TOUCH_MIN);
             assert!(l.total > l.saved_card.bottom());
+            assert!(l.total >= l.hotspot_note.bottom());
+            for s in [l.switch, l.hotspot_switch] {
+                let h = switch_hit(s);
+                assert!(h.w >= TOUCH_MIN && h.h >= TOUCH_MIN && h.contains(s.x, s.y));
+                assert!(h.right() <= frame.content.right(), "{h:?}");
+            }
+            assert!(l.hotspot_name.h >= ROW_H && l.hotspot_pass.y == l.hotspot_name.bottom());
         }
     }
 
@@ -417,5 +607,49 @@ mod tests {
         st.wifi.radio = WifiRadio::Failed;
         st.wifi.ssid = None;
         assert!(layout(&f, &Some(st), &net(2, 1)).hint.is_some());
+    }
+
+    #[test]
+    fn switched_off_wifi_shows_no_connection() {
+        let mut st = crate::app::tests::status(120, &[]);
+        assert_eq!(is_connected(&Some(st.clone())), Some("Home"));
+        st.wifi.enabled = false;
+        assert_eq!(is_connected(&Some(st.clone())), None);
+        assert!(!wifi_enabled(&Some(st)));
+        assert!(!wifi_enabled(&None));
+    }
+
+    #[test]
+    fn hotspot_status_lines() {
+        use walpad_proto::HotspotStatus;
+        let mut st = crate::app::tests::status(120, &[]);
+        let lines = |s: &Status| -> Vec<String> {
+            hotspot_lines(&Some(s.clone()))
+                .into_iter()
+                .map(|(t, _)| t)
+                .collect()
+        };
+        assert_eq!(lines(&st), ["Off", "Set a password to use the hotspot"]);
+        st.hotspot = HotspotStatus {
+            state: HotspotState::On,
+            has_secret: true,
+            clients: Some(1),
+            internet: Some(HotspotInternet::Unavailable),
+            exclusive: true,
+            ..Default::default()
+        };
+        assert!(hotspot_on(&Some(st.clone())));
+        assert_eq!(
+            lines(&st),
+            [
+                "On, 1 device connected",
+                "Internet sharing is not available: local network only",
+                "Wi-Fi client paused while the hotspot is on"
+            ]
+        );
+        st.hotspot.state = HotspotState::Failed;
+        st.hotspot.reason = Some("hostapd is not installed".into());
+        assert!(!hotspot_on(&Some(st.clone())));
+        assert_eq!(lines(&st), ["Failed: hostapd is not installed"]);
     }
 }

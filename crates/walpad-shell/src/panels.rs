@@ -4,7 +4,7 @@
 //! swallows taps between rows (`PanelBody`).
 use crate::app::{Model, Target, Tile};
 use crate::home::wifi_name;
-use walpad_proto::{BatterySource, WifiRadio};
+use walpad_proto::{BatterySource, HotspotState, WifiRadio};
 use walpad_ui::components::{Painter, WifiMark};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
@@ -18,6 +18,7 @@ const QS_ROW: i32 = 56;
 pub struct QsGeom {
     pub panel: Rect,
     pub wifi: Rect,
+    pub hotspot: Rect,
     pub bluetooth: Rect,
     pub battery: Rect,
     pub divider1: i32,
@@ -38,7 +39,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         y += QS_ROW;
         r
     };
-    let (wifi, bluetooth, battery) = (row(), row(), row());
+    let (wifi, hotspot, bluetooth, battery) = (row(), row(), row(), row());
     let divider1 = battery.bottom() + 4;
     let brightness_label = Rect::new(ix + SP_3, divider1 + 9, iw - 2 * SP_3, 24);
     let slider = Rect::new(ix, brightness_label.bottom(), iw, 56);
@@ -54,6 +55,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
     QsGeom {
         panel: Rect::new(x, top, QS_W, screen_off.bottom() + QS_PAD - top),
         wifi,
+        hotspot,
         bluetooth,
         battery,
         divider1,
@@ -113,11 +115,72 @@ pub fn wifi_row(m: &Model) -> (String, Color) {
     match &m.status {
         None => ("Unknown".into(), TEXT_SECONDARY),
         Some(s) if s.wifi.radio == WifiRadio::Failed => ("Failed: restart to retry".into(), DANGER),
+        Some(s) if !s.wifi.enabled => ("Off".into(), TEXT_SECONDARY),
+        Some(s) if s.wifi.state.as_deref() == Some("hotspot") => {
+            ("Paused (hotspot)".into(), WARNING)
+        }
         Some(s) => match wifi_name(s) {
             Some(n) => (n, TEXT_SECONDARY),
             None => ("Not connected".into(), TEXT_SECONDARY),
         },
     }
+}
+
+/// Quick Settings Hotspot row subtitle.
+pub fn hotspot_row(m: &Model) -> (String, Color) {
+    let Some(h) = m.status.as_ref().map(|s| &s.hotspot) else {
+        return ("Unknown".into(), TEXT_SECONDARY);
+    };
+    match h.state {
+        HotspotState::On => {
+            let n = h.clients.unwrap_or(0);
+            (
+                format!("On, {n} {}", if n == 1 { "device" } else { "devices" }),
+                SUCCESS,
+            )
+        }
+        HotspotState::Starting => ("Starting...".into(), WARNING),
+        HotspotState::Stopping => ("Stopping...".into(), TEXT_SECONDARY),
+        HotspotState::Failed => ("Failed".into(), DANGER),
+        HotspotState::Off if !h.has_secret => ("No password set".into(), TEXT_SECONDARY),
+        HotspotState::Off => ("Off".into(), TEXT_SECONDARY),
+    }
+}
+
+/// A Quick Settings row with a switch at the right: the row opens `row_t`, the switch toggles
+/// (`switch_t`, drawn last so its hit area wins).
+#[allow(clippy::too_many_arguments)]
+fn qs_switch_row(
+    p: &mut Painter,
+    hits: &mut Vec<(Rect, Target)>,
+    m: &Model,
+    r: Rect,
+    icon: Icon,
+    title: &str,
+    sub: (&str, Color),
+    on: bool,
+    row_t: Target,
+    switch_t: Target,
+    switch_disabled: bool,
+) {
+    if m.pressed == Some(row_t) {
+        p.row_pressed(r);
+    }
+    let sw_x = r.right() - SP_3 - 56;
+    let text_r = Rect::new(r.x, r.y, sw_x - SP_2 - r.x, r.h);
+    qs_row(p, text_r, icon, title, Some(sub), false, false, false);
+    p.toggle(
+        sw_x,
+        r.y + (r.h - 32) / 2,
+        on,
+        m.pressed == Some(switch_t),
+        switch_disabled,
+    );
+    hits.push((r, row_t));
+    hits.push((
+        Rect::new(sw_x - SP_3, r.y, r.right() - sw_x + SP_3, r.h),
+        switch_t,
+    ));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -176,18 +239,42 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     ];
     p.popover(g.panel);
 
+    // Wi-Fi and Hotspot: tap the row = Network screen, the switch toggles (owner request 2026-11-10)
+    let sw_off = !online || m.status.is_none();
     let (wsub, wcol) = wifi_row(m);
-    qs_row(
+    qs_switch_row(
         p,
+        &mut hits,
+        m,
         g.wifi,
         Icon::Wifi,
         "Wi-Fi Network",
-        Some((&wsub, wcol)),
-        true,
-        pr(Target::WifiCard),
-        false,
+        (&wsub, wcol),
+        crate::network::wifi_enabled(&m.status),
+        Target::WifiCard,
+        Target::WifiSwitch,
+        sw_off,
     );
-    hits.push((g.wifi, Target::WifiCard));
+    let (hsub, hcol) = hotspot_row(m);
+    let hs_busy = m.status.as_ref().is_some_and(|s| {
+        matches!(
+            s.hotspot.state,
+            HotspotState::Starting | HotspotState::Stopping
+        )
+    });
+    qs_switch_row(
+        p,
+        &mut hits,
+        m,
+        g.hotspot,
+        Icon::Globe,
+        "Hotspot",
+        (&hsub, hcol),
+        crate::network::hotspot_on(&m.status),
+        Target::HotspotCard,
+        Target::HotspotSwitch,
+        sw_off || hs_busy,
+    );
     qs_row(
         p,
         g.bluetooth,
@@ -505,6 +592,7 @@ mod tests {
             assert!(g.panel.y < HEADER_H && g.panel.bottom() < f.h - SP_4);
             let rows = [
                 g.wifi,
+                g.hotspot,
                 g.bluetooth,
                 g.battery,
                 g.slider,

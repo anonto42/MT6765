@@ -79,8 +79,10 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   3 px in WATERMARK, scaled to 62 % of the content area (aspect kept) and centred. It sits in the
   cached background layer, so it shows behind every screen at no per-frame cost.
 - **Quick Settings** (popover 280 wide under the pill, right-aligned, BG fill, 1 px CARD_BORDER,
-  radius 16): Wi-Fi Network (subtitle SSID / Not connected / Unknown / "Failed: restart to retry",
-  opens Network); Bluetooth (disabled, "Not supported on this tablet"); Battery (NN %) (opens Device;
+  radius 16): Wi-Fi Network (subtitle SSID / Not connected / Off / Paused (hotspot) / Unknown /
+  "Failed: restart to retry"; the row opens Network, the switch at its right toggles Wi-Fi);
+  Hotspot (globe icon, subtitle Off / No password set / Starting... / On, N devices / Failed; the
+  row opens Network, the switch toggles the hotspot); Bluetooth (disabled, "Not supported on this tablet"); Battery (NN %) (opens Device;
   "Battery (~62%)" + "Estimated from voltage" in warning for an estimate, "Battery (unavailable)"
   when there is no reading, the charge state for a gauge); divider; Brightness label + percent and
   the slider; divider; Rotation: Auto/Locked, Screen off (disabled while the core is away). No
@@ -98,8 +100,15 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   "TOOLS": a generic 4-column grid of tools (`panels::TOOLS`: icon, label, action); the first is
   "Mouse pad". Installed apps are on Home and the sidebar, not here. Cells are 70x72 touch
   targets; a tap outside closes the panel.
-- **Network**: title "Wi-Fi" + outlined radio chip (Up/Starting/Failed/Down; Failed shows "Restart
-  the tablet to retry Wi-Fi"); no on/off toggle. Connected card (outlined: SSID, signal, IP mono,
+- **Network**: title "Wi-Fi" + outlined radio chip (Up/Starting/Failed/Down, Off when switched off,
+  Paused while an exclusive hotspot runs; Failed shows "Restart the tablet to retry Wi-Fi") and the
+  Wi-Fi switch at the right (owner request 2026-11-10; off = "Wi-Fi is off" empty state, Scan
+  disabled). At the bottom a Hotspot section: label + switch, an outlined card with Name and
+  Password rows (value "Set"/"Not set"; each opens the password sheet as "Hotspot name" / "Hotspot
+  password" with Save), then up to three status lines (On, N devices connected in success; internet
+  shared / local network only / sharing unavailable in warning; "Wi-Fi client paused" in warning;
+  Failed: reason in danger). Turning the hotspot on without a password opens the password sheet.
+  Connected card (outlined: SSID, signal, IP mono,
   Disconnect). Scan button (outlined, spinner while scanning). Available networks in an outlined
   card: transparent 72 px rows with dividers (SSID, lock, 4-step signal bars white / success when
   connected). Saved networks with Forget (danger text, confirm dialog). Password sheet: full-width

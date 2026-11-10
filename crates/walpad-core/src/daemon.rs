@@ -154,7 +154,10 @@ fn wifi_err(e: WifiError) -> (ErrorCode, String) {
 
 fn hotspot_err(e: HotspotError) -> (ErrorCode, String) {
     match e {
-        HotspotError::Busy => (ErrorCode::Busy, "the hotspot is starting or stopping".into()),
+        HotspotError::Busy => (
+            ErrorCode::Busy,
+            "the hotspot is starting or stopping".into(),
+        ),
         HotspotError::Invalid(m) => (ErrorCode::InvalidArgs, m),
         HotspotError::Failed(m) => (ErrorCode::Internal, m),
     }
@@ -805,8 +808,8 @@ impl Daemon {
             parse_wifi_state(sysfs::read_trim(&self.root, "/run/walpad/wifi-state").as_deref());
         wifi.enabled = self.wifi_enabled();
         // a stale supplicant reading must not show a connection while the client is off
-        let client_off = !wifi.enabled
-            || matches!(wifi.state.as_deref(), Some("disabled" | "hotspot"));
+        let client_off =
+            !wifi.enabled || matches!(wifi.state.as_deref(), Some("disabled" | "hotspot"));
         if !client_off {
             let live = self.wifi.live();
             wifi.ssid = live.ssid.clone();
@@ -853,7 +856,10 @@ impl Daemon {
         if !on && self.wifi.connected() {
             let _ = self.wifi.disconnect();
         }
-        eprintln!("walpad-core: Wi-Fi switch {}", if on { "on" } else { "off" });
+        eprintln!(
+            "walpad-core: Wi-Fi switch {}",
+            if on { "on" } else { "off" }
+        );
         Ok(json!({
             "enabled": on,
             // the client stays paused while an exclusive hotspot runs

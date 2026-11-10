@@ -71,7 +71,11 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
                 "off" => false,
                 _ => return Err(USAGE.to_string()),
             };
-            let cmd = if w == "wifi" { "wifi_enable" } else { "hotspot" };
+            let cmd = if w == "wifi" {
+                "wifi_enable"
+            } else {
+                "hotspot"
+            };
             (cmd.into(), json!({"on": on}))
         }
         Some("power") => (

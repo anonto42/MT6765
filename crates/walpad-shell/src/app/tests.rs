@@ -7,6 +7,8 @@ use walpad_proto::{
 use walpad_ui::components::keyboard_layout;
 use walpad_ui::{Canvas, Fonts};
 
+mod hotspot;
+
 pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
     Status {
         battery: Battery {

@@ -156,7 +156,10 @@ fn wifi_switch_persists_and_hides_the_connection() {
 fn hotspot_config_start_status_stop() {
     let rig = Rig::new("cycle", false);
     let mut c = Conn::new(&rig.root);
-    assert_eq!(c.call(2, "subscribe", json!({"topics":["wifi"]}))["ok"], true);
+    assert_eq!(
+        c.call(2, "subscribe", json!({"topics":["wifi"]}))["ok"],
+        true
+    );
 
     // no password yet: refused before the script runs
     let r = c.call(3, "hotspot", json!({"on": true}));
@@ -197,7 +200,10 @@ fn hotspot_config_start_status_stop() {
     assert_eq!(s["hotspot"]["state"], "on");
     assert!(!s.to_string().contains(SECRET));
     // already on: no second start
-    assert_eq!(c.call(8, "hotspot", json!({"on": true}))["data"]["state"], "on");
+    assert_eq!(
+        c.call(8, "hotspot", json!({"on": true}))["data"]["state"],
+        "on"
+    );
 
     assert_eq!(
         c.call(9, "hotspot", json!({"on": false}))["data"]["state"],
@@ -213,7 +219,9 @@ fn hotspot_config_start_status_stop() {
         1,
         "{calls}"
     );
-    assert!(calls.lines().all(|l| ["start", "stop", "status"].contains(&l)));
+    assert!(calls
+        .lines()
+        .all(|l| ["start", "stop", "status"].contains(&l)));
     for bad in [json!({}), json!({"secret": "short"}), json!({"ssid": ""})] {
         assert_eq!(
             c.call(11, "hotspot_config", bad)["error"]["code"],
@@ -226,7 +234,10 @@ fn hotspot_config_start_status_stop() {
 fn hotspot_failure_and_timeout_paths() {
     let rig = Rig::new("fail", true);
     let mut c = Conn::new(&rig.root);
-    assert_eq!(c.call(2, "subscribe", json!({"topics":["wifi"]}))["ok"], true);
+    assert_eq!(
+        c.call(2, "subscribe", json!({"topics":["wifi"]}))["ok"],
+        true
+    );
     c.call(3, "hotspot_config", json!({"secret": SECRET}));
     // the name defaults to WalPad
     assert_eq!(c.status(4)["hotspot"]["ssid"], "WalPad");

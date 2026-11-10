@@ -17,7 +17,8 @@
 - `orientation`: ASCII 0|90|180|270 (device daemon -> fbmirror ~160 ms poll, touch bridge).
 - `status.json` (every 2 s, atomic rename): {time, uptime_s, battery{percent, estimated, status, mv, temp_dC}, orientation, rotation_locked, screen: on/dim/off, brightness, lid_closed, low_battery, wifi}.
 - `devd.cmd` FIFO 0666: screen on/off/toggle, rotate auto/lock/toggle/0/90/180/270, brightness N/+N/-N, keyboard, reload.
-- `wifi-state` (walpad-wifi, 4 s): `<wpa_state> <ipv4>` or started/failed.
+- `wifi-state` (walpad-wifi, 4 s): `<wpa_state> <ipv4>` or started/failed; `disabled` (Wi-Fi switch off) or `hotspot` (client paused for an exclusive hotspot) (owner request 2026-11-10).
+- `hotspot-state` (walpad-hotspot): `key=value` lines state (off|starting|on|failed), reason, iface, channel, internet (shared|no_uplink|unavailable), exclusive (0|1). `hotspot-exclusive`: present while the Wi-Fi client is held off for the hotspot (walpad-wifi does not run the supplicant). `hostapd.conf` / `udhcpd.conf` / `*.pid`: walpad-hotspot's, mode 0600.
 - `xfb/Xvfb_screen0`: XWD, mmapped by fbmirror.
 - Wi-Fi: socket dir /run/wpa_supplicant, iface wlan0, /etc/wpa_supplicant/wpa_supplicant.conf (600, update_config=1).
 
@@ -25,6 +26,15 @@
 - Events `{"kind": ...}`: `power_menu_open`, `volume_up`, `volume_down`, `power_short`; `keyboard_show`, `keyboard_hide` (owner request 2026-11-10: the shell's system keyboard replaces matchbox-keyboard).
 - `keyboard {mode: show|hide|toggle}` publishes `keyboard_show|keyboard_hide` (toggle is resolved against the state the shell last reported with `keyboard show|hide`) and answers `{"keyboard": "shown"|"hidden"|"unavailable"}` (unavailable = no client subscribed to `input`). The core never spawns matchbox-keyboard and no longer opens a keyboard on `launch terminal`; the shell shows it on the `apps` event `started` for app `terminal`.
 - System keyboard windows (shell): `walpad-keyboard` (override-redirect, full width, bottom 30 % of the visible area: 384 portrait, 240 landscape; WM_HINTS input=false; keys injected with XTEST) + managed 1x1 `walpad-keyboard-strut` (`_NET_WM_WINDOW_TYPE_DOCK`, bottom strut incl. the root below the panel: 384 / 720). The system dock sits directly above it while both are up.
+
+## Wi-Fi switch and hotspot (owner request 2026-11-10)
+- The chip is never powered off/on after boot (a failed power-on latches until reboot): Wi-Fi off is network level only. walpad-wifi always brings the stack up at boot; its loop then honours the switch.
+- `/var/lib/walpad/wifi-enabled` (persistent): `0` = client off, anything else or missing = on. Off: the loop terminates wpa_supplicant, stops DHCP, flushes and downs wlan0 (wlan0 stays up while an exclusive hotspot runs); on: it restarts the supplicant, which auto-connects to saved networks. Checked every second.
+- `wifi_enable {on: bool}` writes the file (atomic) and, for off, sends DISCONNECT at once; answers `{enabled, held_by_hotspot}`. `status.wifi.enabled` reflects the file; while off or paused `wifi.ssid/ip/signal_dbm` are null.
+- `/etc/walpad/hotspot.conf` (0600, owned by walpad-core): `ssid2=<hex>` and `wpa_passphrase=<8-63 printable ASCII>`. `hotspot_config {ssid?: string (1-32 bytes, no control chars), secret?: string}` (at least one; a missing name defaults to `WalPad`; the secret is never logged, never in argv, never answered) answers `{ssid, has_secret, restarting}`; a running hotspot restarts with the new settings.
+- `hotspot {on: bool}` runs `/usr/local/sbin/walpad-hotspot start|stop` (fixed path, empty environment + PATH, own process group; timeouts start 45 s, stop 20 s, status 8 s; a timed-out start is killed and followed by a cleanup stop); `on` without a stored password is `invalid_args`; `busy` while a start/stop runs. Answers `{state}` at once and finishes with a `wifi` event `{kind: "hotspot", state, reason, ssid, has_secret, clients, internet, exclusive}`. While on, `status` runs every 10 s (client count). At core start one `status` picks up a running hotspot.
+- `status.hotspot`: `{state: off|starting|on|stopping|failed, reason, ssid, has_secret, clients, internet: shared|no_uplink|unavailable|null, exclusive}`.
+- walpad-hotspot: hostapd (nl80211, WPA2-PSK CCMP) on `ap0` (created with `iw dev wlan0 interface add ap0 type __ap` if missing), 192.168.50.1/24, busybox udhcpd .10-.60, NAT with legacy iptables (chain `WALPAD_HS`, MASQUERADE to the default-route interface, ip_forward 1 only while on). STA+AP only when `iw list` has a combination with managed and AP together (then the AP uses the client's channel); otherwise the client is paused (`hotspot-exclusive`) and resumes on stop/failure. No uplink or no iptables = hotspot without internet (`internet` says which).
 
 ## Input (discover by /sys/class/input/input*/name, never by event number; mknod missing nodes; no EVIOCGRAB)
 - HALL_DEV: EV_SW 1 = closed. mtk-kpd: KEY_VOLUMEDOWN 114, KEY_VOLUMEUP 115. mtk-pmic-keys: KEY_POWER 116. kxd-kxd: unused.
