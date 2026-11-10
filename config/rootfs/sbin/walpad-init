@@ -81,6 +81,7 @@ fi
 ( walpad-wifi >> /var/log/walpad-wifi.log 2>&1 ) &
 # SD card / USB disks -> /mnt/sd, /mnt/usb/* (own loop: insert and remove while running)
 ( walpad-storage >> /var/log/walpad-storage.log 2>&1 ) &
+walpad-audio >> /var/log/walpad-audio.log 2>&1   # speaker amps on (sound plays via /etc/asound.conf)
 
 if [ -z "$SAFE" ]; then
 # Rust core (own restart loop, outside the session so a UI/X crash never stops it).  Started only when

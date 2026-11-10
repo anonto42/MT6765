@@ -1,0 +1,13 @@
+#!/bin/sh
+# walpad-audio: switch the speaker path of the MT6357 codec on (legacy mt-soc driver: plain switches,
+# no DAPM routing).  Playback must go through /etc/asound.conf (44.1 kHz plug), never raw hw:0,0 at
+# other rates.  Every amixer call has a timeout.
+set_ctl() { timeout 3 amixer -c 0 -q cset name="$1" "$2" 2>/dev/null || echo "walpad-audio: could not set $1"; }
+[ -e /dev/snd/controlC0 ] || { echo "walpad-audio: no sound card"; exit 0; }
+set_ctl Speaker_Amp_Switch On
+set_ctl Ext_Speaker_Amp_Switch On
+set_ctl Audio_Amp_L_Switch On
+set_ctl Audio_Amp_R_Switch On
+set_ctl Lineout_PGAL_GAIN 8   # 0 dB
+set_ctl Lineout_PGAR_GAIN 8
+echo "walpad-audio: speaker on"
