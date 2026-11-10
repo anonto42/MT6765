@@ -16,7 +16,7 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   mute on|off
   rotate auto|lock|toggle|0|90|180|270
   keyboard [show|hide|toggle]
-  home | screenshot | restart-shell
+  home | back | screenshot | restart-shell
   launch <app-id>
   wifi-scan                       scan and print the networks (waits for the result)
   wifi-connect <ssid> [--open]    join a network; the passphrase is read from stdin (never argv)
@@ -73,6 +73,7 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
             json!({"mode": a.get(1).copied().unwrap_or("toggle")}),
         ),
         Some("home") => ("home".into(), Value::Null),
+        Some("back") => ("back".into(), Value::Null),
         Some("screenshot") => ("screenshot".into(), Value::Null),
         Some("restart-shell") => ("restart_shell".into(), Value::Null),
         Some("launch") => ("launch".into(), json!({"app": need(1)?})),

@@ -32,6 +32,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "launch",
     "close_app",
     "home",
+    "back",
     "keyboard",
     "power",
     "restart_shell",
@@ -51,6 +52,7 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "wifi_list_saved",
     "wifi_disconnect",
     "home",
+    "back",
     "restart_shell",
     "screenshot",
     "mobile_info",
@@ -238,6 +240,9 @@ pub enum Command {
         app: String,
     },
     Home,
+    /// The Back control: Alt+Left to the focused window of the browser or the file manager, Esc
+    /// to any other (answers `{"sent": "alt+Left"|"Escape"|null}`).
+    Back,
     Keyboard {
         mode: KeyboardMode,
     },

@@ -97,6 +97,7 @@ impl fmt::Display for Effect {
                 kg::Action::Launch(a) => write!(f, "WOULD action launch:{a}"),
                 kg::Action::Run(c) => write!(f, "WOULD action run:{c} (rejected under Rust)"),
                 kg::Action::Home => write!(f, "WOULD action home"),
+                kg::Action::Back => write!(f, "WOULD action back"),
                 kg::Action::Keyboard => write!(f, "WOULD action keyboard"),
                 kg::Action::PowerMenu => write!(f, "WOULD action powermenu"),
                 kg::Action::Screenshot => write!(f, "WOULD action screenshot"),

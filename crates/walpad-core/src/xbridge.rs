@@ -71,6 +71,19 @@ pub fn parse_key_spec(spec: &str) -> Option<(Vec<u32>, u32)> {
     Some((m, keysym(key)?))
 }
 
+/// WM_CLASS needles of the apps whose Back is Alt+Left (history / parent folder).
+pub const BACK_ALT_LEFT: &[&str] = &["firefox", "pcmanfm"];
+
+/// The key spec the Back control sends to a window of this class: Alt+Left in the browser and
+/// the file manager, Esc anywhere else (also when no window is active).
+pub fn back_spec(class: &[String]) -> &'static str {
+    if BACK_ALT_LEFT.iter().any(|n| class_matches(class, n)) {
+        "alt+Left"
+    } else {
+        "Escape"
+    }
+}
+
 /// A top-level client window with the properties the process manager needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XWindow {
@@ -526,6 +539,34 @@ impl XBridge {
         Ok(out)
     }
 
+    /// WM_CLASS of the window `_NET_ACTIVE_WINDOW` names (empty when none or unreadable).
+    pub fn active_class(&self) -> R<Vec<String>> {
+        let atom = self.atom("_NET_ACTIVE_WINDOW")?;
+        let p = self
+            .conn
+            .get_property(false, self.root, atom, AtomEnum::WINDOW, 0, 1)?
+            .reply()?;
+        let Some(w) = p.value32().and_then(|mut v| v.next()).filter(|w| *w != 0) else {
+            return Ok(Vec::new());
+        };
+        let c = self
+            .conn
+            .get_property(false, w, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 64)?
+            .reply()?;
+        Ok(String::from_utf8_lossy(&c.value)
+            .split('\0')
+            .filter(|x| !x.is_empty())
+            .map(String::from)
+            .collect())
+    }
+
+    /// The Back control: Alt+Left or Esc to the active window (see `back_spec`). Returns the spec.
+    pub fn back(&mut self) -> R<&'static str> {
+        let spec = back_spec(&self.active_class()?);
+        self.send_key(spec)?;
+        Ok(spec)
+    }
+
     /// Ask a window to close (WM_PROTOCOLS / WM_DELETE_WINDOW ClientMessage, ICCCM 4.2.8.1).
     pub fn close_window(&mut self, w: Window) -> R<()> {
         let proto = self.atom("WM_PROTOCOLS")?;
@@ -594,6 +635,17 @@ mod tests {
     use super::*;
     use std::process::{Child, Command, Stdio};
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn back_is_alt_left_in_browser_and_files_and_escape_elsewhere() {
+        let c = |a: &str, b: &str| vec![a.to_string(), b.to_string()];
+        assert_eq!(back_spec(&c("Navigator", "firefox-esr")), "alt+Left");
+        assert_eq!(back_spec(&c("pcmanfm", "Pcmanfm")), "alt+Left");
+        assert_eq!(back_spec(&c("st", "St")), "Escape");
+        assert_eq!(back_spec(&[]), "Escape");
+        assert!(parse_key_spec(back_spec(&[])).is_some());
+        assert!(parse_key_spec("alt+Left").is_some());
+    }
 
     #[test]
     fn wm_class_matching() {

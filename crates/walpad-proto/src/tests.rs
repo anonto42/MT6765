@@ -101,6 +101,7 @@ fn commands_without_arguments_ignore_a_stray_args_object() {
         "wifi_list_saved",
         "wifi_disconnect",
         "home",
+        "back",
         "restart_shell",
         "screenshot",
     ] {

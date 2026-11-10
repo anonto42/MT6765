@@ -761,6 +761,9 @@ impl Daemon {
                     self.keyboard(KeyboardMode::Hide);
                 }
             }
+            Action::Back => {
+                self.x_try(|b| b.back());
+            }
             Action::Keyboard => {
                 self.keyboard(KeyboardMode::Toggle);
             }
@@ -1020,6 +1023,10 @@ impl Daemon {
                     .x_try(|b| b.focus_title("WalPad Home"))
                     .unwrap_or(false);
                 Ok(json!({"focused": ok}))
+            }
+            Command::Back => {
+                let sent = self.x_try(|b| b.back());
+                Ok(json!({"sent": sent}))
             }
             Command::Launch { app } => self.launch(&app).map(|how| json!({"result": how})),
             Command::CloseApp { app } => {

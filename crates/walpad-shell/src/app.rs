@@ -242,6 +242,8 @@ pub enum Cmd {
     /// Show the clipboard history list (seltools.rs). Shell-local like the mouse pad.
     ClipboardShow,
     ScreenOff,
+    /// The Back control (dock button): the core sends Alt+Left or Esc to the focused window.
+    Back,
     Launch(String),
     CloseApp(String),
     SetPinned(Vec<String>),
@@ -327,6 +329,7 @@ impl Cmd {
             Cmd::MousePadHide => ("mouse_pad", json!({"mode": "hide"})),
             Cmd::ClipboardShow => ("clipboard", json!({"mode": "show"})),
             Cmd::ScreenOff => ("screen", json!({"mode": "off"})),
+            Cmd::Back => ("back", Value::Null),
             Cmd::Launch(id) => ("launch", json!({"app": id})),
             Cmd::CloseApp(id) => ("close_app", json!({"app": id})),
             Cmd::SetPinned(ids) => ("set_setting", json!({"key": "pinned_apps", "value": ids})),
@@ -665,6 +668,11 @@ impl App {
     /// Remember which request was sent with which id (to interpret its reply).
     pub fn note_sent(&mut self, id: u64, cmd: &Cmd) {
         self.pending.insert(id, cmd.purpose());
+    }
+
+    /// A warning toast from outside the model (the Recents strip).
+    pub fn notice(&mut self, text: impl Into<String>) {
+        self.toast(text, Tone::Warning);
     }
 
     fn toast(&mut self, text: impl Into<String>, tone: Tone) {

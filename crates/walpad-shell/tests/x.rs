@@ -800,10 +800,10 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     });
     wait_for("handle back on the edge", || geom(p, handle).1 == 1252);
 
-    // Home (left third) raises the shell above the app and the dock, and folds the strip
+    // Home (second of four cells) raises the shell above the app and the dock, and folds the strip
     expand_dock(&probe, handle, dock);
     assert!(stack_pos(p, shell) < stack_pos(p, dock));
-    probe.click(100, 1250);
+    probe.click(300, 1250);
     wait_for("shell raised above the app", || {
         stack_pos(p, shell) > stack_pos(p, app)
     });
@@ -949,10 +949,10 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     c.flush().unwrap();
     let handle = find_by_class(p, b"walpad-dock-handle\0").expect("dock handle");
 
-    // the dock's Keyboard button (middle third) shows the keyboard: 30 % of 1280 at the bottom,
+    // the dock's Keyboard button (third of four cells) shows the keyboard: 30 % of 1280 at the bottom,
     // the dock moves directly above it, struts cover both
     expand_dock(&probe, handle, dock);
-    probe.click(400, 1250);
+    probe.click(500, 1250);
     wait_for("keyboard mapped", || is_mapped(p, kbd));
     // the action folded the strip: the handle sits directly on the keyboard
     wait_for("handle above the keyboard", || {
@@ -1055,7 +1055,7 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
         geom(p, dock) == (0, 744, 1280, 56)
     });
     expand_dock(&probe, handle, dock);
-    probe.click(640, 772);
+    probe.click(800, 772);
     wait_for("landscape keyboard mapped", || is_mapped(p, kbd));
     let r = keyboard_rect((1280, 800));
     assert_eq!(geom(p, kbd), (0, 560, 1280, 240));
@@ -1071,7 +1071,7 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     wait_for("handle on the strip above the keyboard", || {
         geom(p, handle).1 == 504 - 28
     });
-    probe.click(100, 530);
+    probe.click(400, 530);
     wait_for("keyboard hidden by Home", || !is_mapped(p, kbd));
 
     // shown again, then the shell comes to the front (the user went Home another way): hidden.
@@ -1085,7 +1085,7 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
         geom(p, dock) == (0, 744, 1280, 56)
     });
     expand_dock(&probe, handle, dock);
-    probe.click(640, 772);
+    probe.click(800, 772);
     wait_for("keyboard shown again", || is_mapped(p, kbd));
     set_active(p, shell);
     wait_for("keyboard hidden when the shell is active", || {
@@ -1626,4 +1626,236 @@ fn xim_focus_shows_and_hides_the_system_keyboard() {
     app2.client.disconnect().unwrap();
     app2.pump(20);
     wait_for("keyboard down after disconnect", || !is_mapped(p, kbd));
+}
+
+// ---------------------------------------------------------------------------------------------
+// app switcher and navigation (`app-switcher-navigation`): the bottom-edge swipe (short = Home,
+// held = Recents), thumbnails, tap a card = focus, swipe a card = close, and no interference
+// with touches that start above the edge zone. The test plays the window manager.
+
+/// Press at (x0, y0), move to (x1, y1) in steps, wait `hold_ms`, release.
+fn swipe(probe: &Probe, (x0, y0): (i16, i16), (x1, y1): (i16, i16), hold_ms: u64) {
+    let (c, r) = (&probe.0.conn, probe.0.root);
+    let motion = |x: i16, y: i16| {
+        c.xtest_fake_input(xproto::MOTION_NOTIFY_EVENT, 0, 0, r, x, y, 0)
+            .unwrap();
+        c.flush().unwrap();
+    };
+    motion(x0, y0);
+    c.xtest_fake_input(xproto::BUTTON_PRESS_EVENT, 1, 0, r, 0, 0, 0)
+        .unwrap();
+    c.flush().unwrap();
+    std::thread::sleep(Duration::from_millis(40));
+    for i in 1..=6 {
+        motion(x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    std::thread::sleep(Duration::from_millis(hold_ms));
+    c.xtest_fake_input(xproto::BUTTON_RELEASE_EVENT, 1, 0, r, 0, 0, 0)
+        .unwrap();
+    c.flush().unwrap();
+}
+
+/// What the window manager does when it activates an app: raise it and report it active.
+fn activate_app(p: &XConn, w: Window) {
+    p.conn
+        .configure_window(
+            w,
+            &ConfigureWindowAux::new().stack_mode(xproto::StackMode::ABOVE),
+        )
+        .unwrap();
+    set_active(p, w);
+}
+
+fn app_window(p: &XConn, class: &[u8], colour: u32) -> Window {
+    use x11rb::protocol::xproto::{CreateWindowAux, WindowClass};
+    let c = &p.conn;
+    let w = c.generate_id().unwrap();
+    c.create_window(
+        0,
+        w,
+        p.root,
+        0,
+        0,
+        800,
+        1280,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        0,
+        &CreateWindowAux::new().background_pixel(colour),
+    )
+    .unwrap();
+    c.change_property8(
+        xproto::PropMode::REPLACE,
+        w,
+        AtomEnum::WM_CLASS,
+        AtomEnum::STRING,
+        class,
+    )
+    .unwrap();
+    c.map_window(w).unwrap();
+    c.flush().unwrap();
+    w
+}
+
+#[test]
+fn edge_swipe_goes_home_or_opens_recents_and_cards_focus_and_close() {
+    use walpad_core::{daemon::Daemon, fake};
+    use walpad_shell::edge::{zone_rect, EDGE_ZONE_PX};
+    use walpad_shell::recents::{geometry, GAP, PAD};
+    let n = display_num();
+    let Some(x) = xvfb(n) else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("walpad-shell-nav-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("etc/walpad")).unwrap();
+    fake::populate(&root).unwrap();
+    std::fs::write(
+        root.join("etc/walpad/apps.json"),
+        r#"[
+ {"id":"browser","name":"Browser","icon":"globe","exec":["true"],"wm_class":"firefox-esr"},
+ {"id":"terminal","name":"Terminal","icon":"terminal","exec":["true"],"wm_class":"st"},
+ {"id":"files","name":"Files","icon":"folder","exec":["true"],"wm_class":"pcmanfm"}
+]"#,
+    )
+    .unwrap();
+    let mut core = Daemon::new(Root::new(&root)).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let s2 = stop.clone();
+    let core_thread = std::thread::spawn(move || core.run(&s2));
+    let sh = Running::start(&root, &x.1);
+    let probe = Probe(walpad_x::connect(&x.1).unwrap());
+    wait_for("/run/walpad-ok", || root.join("run/walpad-ok").exists());
+    let shell = probe.find_shell().expect("shell window");
+    let p = &probe.0;
+    let c = &p.conn;
+    let edge = find_by_class(p, b"walpad-edge\0").expect("edge window");
+    let rwin = find_by_class(p, b"walpad-recents\0").expect("recents window");
+    let (dock, handle, _) = dock_windows(p);
+    assert!(
+        !is_mapped(p, edge) && !is_mapped(p, rwin),
+        "nothing over the Home screen"
+    );
+
+    // three apps, the files window on top (the stacking list is bottom to top)
+    let browser = app_window(p, b"firefox-esr\0Navigator\0", 0x00CC_4444);
+    let term = app_window(p, b"st\0St\0", 0x0044_CC44);
+    let files = app_window(p, b"pcmanfm\0Pcmanfm\0", 0x0044_44CC);
+    c.change_property32(
+        xproto::PropMode::REPLACE,
+        p.root,
+        atom(p, "_NET_CLIENT_LIST_STACKING"),
+        AtomEnum::WINDOW,
+        &[browser, term, files],
+    )
+    .unwrap();
+    set_active(p, files);
+    wait_for("edge zone mapped over the app", || is_mapped(p, edge));
+    let z = zone_rect((800, 1280));
+    assert_eq!(
+        geom(p, edge),
+        (z.x as i16, z.y as i16, z.w as u16, EDGE_ZONE_PX as u16),
+        "24 px at the bottom, the dock handle's columns left out"
+    );
+    assert!(
+        c.get_window_attributes(edge)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .override_redirect
+    );
+
+    // a drag that starts 100 px above the bottom edge is not ours: nothing fires
+    swipe(&probe, (400, 1180), (400, 900), 500);
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!is_mapped(p, rwin), "no Recents from a drag inside the app");
+    assert!(stack_pos(p, shell) < stack_pos(p, files), "no Home either");
+
+    // a short swipe from the edge is Home: the shell comes above the app
+    swipe(&probe, (400, 1270), (400, 1100), 0);
+    wait_for("shell raised by the Home swipe", || {
+        stack_pos(p, shell) > stack_pos(p, files)
+    });
+    assert!(!is_mapped(p, rwin));
+    // the window manager reports the shell: no edge zone over Home
+    set_active(p, shell);
+    wait_for("edge zone gone over Home", || !is_mapped(p, edge));
+
+    // the expanded dock strip owns the bottom edge: no zone while it is open
+    activate_app(p, files);
+    wait_for("edge zone back", || is_mapped(p, edge));
+    expand_dock(&probe, handle, dock);
+    wait_for("edge zone unmapped while the dock strip is open", || {
+        !is_mapped(p, edge)
+    });
+    probe.click(300, 1250); // Home (also folds the strip)
+    wait_for("strip folded", || !is_mapped(p, dock));
+    set_active(p, shell);
+    wait_for("edge zone gone again", || !is_mapped(p, edge));
+    activate_app(p, files);
+    wait_for("edge zone mapped again", || is_mapped(p, edge));
+
+    // swipe up and hold: three cards, most recent first, the app in front with its thumbnail
+    swipe(&probe, (400, 1270), (400, 1100), 450);
+    wait_for("Recents strip mapped", || is_mapped(p, rwin));
+    assert_eq!(geom(p, rwin), (0, 0, 800, 1280));
+    let g = geometry((800, 1280), 3);
+    let card_x = |i: i32| g.left + i * (g.card_w + GAP);
+    let thumb_px = |img: &[u8], i: i32| {
+        px(
+            img,
+            800,
+            (card_x(i) + PAD + g.thumb_w / 2) as usize,
+            (g.top + PAD + g.thumb_h / 2) as usize,
+        )
+    };
+    wait_for("the front app's thumbnail on the first card", || {
+        thumb_px(&probe.image(rwin, 800, 1280), 0) == (0x44, 0x44, 0xCC)
+    });
+    let img = probe.image(rwin, 800, 1280);
+    assert_ne!(
+        thumb_px(&img, 1),
+        (STRIP.r, STRIP.g, STRIP.b),
+        "second card is drawn (icon box)"
+    );
+
+    // swiping a card up asks the core to close it; the core does not run that app (closed:
+    // false), so the card comes back
+    let (sx, sy) = ((card_x(1) + g.card_w / 2) as i16, (g.top + 120) as i16);
+    let before = thumb_px(&img, 1);
+    swipe(&probe, (sx, sy), (sx, sy - 220), 0);
+    wait_for("the card is back after the refusal", || {
+        thumb_px(&probe.image(rwin, 800, 1280), 1) == before
+    });
+    assert!(is_mapped(p, rwin), "still open");
+
+    // rotation while Recents is open: the strip follows, nothing crashes
+    c.configure_window(shell, &ConfigureWindowAux::new().width(1280).height(800))
+        .unwrap();
+    c.flush().unwrap();
+    wait_for("strip resized for landscape", || {
+        geom(p, rwin) == (0, 0, 1280, 800)
+    });
+    c.configure_window(shell, &ConfigureWindowAux::new().width(800).height(1280))
+        .unwrap();
+    c.flush().unwrap();
+    wait_for("strip back in portrait", || {
+        geom(p, rwin) == (0, 0, 800, 1280)
+    });
+
+    // tapping a card focuses that app and closes the strip
+    probe.click(sx, sy);
+    wait_for("terminal raised", || {
+        stack_pos(p, term) > stack_pos(p, files) && stack_pos(p, term) > stack_pos(p, browser)
+    });
+    wait_for("strip closed", || !is_mapped(p, rwin));
+    assert!(
+        !sh.h.as_ref().is_some_and(|h| h.is_finished()),
+        "the shell is still running"
+    );
+
+    stop.store(true, Ordering::Relaxed);
+    core_thread.join().unwrap();
 }

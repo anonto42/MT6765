@@ -12,6 +12,7 @@ use crate::ime::{FocusKbd, ImEvent, ImServer, KbdAction};
 use crate::keyboard::SysKeyboard;
 use crate::mousepad::MousePad;
 use crate::seltools::{BarState, EditBar, EditOut};
+use crate::nav::Nav;
 use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
 use std::path::PathBuf;
@@ -40,6 +41,11 @@ pub struct Shell {
     kbd: Option<SysKeyboard>,
     /// The mouse pad (None when its X connection could not be opened or died).
     pad: Option<MousePad>,
+    /// Bottom-edge swipe (Home / Recents) and the Recents strip (None when its X connection could
+    /// not be opened or died).
+    nav: Option<Nav>,
+    /// `close_app` requests the Recents strip is waiting for: (request id, app id).
+    nav_close: Vec<(u64, String)>,
     /// The XIM server whose focus events drive the keyboard (None when it could not start or
     /// its X connection died: the terminal then gets the keyboard at start, as before).
     ime: Option<ImServer>,
@@ -115,6 +121,23 @@ impl Shell {
                 None
             }
         };
+        let catalog = load_catalog(&opts.root);
+        let nav = match Nav::open(
+            &sock,
+            win.win,
+            load_wm_classes(&opts.root),
+            catalog
+                .iter()
+                .map(|a| (a.id.clone(), a.name.clone(), a.icon))
+                .collect(),
+            (w, h),
+        ) {
+            Ok(n) => Some(n),
+            Err(e) => {
+                eprintln!("walpad-shell: edge swipe / Recents disabled: {}", e.0);
+                None
+            }
+        };
         let ime = match ImServer::open(&sock) {
             Ok(s) => Some(s),
             Err(e) => {
@@ -157,6 +180,8 @@ impl Shell {
             dock,
             kbd,
             pad,
+            nav,
+            nav_close: Vec::new(),
             ime,
             focus: FocusKbd::new(),
             edit,
@@ -166,8 +191,7 @@ impl Shell {
             core,
             canvas,
             fonts,
-            app: App::new(w, h, load_catalog(&opts.root), wall)
-                .with_pinned(read_pinned(&opts.root)),
+            app: App::new(w, h, catalog, wall).with_pinned(read_pinned(&opts.root)),
             rec: Recogniser::new(),
             root: opts.root,
             clock_24h,
@@ -214,8 +238,22 @@ impl Shell {
                 _ => {}
             }
             let (name, args) = c.request();
-            if let Some(id) = self.core.send(name, args) {
-                self.app.note_sent(id, &c);
+            match self.core.send(name, args) {
+                Some(id) => {
+                    self.app.note_sent(id, &c);
+                    if let Cmd::CloseApp(app) = &c {
+                        if self.nav.as_ref().is_some_and(|n| n.is_closing(app)) {
+                            self.nav_close.push((id, app.clone()));
+                        }
+                    }
+                }
+                None => {
+                    // not connected: the card comes back at once
+                    if let (Cmd::CloseApp(app), Some(n)) = (&c, &mut self.nav) {
+                        n.close_result(app, false);
+                        self.app.notice("Could not close the app");
+                    }
+                }
             }
         }
     }
@@ -464,6 +502,11 @@ impl Shell {
                     eprintln!("walpad-shell: system dock: {}", e.0);
                 }
             }
+            if let Some(n) = &mut self.nav {
+                if let Err(e) = n.set_shell_size(w, h) {
+                    eprintln!("walpad-shell: edge swipe / Recents: {}", e.0);
+                }
+            }
         }
     }
 
@@ -510,6 +553,26 @@ impl Shell {
                     self.send(cmds);
                 }
                 Err(e) => eprintln!("walpad-shell: system dock disabled: {}", e.0),
+            }
+        }
+        // the edge zone only exists while the bottom edge is free of keyboard, pad and dock strip
+        let blocked = self.keyboard_visible()
+            || self.mouse_pad_visible()
+            || self.dock.as_ref().is_some_and(|d| d.expanded());
+        if let Some(mut n) = self.nav.take() {
+            let res = n
+                .set_blocked(blocked)
+                .and_then(|()| n.poll(&mut self.fonts));
+            match res {
+                Ok(out) => {
+                    self.nav = Some(n);
+                    for t in out.notices {
+                        self.app.notice(t);
+                        self.dirty = true;
+                    }
+                    self.send(out.cmds);
+                }
+                Err(e) => eprintln!("walpad-shell: edge swipe / Recents disabled: {}", e.0),
             }
         }
         if let Some(mut k) = self.kbd.take() {
@@ -597,6 +660,14 @@ impl Shell {
                 }
                 _ => {}
             }
+            if let CoreEvent::Reply { id, ok, data, .. } = &ev {
+                if let Some(i) = self.nav_close.iter().position(|(r, _)| r == id) {
+                    let (_, app) = self.nav_close.remove(i);
+                    if let Some(n) = &mut self.nav {
+                        n.close_result(&app, *ok && data["closed"] != false);
+                    }
+                }
+            }
             let out = self.app.on_core(&ev, now);
             self.dirty |= out.dirty;
             self.need_refresh |= out.refresh;
@@ -645,6 +716,9 @@ impl Shell {
         if let Some(d) = self.dock.as_ref().and_then(|d| d.next_deadline()) {
             wait = wait.min(d.as_millis() as u64);
         }
+        if let Some(d) = self.nav.as_ref().and_then(|n| n.next_deadline()) {
+            wait = wait.min(d.as_millis() as u64);
+        }
         wait = wait.min(
             self.next_minute
                 .saturating_duration_since(Instant::now())
@@ -659,6 +733,7 @@ impl Shell {
         fds.extend(self.dock.as_ref().map(|d| d.wait_fd()));
         fds.extend(self.kbd.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.pad.as_ref().map(|p| p.wait_fd()));
+        fds.extend(self.nav.as_ref().map(|n| n.wait_fd()));
         fds.extend(self.ime.as_ref().map(|s| s.wait_fd()));
         fds.extend(self.keeper.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.edit.as_ref().map(|e| e.wait_fd()));

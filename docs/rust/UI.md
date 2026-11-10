@@ -170,6 +170,15 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   Restart/Shut down need two taps ("Tap again to shut down" in the danger style for 3 s). Hardware
   focus = a 2 px white ring around the item. Volume keys move focus, a short power press activates,
   the menu closes after 20 s.
+- **Navigation gestures and Recents** (`app-switcher-navigation`): only a touch that starts in the 24 px
+  edge zone at the bottom of the visible area (not above it, not on the dock handle's columns, not while the
+  keyboard/pad/dock strip is up) is a navigation swipe: short up = Home, up and hold 300 ms = Recents; the
+  rest of the screen keeps drag = scroll. Recents: SURFACE_STRONG backdrop, up to three cards across
+  (larger when fewer, never wider than half the screen, more scroll sideways), each a card with a 8 px
+  padded thumbnail of the screen's aspect (app icon in an icon box when there is none), a 56 px label strip
+  (icon, name, 48 px close X) and the caption "Swipe a card up to close it"; empty: "No recent apps".
+  Snapshots `recents_{portrait,landscape,dragging,empty,scrolled}`. The dock strip is Back, Home, Keyboard,
+  Close app (four equal cells; `dock_*` goldens).
 - **System dock (D3)**: 56 px charcoal strip with a top divider and three outlined pill buttons
   (Home, Keyboard, Close app in danger), only while another app is in front. Collapsible (owner
   request 2026-11-10): by default only an arrow handle shows, 56x28 at the right end of the bottom

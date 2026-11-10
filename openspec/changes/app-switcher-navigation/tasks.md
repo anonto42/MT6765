@@ -1,6 +1,6 @@
 ## 1. Host
-- [ ] 1.1 Gesture recogniser unit tests (swipe, hold, cancel) in walpad-shell with synthetic touch streams
-- [ ] 1.2 Golden image for the Recents strip (portrait, landscape)
+- [x] 1.1 Gesture recogniser unit tests (swipe, hold, cancel) in walpad-shell with synthetic touch streams
+- [x] 1.2 Golden image for the Recents strip (portrait, landscape)
 - [ ] 1.3 `scripts/check.sh` passes
 
 ## 2. Device (needs the tablet; no flashing)

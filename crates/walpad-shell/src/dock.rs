@@ -46,12 +46,14 @@ pub const SHELL_TITLE: &str = crate::window::TITLE;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockButton {
+    Back,
     Home,
     Keyboard,
     CloseApp,
 }
 
-pub const BUTTONS: [(DockButton, &str, Icon); 3] = [
+pub const BUTTONS: [(DockButton, &str, Icon); 4] = [
+    (DockButton::Back, "Back", Icon::Back),
     (DockButton::Home, "Home", Icon::Home),
     (DockButton::Keyboard, "Keyboard", Icon::Keyboard),
     (DockButton::CloseApp, "Close app", Icon::Close),
@@ -146,13 +148,18 @@ pub fn strut_partial(area: (i32, i32), kbd_h: i32, root_h: i32) -> [u32; 12] {
     crate::keyboard::bottom_strut(dock_rect(area, kbd_h), root_h)
 }
 
-/// Hit areas of the three buttons (equal thirds of the strip, strip-local coordinates).
-pub fn button_rects(w: i32) -> [(Rect, DockButton); 3] {
-    let cell = w / 3;
-    let mut out = [(Rect::new(0, 0, 0, 0), DockButton::Home); 3];
+/// Hit areas of the buttons (equal cells of the strip, strip-local coordinates).
+pub fn button_rects(w: i32) -> [(Rect, DockButton); BUTTONS.len()] {
+    let n = BUTTONS.len() as i32;
+    let cell = w / n;
+    let mut out = [(Rect::new(0, 0, 0, 0), DockButton::Home); BUTTONS.len()];
     for (i, (b, _, _)) in BUTTONS.iter().enumerate() {
         let x = i as i32 * cell;
-        let cw = if i == 2 { w - 2 * cell } else { cell };
+        let cw = if i as i32 == n - 1 {
+            w - (n - 1) * cell
+        } else {
+            cell
+        };
         out[i] = (Rect::new(x, 0, cw, DOCK_H), *b);
     }
     out
@@ -240,6 +247,7 @@ pub fn command_for(
 ) -> Option<Cmd> {
     match b {
         DockButton::Home => None,
+        DockButton::Back => Some(Cmd::Back),
         DockButton::Keyboard => Some(Cmd::KeyboardToggle),
         DockButton::CloseApp => app_for_class(apps, active_class).map(Cmd::CloseApp),
     }
@@ -934,22 +942,28 @@ mod tests {
     }
 
     #[test]
-    fn three_buttons_tile_the_strip_with_big_targets() {
+    fn four_buttons_tile_the_strip_with_big_targets() {
         for w in [800, 1280] {
             let rs = button_rects(w);
             assert_eq!(
                 rs.iter().map(|(_, b)| *b).collect::<Vec<_>>(),
-                [DockButton::Home, DockButton::Keyboard, DockButton::CloseApp]
+                [
+                    DockButton::Back,
+                    DockButton::Home,
+                    DockButton::Keyboard,
+                    DockButton::CloseApp
+                ]
             );
             assert_eq!(rs[0].0.x, 0);
-            assert_eq!(rs[2].0.right(), w, "no gap at the right edge");
+            assert_eq!(rs[3].0.right(), w, "no gap at the right edge");
             for pair in rs.windows(2) {
                 assert_eq!(pair[0].0.right(), pair[1].0.x);
             }
             assert!(rs.iter().all(|(r, _)| r.h >= TOUCH_MIN && r.w >= TOUCH_MIN));
         }
-        assert_eq!(button_at(800, 10, 10), Some(DockButton::Home));
-        assert_eq!(button_at(800, 400, 30), Some(DockButton::Keyboard));
+        assert_eq!(button_at(800, 10, 10), Some(DockButton::Back));
+        assert_eq!(button_at(800, 300, 30), Some(DockButton::Home));
+        assert_eq!(button_at(800, 500, 30), Some(DockButton::Keyboard));
         assert_eq!(button_at(800, 790, 30), Some(DockButton::CloseApp));
         assert_eq!(button_at(800, 400, 56), None, "below the strip");
     }
@@ -1066,6 +1080,10 @@ mod tests {
         let st = vec!["st".to_string(), "St".to_string()];
         let other = vec!["xterm".to_string()];
         assert_eq!(command_for(DockButton::Home, &apps, &st), None);
+        assert_eq!(
+            command_for(DockButton::Back, &apps, &other),
+            Some(Cmd::Back)
+        );
         assert_eq!(
             command_for(DockButton::Keyboard, &apps, &other),
             Some(Cmd::KeyboardToggle)

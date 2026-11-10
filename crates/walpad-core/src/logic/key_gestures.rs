@@ -81,6 +81,8 @@ pub enum Action {
     /// Legacy `run:` (only honoured while Python is the runtime; the core rejects it).
     Run(String),
     Home,
+    /// Alt+Left in the browser / file manager, Esc elsewhere (the app-switcher Back).
+    Back,
     Keyboard,
     PowerMenu,
     Screenshot,
@@ -95,6 +97,7 @@ pub fn parse_action(s: &str) -> Action {
     }
     match s {
         "home" => return Action::Home,
+        "back" => return Action::Back,
         "keyboard" => return Action::Keyboard,
         "powermenu" => return Action::PowerMenu,
         "screenshot" => return Action::Screenshot,
@@ -272,6 +275,7 @@ mod tests {
         assert_eq!(parse_action("volume:-5"), Action::Volume(-5));
         assert_eq!(parse_action("volume:+5"), Action::Volume(5));
         assert_eq!(parse_action("home"), Action::Home);
+        assert_eq!(parse_action("back"), Action::Back);
         assert_eq!(parse_action("powermenu"), Action::PowerMenu);
         assert!(matches!(parse_action("rm -rf /"), Action::Unknown(_)));
     }

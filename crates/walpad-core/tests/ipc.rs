@@ -345,6 +345,10 @@ fn settings_launch_screenshot_power_and_restart_shell() {
         0
     );
     assert_eq!(c.call(16, "home", Value::Null)["data"]["focused"], false);
+    // Back without an X server: accepted, nothing sent
+    let back = c.call(17, "back", Value::Null);
+    assert_eq!(back["ok"], true);
+    assert!(back["data"]["sent"].is_null());
 }
 
 /// The `keyboard` command no longer spawns matchbox-keyboard: it asks the shell's system keyboard
