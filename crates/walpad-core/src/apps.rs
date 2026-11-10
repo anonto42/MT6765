@@ -112,16 +112,21 @@ pub struct Apps {
 }
 
 impl Apps {
+    /// The shipped /etc/walpad/apps.json plus the apps the app store registered in apps.d.
+    fn read_defs(root: &Root) -> Vec<AppDef> {
+        walpad_proto::appdefs::entries(
+            &root.p(walpad_proto::appdefs::APPS_JSON),
+            &root.p(walpad_proto::appdefs::APPS_D),
+        )
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<AppDef>(v).ok())
+        .filter(|d| !d.id.is_empty() && !d.exec.is_empty())
+        .collect()
+    }
+
     pub fn load(root: &Root) -> Self {
-        let defs = std::fs::read_to_string(root.p("/etc/walpad/apps.json"))
-            .ok()
-            .and_then(|s| serde_json::from_str::<Vec<AppDef>>(&s).ok())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|d| !d.id.is_empty() && !d.exec.is_empty())
-            .collect();
         Apps {
-            defs,
+            defs: Self::read_defs(root),
             children: HashMap::new(),
             ext: HashSet::new(),
             grace: None,
@@ -140,6 +145,11 @@ impl Apps {
                     .and_then(crate::logic::gesture::Mode::parse)
             })
             .unwrap_or_default()
+    }
+
+    /// Read the definitions again (an app was installed or uninstalled). Running children stay.
+    pub fn reload(&mut self, root: &Root) {
+        self.defs = Self::read_defs(root);
     }
 
     pub fn def(&self, id: &str) -> Option<&AppDef> {
@@ -496,6 +506,48 @@ mod tests {
         let gone = reap_all(&mut a, 1);
         assert_eq!(gone, vec![("quick".to_string(), Exit::Clean)]);
         assert!(!a.running("quick"));
+    }
+
+    #[test]
+    fn apps_d_adds_apps_but_never_replaces_the_shipped_ones() {
+        let r = root_with(
+            r#"[{"id":"sleeper","exec":["sleep","30"]}]"#,
+            &["sleep", "true"],
+        );
+        let d = r.p("/var/lib/walpad/apps.d");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(
+            d.join("quick.json"),
+            r#"{"id":"quick","name":"Q","exec":["true"]}"#,
+        )
+        .unwrap();
+        // an entry that tries to take over a shipped id, and ones the allowlist rules reject
+        std::fs::write(
+            d.join("sleeper.json"),
+            r#"{"id":"sleeper","exec":["true"]}"#,
+        )
+        .unwrap();
+        std::fs::write(d.join("bad.json"), r#"{"id":"rm -rf /","exec":["true"]}"#).unwrap();
+        std::fs::write(d.join("empty.json"), r#"{"id":"empty","exec":[]}"#).unwrap();
+        let mut a = Apps::load(&r);
+        assert_eq!(a.def("sleeper").unwrap().exec, ["sleep", "30"]);
+        assert!(
+            a.def("quick").is_some() && a.def("empty").is_none() && a.def("rm -rf /").is_none()
+        );
+        assert!(
+            a.status(&r).iter().any(|s| s.app == "quick"),
+            "installed: its executable exists"
+        );
+        assert_eq!(a.spawn("rm -rf /", &r), Err(LaunchError::Unknown));
+        // reload sees an app registered later and one that was unregistered; children stay
+        a.spawn("sleeper", &r).unwrap();
+        std::fs::remove_file(d.join("quick.json")).unwrap();
+        std::fs::write(d.join("late.json"), r#"{"id":"late","exec":["true"]}"#).unwrap();
+        a.reload(&r);
+        assert!(a.def("quick").is_none() && a.def("late").is_some());
+        assert!(a.owns("sleeper"), "a running app survives the reload");
+        a.request_close("sleeper", Instant::now());
+        reap_all(&mut a, 1);
     }
 
     #[test]

@@ -1,0 +1,12 @@
+{
+ "version": 1,
+ "roles": {
+  "browser": "browser",
+  "files": "files",
+  "terminal": "terminal",
+  "video": "mpv",
+  "music": "audacious",
+  "image": "imv",
+  "pdf": "evince"
+ }
+}

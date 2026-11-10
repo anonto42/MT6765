@@ -9,6 +9,7 @@ use crate::lock::{Lock, LockError, Unlock};
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
 use crate::modem::{MobileError, Modem};
 use crate::volume::Volume;
+use crate::pkg::{Op, Pkg, PkgError};
 use crate::wpa::manager::{Wifi, WifiError, WifiEvent};
 use crate::wpa::parse::{hex, ssid_display, unhex};
 use crate::xbridge::{class_matches, XBridge, XError};
@@ -108,6 +109,7 @@ pub struct Daemon {
     wifi: Wifi,
     hotspot: Hotspot,
     bluetooth: Bluetooth,
+    pkg: Pkg,
     modem: Modem,
     volume: Volume,
     lock: Lock,
@@ -203,6 +205,18 @@ fn mobile_err(e: MobileError) -> (ErrorCode, String) {
     }
 }
 
+fn pkg_err(e: PkgError) -> (ErrorCode, String) {
+    match e {
+        PkgError::Busy => (
+            ErrorCode::Busy,
+            "another install or uninstall is running".into(),
+        ),
+        PkgError::Unknown(m) => (ErrorCode::InvalidArgs, m),
+        PkgError::Refused(m) => (ErrorCode::Refused, m),
+        PkgError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
 fn hotspot_err(e: HotspotError) -> (ErrorCode, String) {
     match e {
         HotspotError::Busy => (
@@ -273,6 +287,7 @@ impl Daemon {
             wifi: Wifi::new(&root),
             hotspot: Hotspot::new(&root),
             bluetooth: Bluetooth::new(&root),
+            pkg: Pkg::new(&root),
             modem: Modem::new(&root),
             volume: Volume::new(&root, now),
             lock: Lock::new(&root, wall_ms()),
@@ -292,6 +307,8 @@ impl Daemon {
         let mut fx = Vec::new();
         Brain::rotation_effects(init, &mut fx);
         d.apply(fx, true);
+        // mimeapps.list follows what is installed (app store, change app-catalogue-manager)
+        let _ = d.pkg.apply_defaults();
         // a hotspot can outlive a core restart: pick up its real state
         d.hotspot.probe(now);
         // the modem: pick up a running one, or boot it once per boot (owner request 2026-11-10)
@@ -464,6 +481,12 @@ impl Daemon {
         if !self.apps.installed(&def, &self.root) {
             return Err((ErrorCode::Refused, format!("{id} is not installed")));
         }
+        if self.pkg.busy_with(id) {
+            return Err((
+                ErrorCode::Busy,
+                format!("{id} is being installed or removed"),
+            ));
+        }
         if def.single_instance {
             if !def.wm_class.is_empty()
                 && self.x_try(|b| b.focus_class(&def.wm_class)) == Some(true)
@@ -516,6 +539,11 @@ impl Daemon {
     /// Test hook: walpad-volume timeout.
     pub fn volume_mut(&mut self) -> &mut Volume {
         &mut self.volume
+    }
+
+    /// Test hook: app store reserve and job timeouts.
+    pub fn pkg_mut(&mut self) -> &mut Pkg {
+        &mut self.pkg
     }
 
     /// Test hook: modem timeouts and poll periods.
@@ -1156,6 +1184,21 @@ impl Daemon {
             Command::BluetoothConfirm { address, accept } => {
                 self.bluetooth.confirm(&address, accept).map_err(bluetooth_err)
             }
+            Command::PkgCatalogue => Ok(self.pkg.catalogue_json()),
+            Command::PkgInstall { id } => {
+                self.pkg.start(Op::Install, &id, Instant::now()).map_err(pkg_err)?;
+                Ok(json!({"accepted": true, "id": id}))
+            }
+            Command::PkgRemove { id } => {
+                self.pkg.start(Op::Remove, &id, Instant::now()).map_err(pkg_err)?;
+                // an app that runs is closed first: its window goes, then the package
+                let closed = self.close_app(&id);
+                Ok(json!({"accepted": true, "id": id, "closed": closed.is_some()}))
+            }
+            Command::DefaultApp { role, app } => {
+                self.pkg.set_default(&role, &app).map_err(pkg_err)?;
+                Ok(json!({"role": role, "app": app}))
+            }
             Command::PowerMenu { open } => {
                 self.shell_menu_until = open.then(|| now + SHELL_MENU_MAX_MS);
                 Ok(json!({"open": open}))
@@ -1472,6 +1515,15 @@ impl Daemon {
         }
         did |= self.bluetooth.tick(Instant::now());
         for n in self.bluetooth.take_notices() {
+            self.publish(Topic::Notice, "notice", n);
+            did = true;
+        }
+        if self.pkg.tick(Instant::now()) {
+            // an app was installed or removed: the allowlist follows
+            self.apps.reload(&self.root);
+            did = true;
+        }
+        for n in self.pkg.take_notices() {
             self.publish(Topic::Notice, "notice", n);
             did = true;
         }

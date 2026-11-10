@@ -233,6 +233,70 @@ fn hotspot_config_is_validated_and_redacted() {
 }
 
 #[test]
+fn pkg_commands_take_ids_never_package_names() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"pkg_catalogue"}"#).unwrap().1,
+        Command::PkgCatalogue
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"pkg_install","args":{"id":"mousepad"}}"#)
+            .unwrap()
+            .1,
+        Command::PkgInstall {
+            id: "mousepad".into()
+        }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"pkg_remove","args":{"id":"font-noto"}}"#)
+            .unwrap()
+            .1,
+        Command::PkgRemove {
+            id: "font-noto".into()
+        }
+    );
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"pkg_install"}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_install","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_install","args":{"id":""}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_install","args":{"id":"--allow-untrusted"}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_install","args":{"id":"/tmp/x.apk"}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_install","args":{"id":"a b"}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_install","args":{"packages":["x"],"allow_untrusted":true}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_remove","args":{"id":"x;reboot"}}"#,
+        r#"{"v":1,"id":1,"cmd":"pkg_remove","args":{"id":7}}"#,
+    ] {
+        assert_eq!(code(req(bad)), ErrorCode::InvalidArgs, "{bad}");
+    }
+}
+
+#[test]
+fn default_app_validates_role_and_app() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"default_app","args":{"role":"pdf","app":"zathura"}}"#)
+            .unwrap()
+            .1,
+        Command::DefaultApp {
+            role: "pdf".into(),
+            app: "zathura".into()
+        }
+    );
+    for role in DEFAULT_ROLES {
+        assert!(req(&format!(
+            r#"{{"v":1,"id":1,"cmd":"default_app","args":{{"role":"{role}","app":"x"}}}}"#
+        ))
+        .is_ok());
+    }
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"default_app","args":{"role":"shell","app":"x"}}"#,
+        r#"{"v":1,"id":1,"cmd":"default_app","args":{"role":"pdf","app":"../x"}}"#,
+        r#"{"v":1,"id":1,"cmd":"default_app","args":{"role":"pdf"}}"#,
+        r#"{"v":1,"id":1,"cmd":"default_app"}"#,
+    ] {
+        assert_eq!(code(req(bad)), ErrorCode::InvalidArgs, "{bad}");
+    }
+}
+
+#[test]
 fn status_without_new_fields_still_parses() {
     let mut v = serde_json::to_value(sample_status()).unwrap();
     v.as_object_mut().unwrap().remove("hotspot");

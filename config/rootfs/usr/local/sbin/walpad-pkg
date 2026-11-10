@@ -1,0 +1,177 @@
+#!/bin/sh
+# walpad-pkg: the one door from the app store to apk (change app-catalogue-manager).
+#   walpad-pkg install [--need-kb N] <id> <package>...   apk add (signed repositories only)
+#   walpad-pkg upgrade [--need-kb N] <id> <package>...   apk add -u
+#   walpad-pkg remove <id> <package>...                  apk del (never system packages)
+#   walpad-pkg size <package>...                         size_kb=<installed size of the packages>
+#   walpad-pkg free                                      free_kb=<free space on />
+# Run by walpad-core with a timeout, an empty environment and its own process group; the core has
+# already validated the catalogue id and passes that entry's package names.  This script checks
+# them again: the id and every package must be named in /etc/walpad/catalogue.json (on the entry's
+# line), look like an Alpine package name (so no path, no local .apk, no option), and nothing is
+# ever installed with --allow-untrusted.
+# stdout is a line protocol read by the core:
+#   PROGRESS <0-100> <text>   then   OK   or   ERROR <kind> <message>
+# kinds: usage refused space net apk timeout.  Exit 0 only after OK.
+# Test hooks (the core sets WALPAD_PKG_ROOT only when it runs against a test root):
+#   WALPAD_PKG_ROOT prefixes every file path, WALPAD_PKG_APK is the apk binary,
+#   WALPAD_PKG_TIMEOUT seconds for apk add/del (default 840), WALPAD_PKG_RESERVE_KB (default 2 GiB).
+R=${WALPAD_PKG_ROOT:-}
+APK=${WALPAD_PKG_APK:-apk}
+CAT=$R/etc/walpad/catalogue.json
+LOG=$R/var/log/walpad-pkg.log
+TMO=${WALPAD_PKG_TIMEOUT:-840}
+RESERVE=${WALPAD_PKG_RESERVE_KB:-2097152}
+umask 022
+mkdir -p "${LOG%/*}" 2>/dev/null
+TMP=$(mktemp -d 2>/dev/null) || TMP=${TMPDIR:-/tmp}/walpad-pkg.$$
+mkdir -p "$TMP"
+trap 'rm -rf "$TMP"' EXIT
+
+log() { echo "$(date '+%F %T' 2>/dev/null) $*" >> "$LOG" 2>/dev/null; }
+progress() { echo "PROGRESS $1 $2"; }
+fail() { # kind message exit-code
+  log "ERROR $1 $2"
+  echo "ERROR $1 $2"
+  exit "$3"
+}
+
+free_kb() { df -Pk "$R/" 2>/dev/null | awk 'NR==2 {print $4}'; }
+
+valid_id() {
+  case $1 in ''|-*|_*|*[!a-z0-9_-]*) return 1;; esac
+  [ ${#1} -le 32 ]
+}
+valid_pkg() {
+  case $1 in ''|-*|.*|*.apk|*[!a-z0-9._+-]*) return 1;; esac
+  [ ${#1} -le 64 ]
+}
+# the package is named on the catalogue line of the id
+in_catalogue() { # id package
+  grep -E "\"id\": \"$1\"" "$CAT" 2>/dev/null | grep -qF "\"$2\""
+}
+protected() {
+  case $1 in
+    busybox*|musl*|alpine-*|apk-tools*|openrc*|openssh*|xorg-server*|xvfb|openbox*|st|firefox-esr|pcmanfm|walpad*|libc*|dbus*|bluez*|wpa_supplicant*|hostapd*|e2fsprogs*|util-linux*|coreutils|dmlinear|iptables*|iproute2*|iw|eudev*|kmod|alsa-*|scanelf|ssl_client|ca-certificates*) return 0;;
+  esac
+  return 1
+}
+
+# run a command under a time limit; apk's "(3/10) Installing x" lines move the progress from $1 by
+# up to $2 percent; the command's status is left in $RC and its output in $TMP/out
+run_apk() { # base span seconds command...
+  base=$1; span=$2; secs=$3; shift 3
+  : > "$TMP/out"; rm -f "$TMP/rc"
+  { timeout -k 10 "$secs" "$@"; echo $? > "$TMP/rc"; } 2>&1 | while IFS= read -r l; do
+    printf '%s\n' "$l" >> "$TMP/out"
+    case $l in
+      "("[0-9]*"/"[0-9]*")"*)
+        n=${l#\(}; n=${n%%/*}
+        m=${l#*/}; m=${m%%\)*}
+        what=${l#*\) }
+        case $n$m in *[!0-9]*|'') ;; *)
+          [ "$m" -gt 0 ] && progress $((base + n * span / m)) "$what" ;;
+        esac ;;
+    esac
+  done
+  RC=$(cat "$TMP/rc" 2>/dev/null)
+  [ -n "$RC" ] || RC=1
+  cat "$TMP/out" >> "$LOG" 2>/dev/null
+}
+
+classify() { # after a failed apk: say why
+  if [ "$RC" = 124 ] || [ "$RC" = 137 ]; then
+    fail timeout "Timed out after $((TMO / 60)) minutes" 7
+  fi
+  if grep -qiE 'network|temporary error|unable to fetch|could not connect|resolve|offline|timed out|connection|no such file or directory.*index' "$TMP/out"; then
+    fail net "Could not reach the package repository: check the Wi-Fi connection" 5
+  fi
+  last=$(grep -v '^$' "$TMP/out" | tail -n 1 | tr -d '\000-\037' | cut -c1-160)
+  fail apk "apk failed: ${last:-exit status $RC}" 6
+}
+
+cmd=$1
+[ $# -gt 0 ] && shift
+NEED=0
+case $cmd in
+  install|upgrade)
+    if [ "$1" = "--need-kb" ]; then
+      [ $# -ge 2 ] || fail usage "missing value for --need-kb" 2
+      NEED=$2
+      shift 2
+    fi ;;
+esac
+case $NEED in ''|*[!0-9]*) fail usage "--need-kb takes a number" 2;; esac
+
+for a in "$@"; do
+  case $a in
+    --allow-untrusted|--force-*|--allow-*) fail refused "Untrusted packages are not installed" 3;;
+  esac
+done
+
+case $cmd in
+  free)
+    echo "free_kb=$(free_kb)"; exit 0 ;;
+  size)
+    [ $# -ge 1 ] || fail usage "usage: walpad-pkg size <package>..." 2
+    for p in "$@"; do valid_pkg "$p" || fail refused "Not a package name: $p" 3; done
+    total=0
+    for p in "$@"; do
+      kb=$("$APK" info -s "$p" 2>/dev/null | awk '/installed size:/ { getline; v = $1; u = $2
+        if (u == "MiB") v *= 1024; else if (u == "GiB") v *= 1048576; else if (u == "B") v /= 1024
+        s += v } END { printf "%d\n", s }')
+      total=$((total + ${kb:-0}))
+    done
+    echo "size_kb=$total"; exit 0 ;;
+  install|upgrade|remove) ;;
+  *) fail usage "usage: walpad-pkg install|upgrade|remove <id> <package>... | size <package>... | free" 2 ;;
+esac
+
+[ $# -ge 2 ] || fail usage "usage: walpad-pkg $cmd <id> <package>..." 2
+ID=$1; shift
+valid_id "$ID" || fail refused "Not a catalogue id: $ID" 3
+[ -r "$CAT" ] || fail refused "There is no catalogue" 3
+for p in "$@"; do
+  valid_pkg "$p" || fail refused "Not a package name: $p" 3
+  in_catalogue "$ID" "$p" || fail refused "$p is not part of $ID in the catalogue" 3
+  [ "$cmd" = remove ] && protected "$p" && fail refused "$p is a system package and is never removed" 3
+done
+log "$cmd $ID $*"
+
+case $cmd in
+  install|upgrade)
+    progress 2 "Checking free space"
+    free=$(free_kb)
+    case $free in ''|*[!0-9]*) fail space "Cannot read the free space" 4;; esac
+    if [ $((free - NEED)) -lt "$RESERVE" ]; then
+      fail space "Not enough free space: $((NEED / 1024)) MB needed, $((free / 1024)) MB free, $((RESERVE / 1024)) MB must stay free" 4
+    fi
+    progress 8 "Updating the package index"
+    run_apk 0 0 120 "$APK" update
+    [ "$RC" = 0 ] || classify
+    progress 20 "Downloading and installing"
+    if [ "$cmd" = upgrade ]; then
+      run_apk 20 70 "$TMO" "$APK" add -u "$@"
+    else
+      run_apk 20 70 "$TMO" "$APK" add "$@"
+    fi
+    [ "$RC" = 0 ] || classify
+    progress 100 "Done"
+    echo OK ;;
+  remove)
+    progress 5 "Checking what depends on it"
+    for p in "$@"; do
+      "$APK" info -r "$p" 2>/dev/null | sed 1d | sed 's/-[0-9][^ ]*$//' | grep -v '^$' > "$TMP/rdeps"
+      while IFS= read -r d; do
+        mine=0
+        for q in "$@"; do [ "$d" = "$q" ] && mine=1; done
+        [ "$mine" = 1 ] || fail refused "$p is needed by $d, so it is not removed" 3
+      done < "$TMP/rdeps"
+    done
+    progress 30 "Removing"
+    run_apk 30 65 120 "$APK" del "$@"
+    [ "$RC" = 0 ] || classify
+    progress 100 "Done"
+    echo OK ;;
+esac
+exit 0

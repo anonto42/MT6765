@@ -2,6 +2,7 @@
 //! Newline-delimited JSON over /run/walpad/control.sock (see docs/rust/PLAN section 6).
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod appdefs;
 mod codec;
 mod command;
 mod devd;
@@ -10,10 +11,10 @@ mod status;
 
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
-    lock_secret_rule, valid_apn, valid_attempt, valid_bt_address, valid_hotspot_secret,
-    valid_hotspot_ssid, valid_lock_secret, valid_sim_pin, BrightnessArgs, Command, KeyboardMode,
-    PowerAction, RawRequest, RotateMode, ScreenMode, ShellInput, Topic, ALLOWED_SETTINGS,
-    COMMAND_NAMES,
+    lock_secret_rule, valid_apn, valid_app_id, valid_attempt, valid_bt_address,
+    valid_hotspot_secret, valid_hotspot_ssid, valid_lock_secret, valid_sim_pin, BrightnessArgs,
+    Command, KeyboardMode, PowerAction, RawRequest, RotateMode, ScreenMode, ShellInput, Topic,
+    ALLOWED_SETTINGS, COMMAND_NAMES, DEFAULT_ROLES,
 };
 pub use devd::parse_devd_line;
 pub use secret::{redact_hex_ssid, Secret};

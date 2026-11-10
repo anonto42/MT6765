@@ -48,6 +48,10 @@ pub const COMMAND_NAMES: &[&str] = &[
     "unlock",
     "lock_now",
     "lock_config",
+    "pkg_catalogue",
+    "pkg_install",
+    "pkg_remove",
+    "default_app",
 ];
 
 /// Commands without arguments.
@@ -63,6 +67,12 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "mobile_info",
     "volume_test",
     "lock_now",
+    "pkg_catalogue",
+];
+
+/// Roles of the default apps (`default_app`; /etc/walpad/defaults.json).
+pub const DEFAULT_ROLES: &[&str] = &[
+    "browser", "files", "terminal", "video", "music", "image", "pdf",
 ];
 
 /// Settings accepted by `set_setting` (section 9 of the plan).
@@ -306,6 +316,22 @@ pub enum Command {
     LockConfig {
         auto_lock_s: u32,
     },
+    /// App store (change `app-catalogue-manager`): the shipped catalogue with install state, free
+    /// space and the running job. Never takes arguments.
+    PkgCatalogue,
+    /// Install a catalogue entry by id (never a package name): runs /usr/local/sbin/walpad-pkg.
+    PkgInstall {
+        id: String,
+    },
+    /// Uninstall a catalogue entry by id (never a system package).
+    PkgRemove {
+        id: String,
+    },
+    /// Choose the app that opens a role's files (`role` from `DEFAULT_ROLES`, `app` a catalogue id).
+    DefaultApp {
+        role: String,
+        app: String,
+    },
 }
 
 /// Hardware-key events published on the `input` topic for the shell (never touch).
@@ -428,6 +454,22 @@ impl Command {
                     Ok(())
                 } else {
                     Err("app must be an id like \"browser\"".into())
+                }
+            }
+            Command::PkgInstall { id } | Command::PkgRemove { id } => {
+                if valid_app_id(id) && !id.starts_with(['-', '_']) {
+                    Ok(())
+                } else {
+                    Err("id must be a catalogue id like \"mousepad\"".into())
+                }
+            }
+            Command::DefaultApp { role, app } => {
+                if !DEFAULT_ROLES.contains(&role.as_str()) {
+                    Err("role is not one of the default app roles".into())
+                } else if !valid_app_id(app) || app.starts_with(['-', '_']) {
+                    Err("app must be a catalogue id like \"evince\"".into())
+                } else {
+                    Ok(())
                 }
             }
             Command::SetSetting { key, value } => validate_setting(key, value),

@@ -775,5 +775,7 @@ for c in 1001:PREVIEW_START 1002:PREVIEW_STOP 1003:CAPTURE 1006:SET_SRC_DEV; do
   grep -q "ACDK_CMD_${c#*:} 0x8000${c%%:*}u" tools/camacdk/camacdk.c && ok "camacdk: ACDK_CMD_${c#*:} = 0x8000${c%%:*}" || bad "camacdk: ACDK_CMD_${c#*:}" missing "0x8000${c%%:*}"
 done
 grep -q 'SENSOR_DEV_MAIN 1' tools/camacdk/camacdk.c && grep -q 'SENSOR_DEV_SUB 2' tools/camacdk/camacdk.c && ok "camacdk: main=1 sub=2" || bad "camacdk: main=1 sub=2" missing present
+# --- walpad-pkg and the app catalogue (change app-catalogue-manager)
+. tests/shell/pkg_test.sh
 
 exit $FAIL
