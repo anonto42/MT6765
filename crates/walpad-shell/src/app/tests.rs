@@ -397,7 +397,8 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
             Target::PanelActive(1),
             Target::PanelClose(1),
             Target::PanelTool(0),
-            Target::PanelTool(1)
+            Target::PanelTool(1),
+            Target::PanelTool(2)
         ]
     );
     // tapping the running app focuses it (launch = focus when it runs) and closes the panel
