@@ -585,6 +585,8 @@ impl Shell {
             self.dirty |= self.app.set_wall(wall);
         }
         self.dirty |= self.app.set_sysinfo(gather(&self.root));
+        // apps installed or removed in the app store
+        self.dirty |= self.app.set_catalog(load_catalog(&self.root));
     }
 
     fn resize(&mut self, w: i32, h: i32) {

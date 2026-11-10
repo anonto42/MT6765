@@ -1,7 +1,7 @@
 ## 1. Host
-- [ ] 1.1 Catalogue schema validation and apps.json generation tests (fake apk)
-- [ ] 1.2 walpad-pkg shell tests with a stub apk
-- [ ] 1.3 `scripts/check.sh` passes
+- [x] 1.1 Catalogue schema validation and apps.json generation tests (fake apk)
+- [x] 1.2 walpad-pkg shell tests with a stub apk
+- [x] 1.3 `scripts/check.sh` passes
 
 ## 2. Device (needs the tablet; no flashing)
 - [ ] 2.1 Install/uninstall round trip on the tablet

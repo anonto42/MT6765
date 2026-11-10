@@ -203,23 +203,17 @@ pub fn render(p: &mut Painter, pressed: Option<DockButton>) {
 
 /// `(app id, wm_class)` of every app in apps.json that names a window class.
 pub fn load_wm_classes(root: &Root) -> Vec<(String, String)> {
-    let Some(v) = std::fs::read_to_string(root.p("/etc/walpad/apps.json"))
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-    else {
-        return Vec::new();
-    };
-    v.as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|e| {
-                    let id = e["id"].as_str()?.to_string();
-                    let class = e["wm_class"].as_str().filter(|c| !c.is_empty())?;
-                    Some((id, class.to_string()))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    walpad_proto::appdefs::entries(
+        &root.p(walpad_proto::appdefs::APPS_JSON),
+        &root.p(walpad_proto::appdefs::APPS_D),
+    )
+    .iter()
+    .filter_map(|e| {
+        let id = e["id"].as_str()?.to_string();
+        let class = e["wm_class"].as_str().filter(|c| !c.is_empty())?;
+        Some((id, class.to_string()))
+    })
+    .collect()
 }
 
 /// The apps.json id for a window's WM_CLASS (instance, class), compared case-insensitively.

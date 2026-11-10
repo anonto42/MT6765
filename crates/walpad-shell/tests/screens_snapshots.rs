@@ -819,3 +819,55 @@ fn quick_settings_bluetooth_row_and_header_mark() {
     with_bt(&mut l, bt_on);
     shot("home_landscape_bluetooth_mark", 1280, 800, &mut l);
 }
+
+// ---- app store (change app-catalogue-manager)
+fn store_app(w: i32, h: i32, view: walpad_shell::store::StoreView) -> App {
+    let mut a = app(w, h, Tab::Settings, true);
+    a.model.settings_page = Some(Page::Apps);
+    const GIB: u64 = 1024 * 1024;
+    a.model.store.apply_catalogue(&json!({
+        "entries": [
+            {"id":"browser","name":"Browser","category":"Built in","size_kb":224000,"installed":true,"system":true,"roles":["browser"]},
+            {"id":"files","name":"Files","category":"Built in","size_kb":2700,"installed":true,"system":true,"roles":["files"]},
+            {"id":"mousepad","name":"Mousepad","category":"Documents","summary":"Simple text editor","size_kb":700,"installed":true,"system":false,"roles":[]},
+            {"id":"evince","name":"Evince","category":"Documents","summary":"PDF viewer","size_kb":15000,"installed":true,"system":false,"roles":["pdf"]},
+            {"id":"zathura","name":"Zathura","category":"Documents","summary":"Light PDF viewer","size_kb":1500,"installed":false,"system":false,"roles":["pdf"]},
+            {"id":"mpv","name":"mpv","category":"Media","summary":"Video player","size_kb":37600,"installed":false,"system":false,"roles":["video"]},
+            {"id":"vlc","name":"VLC","category":"Media","summary":"Video and audio player","size_kb":28000,"installed":false,"system":false,"roles":["video"]},
+            {"id":"libreoffice-writer","name":"LibreOffice Writer","category":"Office","summary":"Word processor (large)","size_kb":322000,"installed":false,"system":false,"roles":[]}
+        ],
+        "free_kb": 5 * GIB, "reserve_kb": 2 * GIB, "busy": null,
+        "defaults": {"browser":"browser","files":"files","pdf":"evince"}
+    }));
+    a.model.store.view = view;
+    a
+}
+
+#[test]
+fn app_store_screens() {
+    use walpad_shell::store::{Busy, StoreView};
+    let mut a = store_app(800, 1280, StoreView::Installed);
+    shot("store_installed", 800, 1280, &mut a);
+    let mut a = store_app(800, 1280, StoreView::Browse);
+    shot("store_browse", 800, 1280, &mut a);
+    a.model.store.busy = Some(Busy {
+        op: "install".into(),
+        id: "mpv".into(),
+        percent: 45,
+        text: "(3/8) Installing ffmpeg-libs (6.1-r0)".into(),
+    });
+    shot("store_browse_installing", 800, 1280, &mut a);
+    a.model.store.busy = None;
+    a.model.store.error = Some("LibreOffice Writer: Not enough free space: 315 MB needed, 5.0 GB free, 2.0 GB must stay free. Free some space and try again.".into());
+    shot("store_browse_error", 800, 1280, &mut a);
+    let mut a = store_app(800, 1280, StoreView::Role(6));
+    shot("store_role_pdf", 800, 1280, &mut a);
+    let mut a = store_app(1280, 800, StoreView::Browse);
+    shot("store_browse_landscape", 1280, 800, &mut a);
+    let mut a = store_app(800, 1280, StoreView::Installed);
+    a.model.store.armed = Some(2);
+    shot("store_installed_armed", 800, 1280, &mut a);
+    let mut a = app(800, 1280, Tab::Settings, true);
+    a.model.settings_page = Some(Page::Apps);
+    shot("store_loading", 800, 1280, &mut a);
+}

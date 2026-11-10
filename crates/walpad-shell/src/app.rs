@@ -15,6 +15,7 @@ use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
 use crate::volume_ui::{self, Osd};
+use crate::store::{self, StoreTarget, StoreView};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use walpad_hw::Root;
@@ -89,25 +90,19 @@ pub struct AppEntry {
 }
 
 pub fn load_catalog(root: &Root) -> Vec<AppEntry> {
-    let Some(list) = std::fs::read_to_string(root.p("/etc/walpad/apps.json"))
-        .ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-    else {
-        return Vec::new();
-    };
-    list.as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|e| {
-                    let id = e["id"].as_str()?.to_string();
-                    let name = e["name"].as_str().unwrap_or(&id).to_string();
-                    let icon =
-                        Icon::from_name(e["icon"].as_str().unwrap_or("")).unwrap_or(Icon::Apps);
-                    Some(AppEntry { id, name, icon })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    // apps.json plus the apps the app store registered in apps.d
+    walpad_proto::appdefs::entries(
+        &root.p(walpad_proto::appdefs::APPS_JSON),
+        &root.p(walpad_proto::appdefs::APPS_D),
+    )
+    .iter()
+    .filter_map(|e| {
+        let id = e["id"].as_str()?.to_string();
+        let name = e["name"].as_str().unwrap_or(&id).to_string();
+        let icon = Icon::from_name(e["icon"].as_str().unwrap_or("")).unwrap_or(Icon::Apps);
+        Some(AppEntry { id, name, icon })
+    })
+    .collect()
 }
 
 fn shell_json(root: &Root) -> Value {
@@ -226,6 +221,8 @@ pub enum Target {
     PowerItem(usize),
     /// Settings > Security: the screen lock rows (OpenSpec `lock-screen`).
     Lock(LockAct),
+    /// App store screen (change app-catalogue-manager).
+    Store(StoreTarget),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +293,14 @@ pub enum Cmd {
     LockRemove(Secret),
     LockNow,
     LockConfig(u32),
+    /// App store: the catalogue, install / uninstall by catalogue id, default app per role.
+    PkgCatalogue,
+    PkgInstall(String),
+    PkgRemove(String),
+    DefaultApp {
+        role: String,
+        app: String,
+    },
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `set_setting` with an allowlisted key.
@@ -325,6 +330,9 @@ pub enum Purpose {
     BtPair,
     BtOp,
     Lock,
+    PkgCatalogue,
+    PkgAction,
+    DefaultApp,
     Other,
 }
 
@@ -430,6 +438,10 @@ impl Cmd {
             ),
             Cmd::LockNow => ("lock_now", Value::Null),
             Cmd::LockConfig(s) => ("lock_config", json!({"auto_lock_s": s})),
+            Cmd::PkgCatalogue => ("pkg_catalogue", Value::Null),
+            Cmd::PkgInstall(id) => ("pkg_install", json!({"id": id})),
+            Cmd::PkgRemove(id) => ("pkg_remove", json!({"id": id})),
+            Cmd::DefaultApp { role, app } => ("default_app", json!({"role": role, "app": app})),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
@@ -456,6 +468,9 @@ impl Cmd {
             Cmd::LockSet { .. } | Cmd::LockRemove(_) | Cmd::LockNow | Cmd::LockConfig(_) => {
                 Purpose::Lock
             }
+            Cmd::PkgCatalogue => Purpose::PkgCatalogue,
+            Cmd::PkgInstall(_) | Cmd::PkgRemove(_) => Purpose::PkgAction,
+            Cmd::DefaultApp { .. } => Purpose::DefaultApp,
             Cmd::CloseApp(_) => Purpose::Close,
             Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
@@ -503,6 +518,8 @@ pub struct Model {
     pub bt_busy: Option<String>,
     /// The open "set / change / remove the screen lock" sequence (Settings > Security).
     pub lock_flow: Option<LockFlow>,
+    /// App store screen state.
+    pub store: store::StoreModel,
 }
 
 impl Model {
@@ -531,6 +548,7 @@ impl Model {
             imei_shown: false,
             bt_busy: None,
             lock_flow: None,
+            store: store::StoreModel::default(),
         }
     }
 
@@ -641,6 +659,14 @@ impl App {
         a
     }
 
+    /// The app definitions changed (an app was installed or removed): rebuild the tiles.
+    pub fn set_catalog(&mut self, catalog: Vec<AppEntry>) -> bool {
+        let changed = self.catalog != catalog;
+        self.catalog = catalog;
+        self.rebuild_tiles();
+        changed
+    }
+
     pub fn with_pinned(mut self, pinned: Vec<String>) -> App {
         self.model.pinned = pinned;
         self.rebuild_tiles();
@@ -738,6 +764,8 @@ impl App {
             self.content_hits.clear();
             self.model.settings_page = None;
             self.model.imei_shown = false;
+            self.model.store.view = StoreView::Installed;
+            self.model.store.armed = None;
         }
         if matches!(tab, Tab::Device | Tab::Settings) {
             out.refresh = true;
@@ -797,6 +825,9 @@ impl App {
                     .is_some_and(|k| k.starts_with("bluetooth")) =>
             {
                 self.on_bt_notice(v, &mut out)
+            }
+            CoreEvent::Notice(v) if v["kind"].as_str().is_some_and(|k| k.starts_with("pkg_")) => {
+                self.on_pkg_notice(v, &mut out)
             }
             CoreEvent::Notice(v) => {
                 if v["kind"] == "app_crashed" {
@@ -898,6 +929,54 @@ impl App {
                     _ => {}
                 }
                 out.dirty = true;
+            }
+            _ => {}
+        }
+    }
+
+    /// Progress and result of an install or uninstall (change app-catalogue-manager).
+    fn on_pkg_notice(&mut self, v: &Value, out: &mut Outcome) {
+        out.dirty = true;
+        let id = v["id"].as_str().unwrap_or("").to_string();
+        let op = v["op"].as_str().unwrap_or("install").to_string();
+        match v["kind"].as_str() {
+            Some("pkg_progress") => {
+                self.model.store.busy = Some(store::Busy {
+                    op,
+                    id,
+                    percent: v["percent"].as_u64().unwrap_or(0).min(100) as u8,
+                    text: v["text"].as_str().unwrap_or("").to_string(),
+                });
+            }
+            Some("pkg_done") => {
+                let name = self.model.store.name_of(&id);
+                self.model.store.busy = None;
+                if v["ok"] == true {
+                    self.model.store.error = None;
+                    let verb = if op == "remove" {
+                        "uninstalled"
+                    } else {
+                        "installed"
+                    };
+                    self.toast(format!("{name} {verb}"), Tone::Info);
+                } else {
+                    let why = v["error"].as_str().unwrap_or("unknown error");
+                    self.model.store.error = Some(format!("{name}: {why}"));
+                    self.toast(
+                        format!(
+                            "Could not {} {name}",
+                            if op == "remove" {
+                                "uninstall"
+                            } else {
+                                "install"
+                            }
+                        ),
+                        Tone::Danger,
+                    );
+                }
+                out.cmd(Cmd::PkgCatalogue);
+                // the app list changed: re-read apps.json / apps.d
+                out.refresh = true;
             }
             _ => {}
         }
@@ -1140,6 +1219,23 @@ impl App {
                         _ => self.toast(msg, Tone::Danger),
                     }
                 }
+            }
+            (Purpose::PkgCatalogue, true) => self.model.store.apply_catalogue(data),
+            (Purpose::PkgCatalogue, false) => {
+                self.model.store.error =
+                    Some(error.map_or_else(|| "Cannot read the catalogue".into(), friendly));
+            }
+            (Purpose::PkgAction, false) => {
+                // refused (no space, built in, busy ...): nothing changed, say why
+                self.model.store.busy = None;
+                self.model.store.error =
+                    Some(error.map_or_else(|| "The request failed".into(), friendly));
+            }
+            (Purpose::PkgAction, true) => {}
+            (Purpose::DefaultApp, true) => out.cmd(Cmd::PkgCatalogue),
+            (Purpose::DefaultApp, false) => {
+                self.model.store.error =
+                    Some(error.map_or_else(|| "Could not change the default app".into(), friendly));
             }
             (Purpose::Setting, ok) => {
                 // the core wrote (or refused) the file: show what is really configured
@@ -1415,6 +1511,9 @@ impl App {
 
     fn on_tap(&mut self, t: Target, x: i32, was_slider: bool, out: &mut Outcome) {
         let interactive = self.model.connected;
+        if !matches!(t, Target::Store(StoreTarget::Remove(_))) {
+            self.model.store.armed = None;
+        }
         match t {
             Target::Nav(NAV_APPS) => self.model.overlay = Some(Overlay::AppsPanel),
             Target::Nav(i) => self.go(Tab::ALL[i], out),
@@ -1444,6 +1543,12 @@ impl App {
                     match tool.action {
                         panels::ToolAction::MousePad => out.cmd(Cmd::MousePadShow),
                         panels::ToolAction::Clipboard => out.cmd(Cmd::ClipboardShow),
+                        panels::ToolAction::AppStore => {
+                            self.go(Tab::Settings, out);
+                            self.model.settings_page = Some(Page::Apps);
+                            self.model.store.view = StoreView::Browse;
+                            out.cmd(Cmd::PkgCatalogue);
+                        }
                     }
                 }
             }
@@ -1655,10 +1760,23 @@ impl App {
             Target::Page(Page::Display) => self.go(Tab::Device, out),
             Target::Page(pg) => {
                 self.model.settings_page = Some(pg);
+                if pg == Page::Apps {
+                    self.model.store.view = StoreView::Installed;
+                    out.cmd(Cmd::PkgCatalogue);
+                }
                 self.scroll = 0;
                 self.content_hits.clear();
                 out.refresh = true;
             }
+            Target::Back
+                if self.model.settings_page == Some(Page::Apps)
+                    && self.model.store.view != StoreView::Installed =>
+            {
+                self.model.store.view = StoreView::Installed;
+                self.scroll = 0;
+                self.content_hits.clear();
+            }
+            Target::Store(t) if interactive => self.on_store_tap(t, out),
             Target::Back => {
                 self.model.settings_page = match self.model.settings_page {
                     Some(Page::Logs) => Some(Page::Maintenance),
@@ -1737,6 +1855,75 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn on_store_tap(&mut self, t: StoreTarget, out: &mut Outcome) {
+        let st = &mut self.model.store;
+        match t {
+            StoreTarget::DismissError => st.error = None,
+            StoreTarget::Browse => {
+                st.view = StoreView::Browse;
+                self.scroll = 0;
+                self.content_hits.clear();
+            }
+            StoreTarget::Role(i) => {
+                st.view = StoreView::Role(i);
+                self.scroll = 0;
+                self.content_hits.clear();
+            }
+            StoreTarget::PickDefault(i) => {
+                if let (StoreView::Role(ri), Some(e)) = (st.view, st.entries.get(i)) {
+                    if let Some(role) = walpad_proto::DEFAULT_ROLES.get(ri) {
+                        out.cmd(Cmd::DefaultApp {
+                            role: role.to_string(),
+                            app: e.id.clone(),
+                        });
+                    }
+                }
+            }
+            StoreTarget::Install(i) => {
+                let Some(e) = st.entries.get(i).cloned() else {
+                    return;
+                };
+                if st.busy.is_some() {
+                    return;
+                }
+                if let Some(why) = st.space_problem(&e) {
+                    // nothing is sent: explain it here, nothing changes
+                    st.error = Some(format!("{}: {why}", e.name));
+                    return;
+                }
+                st.error = None;
+                st.busy = Some(store::Busy {
+                    op: "install".into(),
+                    id: e.id.clone(),
+                    percent: 0,
+                    text: "Starting the installation".into(),
+                });
+                out.cmd(Cmd::PkgInstall(e.id));
+            }
+            StoreTarget::Remove(i) => {
+                let Some(e) = st.entries.get(i).cloned() else {
+                    return;
+                };
+                if st.busy.is_some() || e.system {
+                    return;
+                }
+                if st.armed != Some(i) {
+                    st.armed = Some(i);
+                    return;
+                }
+                st.armed = None;
+                st.error = None;
+                st.busy = Some(store::Busy {
+                    op: "remove".into(),
+                    id: e.id.clone(),
+                    percent: 0,
+                    text: "Starting the removal".into(),
+                });
+                out.cmd(Cmd::PkgRemove(e.id));
+            }
         }
     }
 
@@ -2096,6 +2283,9 @@ impl App {
         let total = match self.active {
             Tab::Network => network::layout(&frame, &self.model.status, &self.model.net).total,
             Tab::Device => device_screen::layout(&frame, &self.model.status, &self.model.devd).1,
+            Tab::Settings if self.model.settings_page == Some(Page::Apps) => {
+                store::layout(&frame, &self.model.store).total
+            }
             Tab::Settings => {
                 settings_screen::layout(&frame, self.model.settings_page, &self.settings_rows())
                     .total
@@ -2129,6 +2319,9 @@ impl App {
                 m.slider_active,
                 m.pressed,
             ),
+            Tab::Settings if m.settings_page == Some(Page::Apps) => {
+                store::render(p, &frame, &m.store, m.connected, m.pressed)
+            }
             Tab::Settings => {
                 let rows = self.settings_rows();
                 settings_screen::render(p, &frame, m.settings_page, &rows, m.connected, m.pressed)

@@ -418,6 +418,8 @@ pub enum ToolAction {
     MousePad,
     /// Show the clipboard history (seltools.rs).
     Clipboard,
+    /// Open the app store at the catalogue (Settings > Apps).
+    AppStore,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -428,7 +430,7 @@ pub struct Tool {
 }
 
 /// The TOOLS section, in grid order. Add a tool here (and its action in `App::on_tap`).
-pub const TOOLS: [Tool; 2] = [
+pub const TOOLS: [Tool; 3] = [
     Tool {
         icon: Icon::Mouse,
         label: "Mouse pad",
@@ -438,6 +440,11 @@ pub const TOOLS: [Tool; 2] = [
         icon: Icon::Clipboard,
         label: "Clipboard",
         action: ToolAction::Clipboard,
+    },
+    Tool {
+        icon: Icon::Apps,
+        label: "App store",
+        action: ToolAction::AppStore,
     },
 ];
 
