@@ -31,6 +31,9 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   lock-remove                     remove the lock; the current secret is read from stdin
   lock_clear                      RESCUE: remove the screen lock (needs no PIN; run it over SSH or
                                   the USB recovery shell; also works while the core is down)
+  vpn on|off|confirm|files        VPN tunnel; confirm keeps the kill switch (else it reverts in 60 s)
+  vpn import <path> [name] | remove <name> | profile <name> | kill-switch on|off
+  vpn dns <ip>... | dns clear | proxy <http://host:port> | proxy clear
   power poweroff|reboot --yes     refuses without --yes
   key-held <name|code>            volumedown|volumeup|power or 114|115|116; exit 0 held, 1 not held,
                                   2 error/unknown device (never blocks, needs no core)";
@@ -106,6 +109,38 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
             };
             (cmd.into(), json!({"on": on}))
         }
+        Some("vpn") => match need(1)? {
+            w @ ("on" | "off") => ("vpn".into(), json!({"on": w == "on"})),
+            "confirm" => ("vpn_confirm".into(), Value::Null),
+            "files" => ("vpn_files".into(), Value::Null),
+            "import" => {
+                let mut r = json!({"path": need(2)?});
+                if let Some(n) = a.get(3) {
+                    r["name"] = json!(n);
+                }
+                ("vpn_import".into(), r)
+            }
+            "remove" => ("vpn_remove".into(), json!({"name": need(2)?})),
+            "profile" => ("vpn_config".into(), json!({"profile": need(2)?})),
+            "kill-switch" => match need(2)? {
+                "on" => ("vpn_config".into(), json!({"kill_switch": true})),
+                "off" => ("vpn_config".into(), json!({"kill_switch": false})),
+                _ => return Err(USAGE.to_string()),
+            },
+            "dns" => {
+                let d: Vec<&str> = if need(2)? == "clear" {
+                    Vec::new()
+                } else {
+                    a[2..].to_vec()
+                };
+                ("vpn_config".into(), json!({"dns": d}))
+            }
+            "proxy" => {
+                let p = if need(2)? == "clear" { "" } else { a[2] };
+                ("vpn_config".into(), json!({"proxy": p}))
+            }
+            _ => return Err(USAGE.to_string()),
+        },
         Some("power") => (
             "power".into(),
             json!({"action": need(1)?, "confirmed": a.contains(&"--yes")}),
@@ -515,6 +550,24 @@ mod tests {
             ("hotspot".into(), json!({"on": true}))
         );
         assert!(build_request(&s(&["hotspot", "maybe"])).is_err());
+        assert_eq!(
+            build_request(&s(&["vpn", "on"])).unwrap(),
+            ("vpn".into(), json!({"on": true}))
+        );
+        assert_eq!(
+            build_request(&s(&["vpn", "dns", "1.1.1.1", "9.9.9.9"])).unwrap(),
+            ("vpn_config".into(), json!({"dns": ["1.1.1.1", "9.9.9.9"]}))
+        );
+        assert_eq!(
+            build_request(&s(&["vpn", "proxy", "clear"])).unwrap(),
+            ("vpn_config".into(), json!({"proxy": ""}))
+        );
+        assert_eq!(
+            build_request(&s(&["vpn", "kill-switch", "on"])).unwrap(),
+            ("vpn_config".into(), json!({"kill_switch": true}))
+        );
+        assert!(build_request(&s(&["vpn", "dns"])).is_err());
+        assert!(build_request(&s(&["vpn", "bogus"])).is_err());
     }
 
     #[test]

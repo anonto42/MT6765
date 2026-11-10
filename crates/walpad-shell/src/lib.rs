@@ -31,4 +31,5 @@ pub mod settings_screen;
 pub mod shell;
 pub mod volume_ui;
 pub mod store;
+pub mod vpn_screen;
 pub mod window;

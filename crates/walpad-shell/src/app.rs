@@ -11,6 +11,7 @@ use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 mod lock_flow;
 
+use crate::vpn_screen;
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
 use crate::settings_screen::{self, Page, SysInfo};
@@ -172,6 +173,15 @@ pub enum Target {
     HotspotName,
     HotspotPassword,
     // Mobile network (owner request 2026-11-10): the Quick Settings row, the screen's controls
+    // VPN and DNS (owner request 2026-11-10)
+    VpnSwitch,
+    VpnKill,
+    VpnKeep,
+    VpnProfile,
+    VpnDns,
+    VpnProxy,
+    /// Import candidate (index into `Model::vpn_files`).
+    VpnImport(usize),
     MobileCard,
     MobileRadio,
     MobileDataSwitch,
@@ -268,6 +278,17 @@ pub enum Cmd {
         ssid: Option<String>,
         secret: Option<Secret>,
     },
+    Vpn(bool),
+    /// Keep the kill switch (`vpn_confirm`).
+    VpnKeep,
+    VpnConfig {
+        profile: Option<String>,
+        kill_switch: Option<bool>,
+        dns: Option<Vec<String>>,
+        proxy: Option<String>,
+    },
+    VpnImport(String),
+    VpnFiles,
     MobileRadio(bool),
     MobileData(bool),
     MobileApn(String),
@@ -333,6 +354,11 @@ pub enum Purpose {
     PkgCatalogue,
     PkgAction,
     DefaultApp,
+    /// A VPN command whose failure is shown as a toast.
+    Vpn,
+    VpnSheet,
+    VpnImport,
+    VpnFiles,
     Other,
 }
 
@@ -398,6 +424,31 @@ impl Cmd {
                 }
                 ("hotspot_config", Value::Object(a))
             }
+            Cmd::Vpn(on) => ("vpn", json!({"on": on})),
+            Cmd::VpnKeep => ("vpn_confirm", Value::Null),
+            Cmd::VpnConfig {
+                profile,
+                kill_switch,
+                dns,
+                proxy,
+            } => {
+                let mut a = serde_json::Map::new();
+                if let Some(p) = profile {
+                    a.insert("profile".into(), json!(p));
+                }
+                if let Some(k) = kill_switch {
+                    a.insert("kill_switch".into(), json!(k));
+                }
+                if let Some(d) = dns {
+                    a.insert("dns".into(), json!(d));
+                }
+                if let Some(p) = proxy {
+                    a.insert("proxy".into(), json!(p));
+                }
+                ("vpn_config", Value::Object(a))
+            }
+            Cmd::VpnImport(path) => ("vpn_import", json!({"path": path})),
+            Cmd::VpnFiles => ("vpn_files", Value::Null),
             Cmd::MobileRadio(on) => ("mobile_radio", json!({"on": on})),
             Cmd::MobileData(on) => ("mobile_data", json!({"on": on})),
             Cmd::MobileApn(a) => ("mobile_apn", json!({"apn": a})),
@@ -463,6 +514,13 @@ impl Cmd {
             Cmd::MobileApn(_) => Purpose::MobileApn,
             Cmd::SimPin(_) => Purpose::SimPin,
             Cmd::MobileInfo => Purpose::MobileInfo,
+            Cmd::Vpn(_) | Cmd::VpnKeep => Purpose::Vpn,
+            Cmd::VpnConfig { dns, proxy, .. } if dns.is_some() || proxy.is_some() => {
+                Purpose::VpnSheet
+            }
+            Cmd::VpnConfig { .. } => Purpose::Vpn,
+            Cmd::VpnImport(_) => Purpose::VpnImport,
+            Cmd::VpnFiles => Purpose::VpnFiles,
             Cmd::BtPair(_) => Purpose::BtPair,
             Cmd::BtConnect(_) | Cmd::BtDisconnect(_) | Cmd::BtForget(_) => Purpose::BtOp,
             Cmd::LockSet { .. } | Cmd::LockRemove(_) | Cmd::LockNow | Cmd::LockConfig(_) => {
@@ -514,6 +572,8 @@ pub struct Model {
     /// IMEI / ICCID from `mobile_info` (asked for when "Show" is tapped; never logged).
     pub mobile_info: Option<MobileInfo>,
     pub imei_shown: bool,
+    /// Importable VPN profiles the core found (VPN screen).
+    pub vpn_files: Vec<crate::vpn_screen::VpnFile>,
     /// Address of the Bluetooth connect / pair request in progress.
     pub bt_busy: Option<String>,
     /// The open "set / change / remove the screen lock" sequence (Settings > Security).
@@ -546,6 +606,7 @@ impl Model {
             settings_page: None,
             mobile_info: None,
             imei_shown: false,
+            vpn_files: Vec::new(),
             bt_busy: None,
             lock_flow: None,
             store: store::StoreModel::default(),
@@ -773,6 +834,9 @@ impl App {
         if tab == Tab::Network && self.model.connected {
             out.cmd(Cmd::WifiListSaved);
         }
+        if tab == Tab::Vpn && self.model.connected {
+            out.cmd(Cmd::VpnFiles);
+        }
         out.dirty = true;
     }
 
@@ -914,6 +978,17 @@ impl App {
             }
             Some("disconnected") => {
                 self.toast("Wi-Fi disconnected", Tone::Warning);
+                out.dirty = true;
+            }
+            Some("vpn") => {
+                match v["state"].as_str() {
+                    Some("on") => self.toast("VPN connected", Tone::Info),
+                    Some("failed") => {
+                        let why = v["reason"].as_str().unwrap_or("unknown error");
+                        self.toast(format!("VPN: {why}"), Tone::Danger)
+                    }
+                    _ => {}
+                }
                 out.dirty = true;
             }
             Some("hotspot") => {
@@ -1237,6 +1312,59 @@ impl App {
                 self.model.store.error =
                     Some(error.map_or_else(|| "Could not change the default app".into(), friendly));
             }
+            (Purpose::VpnFiles, true) => {
+                self.model.vpn_files = data["files"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|f| {
+                                Some(crate::vpn_screen::VpnFile {
+                                    name: f["name"].as_str()?.to_string(),
+                                    path: f["path"].as_str()?.to_string(),
+                                })
+                            })
+                            .take(crate::vpn_screen::MAX_FILES)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+            }
+            (Purpose::VpnImport, ok) => {
+                if ok {
+                    self.toast("VPN profile imported", Tone::Info);
+                    out.cmd(Cmd::VpnFiles);
+                } else {
+                    let msg = error
+                        .map(friendly)
+                        .unwrap_or_else(|| "Import failed".into());
+                    self.toast(msg, Tone::Danger);
+                }
+            }
+            (Purpose::Vpn, false) => {
+                let msg = error
+                    .map(friendly)
+                    .unwrap_or_else(|| "VPN request failed".into());
+                self.toast(msg, Tone::Danger);
+            }
+            (Purpose::VpnSheet, ok) => {
+                let sheet = matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_vpn());
+                if ok {
+                    if sheet {
+                        self.close_overlay();
+                    }
+                    self.toast("Saved", Tone::Info);
+                } else {
+                    let msg = error
+                        .map(friendly)
+                        .unwrap_or_else(|| "Could not save".into());
+                    match &mut self.model.overlay {
+                        Some(Overlay::Password(s)) if sheet => {
+                            s.connecting = false;
+                            s.error = Some(msg);
+                        }
+                        _ => self.toast(msg, Tone::Danger),
+                    }
+                }
+            }
             (Purpose::Setting, ok) => {
                 // the core wrote (or refused) the file: show what is really configured
                 out.refresh = true;
@@ -1342,7 +1470,7 @@ impl App {
     fn scrolls(&self) -> bool {
         matches!(
             self.active,
-            Tab::Network | Tab::Device | Tab::Settings | Tab::Mobile | Tab::Bluetooth
+            Tab::Network | Tab::Device | Tab::Settings | Tab::Mobile | Tab::Bluetooth | Tab::Vpn
         )
     }
 
@@ -1551,6 +1679,63 @@ impl App {
                         }
                     }
                 }
+            }
+            Target::Page(Page::Vpn) => self.go(Tab::Vpn, out),
+            Target::VpnSwitch if interactive && vpn_screen::switchable(&self.model.status) => {
+                out.cmd(Cmd::Vpn(!vpn_screen::is_on(&self.model.status)))
+            }
+            Target::VpnKill if interactive && vpn_screen::editable(&self.model.status) => {
+                let ks = self
+                    .model
+                    .status
+                    .as_ref()
+                    .is_some_and(|s| s.vpn.kill_switch);
+                out.cmd(Cmd::VpnConfig {
+                    profile: None,
+                    kill_switch: Some(!ks),
+                    dns: None,
+                    proxy: None,
+                })
+            }
+            Target::VpnKeep if interactive => out.cmd(Cmd::VpnKeep),
+            Target::VpnProfile if interactive && vpn_screen::editable(&self.model.status) => {
+                if let Some(s) = &self.model.status {
+                    let names: Vec<&String> = s.vpn.profiles.iter().map(|p| &p.name).collect();
+                    let cur = names
+                        .iter()
+                        .position(|n| Some(*n) == s.vpn.profile.as_ref());
+                    if let Some(next) = names.get(cur.map_or(0, |i| (i + 1) % names.len().max(1))) {
+                        out.cmd(Cmd::VpnConfig {
+                            profile: Some((*next).clone()),
+                            kill_switch: None,
+                            dns: None,
+                            proxy: None,
+                        });
+                    }
+                }
+            }
+            Target::VpnImport(i) if interactive => {
+                if let Some(f) = self.model.vpn_files.get(i) {
+                    out.cmd(Cmd::VpnImport(f.path.clone()));
+                }
+            }
+            Target::VpnDns | Target::VpnProxy if interactive => {
+                let dns = matches!(t, Target::VpnDns);
+                let cur = self.model.status.as_ref().map(|s| {
+                    if dns {
+                        s.vpn.dns.join(", ")
+                    } else {
+                        s.vpn.proxy.clone().unwrap_or_default()
+                    }
+                });
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::vpn(
+                    if dns {
+                        SheetPurpose::VpnDns
+                    } else {
+                        SheetPurpose::VpnProxy
+                    },
+                    &cur.unwrap_or_default(),
+                )));
             }
             Target::WifiCard | Target::HotspotCard => self.go(Tab::Network, out),
             Target::MobileCard | Target::Page(Page::Mobile) => self.go(Tab::Mobile, out),
@@ -2089,6 +2274,37 @@ impl App {
             return self.lock_submit(out);
         }
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
+            if s.is_vpn() {
+                if s.valid() && !s.connecting {
+                    s.connecting = true;
+                    s.error = None;
+                    out.cmd(if s.purpose == SheetPurpose::VpnDns {
+                        Cmd::VpnConfig {
+                            profile: None,
+                            kill_switch: None,
+                            dns: Some(overlay::dns_list(&s.secret)),
+                            proxy: None,
+                        }
+                    } else {
+                        Cmd::VpnConfig {
+                            profile: None,
+                            kill_switch: None,
+                            dns: None,
+                            proxy: Some(s.secret.clone()),
+                        }
+                    });
+                } else if !s.valid() {
+                    s.error = Some(
+                        if s.purpose == SheetPurpose::VpnDns {
+                            "Up to 3 IP addresses, e.g. 1.1.1.1"
+                        } else {
+                            "Use http://host:port, no user name or password"
+                        }
+                        .into(),
+                    );
+                }
+                return;
+            }
             if s.is_mobile() {
                 if s.valid() && !s.connecting {
                     s.connecting = true;
@@ -2281,6 +2497,9 @@ impl App {
     fn render_scrolled(&mut self, p: &mut Painter) {
         let frame = self.frame;
         let total = match self.active {
+            Tab::Vpn => {
+                vpn_screen::layout(&frame, &self.model.status, self.model.vpn_files.len()).total
+            }
             Tab::Network => network::layout(&frame, &self.model.status, &self.model.net).total,
             Tab::Device => device_screen::layout(&frame, &self.model.status, &self.model.devd).1,
             Tab::Settings if self.model.settings_page == Some(Page::Apps) => {
@@ -2346,6 +2565,16 @@ impl App {
                     pressed: m.pressed,
                     spinner_deg: m.spinner_deg,
                     busy: m.bt_busy.as_deref(),
+                },
+            ),
+            Tab::Vpn => vpn_screen::render(
+                p,
+                &frame,
+                &vpn_screen::View {
+                    st: &m.status,
+                    files: &m.vpn_files,
+                    online: m.connected,
+                    pressed: m.pressed,
                 },
             ),
             Tab::Home | Tab::Apps => Vec::new(),

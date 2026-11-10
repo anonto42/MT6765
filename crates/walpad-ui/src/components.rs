@@ -79,9 +79,11 @@ pub enum Tab {
     Mobile,
     /// Bluetooth devices (owner request 2026-11-10; reached from Quick Settings and Settings).
     Bluetooth,
+    /// VPN, DNS and proxy (owner request 2026-11-10; reached from Settings).
+    Vpn,
 }
 impl Tab {
-    pub const ALL: [Tab; 7] = [
+    pub const ALL: [Tab; 8] = [
         Tab::Home,
         Tab::Apps,
         Tab::Network,
@@ -89,6 +91,7 @@ impl Tab {
         Tab::Settings,
         Tab::Mobile,
         Tab::Bluetooth,
+        Tab::Vpn,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -99,6 +102,7 @@ impl Tab {
             Tab::Settings => "Settings",
             Tab::Mobile => "Mobile network",
             Tab::Bluetooth => "Bluetooth",
+            Tab::Vpn => "VPN and DNS",
         }
     }
     pub fn icon(self) -> Icon {
@@ -110,6 +114,7 @@ impl Tab {
             Tab::Settings => Icon::Settings,
             Tab::Mobile => Icon::Sim,
             Tab::Bluetooth => Icon::Bluetooth,
+            Tab::Vpn => Icon::Lock,
         }
     }
 }
@@ -1685,7 +1690,8 @@ mod tests {
                 "Device",
                 "Settings",
                 "Mobile network",
-                "Bluetooth"
+                "Bluetooth",
+                "VPN and DNS",
             ]
         );
     }

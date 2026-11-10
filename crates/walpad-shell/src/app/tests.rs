@@ -13,6 +13,7 @@ mod lock;
 mod mobile;
 mod volume;
 mod store;
+mod vpn;
 
 pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
     Status {

@@ -101,7 +101,7 @@ pub fn active_target(active: Tab, panel_open: bool) -> Option<Target> {
     match active {
         Tab::Home | Tab::Apps => Some(Target::Nav(NAV_HOME)),
         Tab::Settings => Some(Target::Nav(NAV_SETTINGS)),
-        Tab::Network | Tab::Device | Tab::Mobile | Tab::Bluetooth => None,
+        Tab::Network | Tab::Device | Tab::Mobile | Tab::Bluetooth | Tab::Vpn => None,
     }
 }
 

@@ -21,6 +21,10 @@ pub enum SheetPurpose {
     MobileApn,
     /// The SIM PIN (4-8 digits, hidden; sent to the core as a secret).
     SimPin,
+    /// DNS servers, comma separated (shown in clear; empty = automatic).
+    VpnDns,
+    /// HTTP proxy `http://host:port` (shown in clear; empty = none).
+    VpnProxy,
     /// Screen lock (OpenSpec `lock-screen`): the present secret before changing it, the one
     /// before removing the lock, the new one and its repeat. The kind says what is typed.
     LockCurrent(LockKind),
@@ -123,6 +127,22 @@ impl PasswordSheet {
             ..PasswordSheet::new(String::new(), title.into())
         }
     }
+    /// The DNS or proxy sheet of the VPN screen.
+    pub fn vpn(purpose: SheetPurpose, initial: &str) -> Self {
+        let title = match purpose {
+            SheetPurpose::VpnDns => "DNS servers",
+            _ => "HTTP proxy",
+        };
+        PasswordSheet {
+            secret: initial.to_string(),
+            shown: true,
+            purpose,
+            ..PasswordSheet::new(String::new(), title.into())
+        }
+    }
+    pub fn is_vpn(&self) -> bool {
+        matches!(self.purpose, SheetPurpose::VpnDns | SheetPurpose::VpnProxy)
+    }
     /// The sheet sets something on the mobile modem.
     pub fn is_mobile(&self) -> bool {
         matches!(self.purpose, SheetPurpose::MobileApn | SheetPurpose::SimPin)
@@ -140,6 +160,13 @@ impl PasswordSheet {
             SheetPurpose::HotspotPassword => walpad_proto::valid_hotspot_secret(&self.secret),
             SheetPurpose::MobileApn => walpad_proto::valid_apn(&self.secret),
             SheetPurpose::SimPin => walpad_proto::valid_sim_pin(&self.secret),
+            SheetPurpose::VpnDns => {
+                let l = dns_list(&self.secret);
+                l.len() <= 3 && l.iter().all(|d| walpad_proto::valid_dns_server(d))
+            }
+            SheetPurpose::VpnProxy => {
+                self.secret.is_empty() || walpad_proto::valid_proxy(&self.secret)
+            }
             SheetPurpose::LockCurrent(_) | SheetPurpose::LockRemove(_) => {
                 walpad_proto::valid_attempt(&self.secret)
             }
@@ -156,12 +183,22 @@ impl PasswordSheet {
             SheetPurpose::HotspotPassword => 63,
             SheetPurpose::MobileApn => 62,
             SheetPurpose::SimPin => 8,
+            SheetPurpose::VpnDns => 80,
+            SheetPurpose::VpnProxy => 100,
             SheetPurpose::LockCurrent(_)
             | SheetPurpose::LockRemove(_)
             | SheetPurpose::LockNew(_)
             | SheetPurpose::LockRepeat(_) => 64,
         }
     }
+}
+
+/// DNS servers typed in the sheet: split on commas and spaces.
+pub fn dns_list(s: &str) -> Vec<String> {
+    s.split([',', ' '])
+        .filter(|d| !d.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -282,6 +319,8 @@ pub fn render_password(
         SheetPurpose::HotspotPassword => ("8-63 characters", true, "Save"),
         SheetPurpose::MobileApn => ("e.g. gpinternet", false, "Save"),
         SheetPurpose::SimPin => ("4-8 digits", true, "Unlock"),
+        SheetPurpose::VpnDns => ("e.g. 1.1.1.1, 9.9.9.9 (empty: automatic)", false, "Save"),
+        SheetPurpose::VpnProxy => ("http://host:port (empty: none)", false, "Save"),
         SheetPurpose::LockCurrent(_) => ("Current secret", true, "Next"),
         SheetPurpose::LockRemove(_) => ("Current secret", true, "Remove lock"),
         SheetPurpose::LockNew(LockKind::Pin) => ("4-12 digits", true, "Next"),

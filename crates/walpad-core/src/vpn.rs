@@ -275,7 +275,9 @@ pub fn validate_openvpn(text: &str) -> Result<(), String> {
             return Err("the profile uses a directive that runs programs or changes files".into());
         }
         if d == "auth-user-pass" && it.next().is_none() {
-            return Err("the profile asks for a password interactively: embed it or drop it".into());
+            return Err(
+                "the profile asks for a password interactively: embed it or drop it".into(),
+            );
         }
         if d == "remote" && it.next().is_some() {
             remote = true;
@@ -552,7 +554,8 @@ impl Vpn {
 
     /// `vpn_import`: validate and store a profile (0600 file in the 0700 store).
     pub fn import(&mut self, path: &str, name: Option<&str>) -> Result<VpnProfile, VpnError> {
-        let kind = kind_of_name(path).ok_or_else(|| VpnError::Invalid("not a profile file".into()))?;
+        let kind =
+            kind_of_name(path).ok_or_else(|| VpnError::Invalid("not a profile file".into()))?;
         let name = name.map_or_else(|| name_from_path(path), str::to_string);
         if !valid_vpn_name(&name) {
             return Err(VpnError::Invalid("invalid profile name".into()));
@@ -622,13 +625,21 @@ impl Vpn {
             "/var/lib/walpad/import".into(),
         ];
         for base in ["/media", "/mnt"] {
-            for e in std::fs::read_dir(self.root.p(base)).into_iter().flatten().flatten() {
+            for e in std::fs::read_dir(self.root.p(base))
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
                 dirs.push(format!("{base}/{}", e.file_name().to_string_lossy()));
             }
         }
         let mut out = Vec::new();
         for d in dirs {
-            for e in std::fs::read_dir(self.root.p(&d)).into_iter().flatten().flatten() {
+            for e in std::fs::read_dir(self.root.p(&d))
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
                 let f = e.file_name().to_string_lossy().into_owned();
                 let Some(kind) = kind_of_name(&f) else {
                     continue;
@@ -815,7 +826,9 @@ mod tests {
         assert!(validate_wireguard("[Foo]\nx = y\n").is_err());
         // an error never quotes the content
         let bad = wg("").replace(KEY, "notakey-SECRETVALUE");
-        assert!(!validate_wireguard(&bad).unwrap_err().contains("SECRETVALUE"));
+        assert!(!validate_wireguard(&bad)
+            .unwrap_err()
+            .contains("SECRETVALUE"));
     }
 
     #[test]
@@ -840,7 +853,9 @@ mod tests {
             proxy: Some("http://10.0.0.2:3128".into()),
         };
         assert_eq!(parse_settings(&render_settings(&s)), s);
-        let bad = parse_settings("profile=../x\ndns=evil;rm,1.1.1.1\nproxy=http://u:p@h:1\nkill_switch=0\n");
+        let bad = parse_settings(
+            "profile=../x\ndns=evil;rm,1.1.1.1\nproxy=http://u:p@h:1\nkill_switch=0\n",
+        );
         assert_eq!(
             bad,
             Settings {
@@ -854,10 +869,16 @@ mod tests {
 
     #[test]
     fn names_from_paths() {
-        assert_eq!(name_from_path("/root/Downloads/my vpn (1).conf"), "my-vpn--1-");
+        assert_eq!(
+            name_from_path("/root/Downloads/my vpn (1).conf"),
+            "my-vpn--1-"
+        );
         assert_eq!(name_from_path("/root/.hidden.ovpn"), "hidden");
         assert!(!name_from_path("/root/").is_empty());
-        assert_eq!(name_from_path(&format!("/r/{}.conf", "a".repeat(40))).len(), 24);
+        assert_eq!(
+            name_from_path(&format!("/r/{}.conf", "a".repeat(40))).len(),
+            24
+        );
     }
 
     #[test]
