@@ -48,6 +48,12 @@ int main(void) {
     g.refresh = 0; gate_update(&g, 0); CHECK(!g.refresh);
     gate_update(&g, 1); gate_update(&g, 0); CHECK(g.refresh == 1);               /* off again, on again */
 
+    /* idle back-off: normal rate until ~1 s without a change, then IDLE_SLEEP_MS; paused sleep is untouched */
+    CHECK(idle_sleep_ms(GATE_RUN_SLEEP_MS, 0) == GATE_RUN_SLEEP_MS);
+    CHECK(idle_sleep_ms(GATE_RUN_SLEEP_MS, IDLE_AFTER_TICKS - 1) == GATE_RUN_SLEEP_MS);
+    CHECK(idle_sleep_ms(GATE_RUN_SLEEP_MS, IDLE_AFTER_TICKS) == IDLE_SLEEP_MS);
+    CHECK(idle_sleep_ms(GATE_PAUSE_SLEEP_MS, 1000) == GATE_PAUSE_SLEEP_MS);
+
     puts(fails ? "FAIL" : "PASS fbmirror logic");
     return fails != 0;
 }

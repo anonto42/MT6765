@@ -54,6 +54,8 @@ static int slen(const char *s) { int n = 0; while (s[n]) n++; return n; }
 static void write_file(const char *p, const char *s) { long fd = sc3(SYS_openat, AT_FDCWD, p, 1); if (fd < 0) return; sc3(SYS_write, fd, s, slen(s)); sc3(SYS_close, fd, 0, 0); }
 static void msleep(long ms) { struct { long s, ns; } ts = { ms / 1000, (ms % 1000) * 1000000L }; sc3(SYS_nanosleep, &ts, 0, 0); }
 static u32 shadow[PAGE_PX];
+/* raw copy of the visible part of the X frame, compared in memory order (cheap) before the rotated pass */
+static u32 prevraw[1280 * 1280];
 static u32 be32(const u8 *p) { return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3]; }
 static void say(const char *s) { sc3(SYS_write, 2, s, slen(s)); }
 static long map(const char *path, long len, int prot, int flags, int oflag) {
@@ -79,12 +81,23 @@ int cmain(long *sp) {
     if (xm < 0 && xm > -4096) { say("fbmirror: cannot map XWD file\n"); return 5; }
     const u32 *src = (const u32 *)((u8 *)xm + off);
     int inited = 0, woke = 0, cur = 0, ori = -1, tick = 0;
-    fbgate gate = { 0, 0, 0 }; long slept = 0;
+    fbgate gate = { 0, 0, 0 }; long slept = 0; int idle = 0;   /* ticks since the last change */
     for (;;) {
         if (gate_poll_due(&gate, slept)) gate_update(&gate, read_screen_off());
         if (gate.paused) { slept = gate_sleep_ms(&gate); msleep(slept); continue; }   /* screen off: no compare, no copy */
         if (gate.refresh) { gate.refresh = 0; inited = 0; tick = 0; for (int i = 0; i < PAGE_PX; i++) shadow[i] = 0; }   /* resumed: one full refresh, re-read rotation */
-        if ((tick++ & 3) == 0) { int o = read_ori(); if (o != ori) { int first = ori < 0; ori = o; for (int i = 0; i < PAGE_PX; i++) shadow[i] = 0; if (!first) msleep(300); /* let X relayout, then draw once; never blank on rotation */ } }
+        if ((tick++ & 3) == 0) { int o = read_ori(); if (o != ori) { int first = ori < 0; ori = o; for (int i = 0; i < PAGE_PX; i++) shadow[i] = 0; inited = 0; if (!first) msleep(300); /* let X relayout, then draw once; never blank on rotation */ } }
+        {   /* fast idle check: sequential compare of the raw visible region (rotated passes read columns, which is
+             * ~30% of a core at 25 Hz on this SoC); only a difference (or a forced refresh) runs the full pass */
+            int rw = (ori == 90 || ori == 270) ? 1280 : W, rh = (ori == 90 || ori == 270) ? W : H, diff = 0;
+            for (int y = 0; y < rh; y++) {
+                const u32 *r = src + (long)y * stride; u32 *p = prevraw + (long)y * rw; int x = 0;
+                while (x < rw && p[x] == r[x]) x++;
+                if (x < rw) { diff = 1; for (; x < rw; x++) p[x] = r[x]; }
+            }
+            if (!diff && inited) { idle++; slept = idle_sleep_ms(gate_sleep_ms(&gate), idle); msleep(slept); continue; }
+            idle = 0;
+        }
         int changed = 0; u32 *sh = shadow;
         if (ori == 0) {
             for (int y = 0; y < H; y++) { const u32 *r = src + (long)y * stride; for (int x = 0; x < W; x++) { u32 v = r[x] | 0xFF000000u; if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }

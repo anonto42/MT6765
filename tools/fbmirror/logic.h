@@ -50,4 +50,11 @@ static void gate_update(fbgate *g, int off) {
 
 static long gate_sleep_ms(const fbgate *g) { return g->paused ? GATE_PAUSE_SLEEP_MS : GATE_RUN_SLEEP_MS; }
 
+/* Idle back-off: reading the 4 MB frame 25 times a second is ~30% of a core on this SoC (the frame and the
+ * copy do not fit the cache).  After IDLE_AFTER_TICKS unchanged polls (~1 s) poll every IDLE_SLEEP_MS
+ * instead; the first change brings the normal rate back at once. */
+#define IDLE_AFTER_TICKS 25
+#define IDLE_SLEEP_MS 100
+static long idle_sleep_ms(long normal, int idle_ticks) { return idle_ticks >= IDLE_AFTER_TICKS && normal < IDLE_SLEEP_MS ? IDLE_SLEEP_MS : normal; }
+
 #endif
