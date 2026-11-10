@@ -529,16 +529,16 @@ for f in config/rootfs/sbin/walpad-init config/rootfs-nopython/files/sbin/walpad
   g=$(grep -n 'if \[ -z "\$SAFE" \]' "$f" | head -n 1 | cut -d: -f1)
   [ -n "$w" ] && [ -n "$b" ] && [ "$w" -lt "$b" ] && ok "init starts walpad-bluetooth after walpad-wifi ($f)" || bad "init bluetooth order ($f)" "$w $b" "wifi < bluetooth"
   [ -n "$g" ] && [ "$b" -lt "$g" ] && ok "bluetooth start is before the safe-mode gate ($f)" || bad "bluetooth before the gate ($f)" "$b $g" "bt < gate"
-  grep -q 'bluetooth-enabled' "$f" && grep -q '/var/log/walpad-bluetooth.log' "$f" && grep -q -- '-lt 120' "$f" && ok "init honours the switch, logs, waits 120 s for wmt_drv ($f)" || bad "init bluetooth switch/log/wait ($f)" missing present
-  # run the block with fake commands: switch on -> start once after wmt_drv; switch off -> never
+  grep -q 'bluetooth-enabled' "$f" && grep -q '/var/log/walpad-bluetooth.log' "$f" && grep -q -- '-lt 120' "$f" && ok "init honours the switch, logs, waits 120 s for wlan0 ($f)" || bad "init bluetooth switch/log/wait ($f)" missing present
+  # run the block with fake commands: switch on -> start once wlan0 exists; switch off -> never
   blk=$(sed -n '/^# Bluetooth (owner request/,/^fi$/p' "$f")
   for sw in on off; do
     BI=$T/btinit-$sw; mkdir -p "$BI/bin" "$BI/var/lib/walpad" "$BI/var/log"; : > "$BI/calls"
     printf '#!/bin/sh\necho "$*" >> %s/calls\n' "$BI" > "$BI/bin/walpad-bluetooth"; chmod +x "$BI/bin/walpad-bluetooth"
-    echo "wmt_drv 1 0 - Live 0x0" > "$BI/modules"
+    mkdir -p "$BI/net/wlan0"   # the block waits for wlan0 (the Wi-Fi stack is fully up), not just wmt_drv
     [ "$sw" = off ] && echo 0 > "$BI/var/lib/walpad/bluetooth-enabled"
     # the block hard-codes absolute paths: rewrite them into the fake root
-    echo "$blk" | sed "s|/usr/local/sbin/walpad-bluetooth|$BI/bin/walpad-bluetooth|; s|/var/lib/walpad|$BI/var/lib/walpad|; s|/proc/modules|$BI/modules|g; s|/var/log/walpad-bluetooth.log|$BI/var/log/bt.log|; s|^\( *\)walpad-bluetooth start|\1$BI/bin/walpad-bluetooth start|; s|; walpad-bluetooth start|; $BI/bin/walpad-bluetooth start|" > "$BI/blk.sh"
+    echo "$blk" | sed "s|/usr/local/sbin/walpad-bluetooth|$BI/bin/walpad-bluetooth|; s|/var/lib/walpad|$BI/var/lib/walpad|; s|/sys/class/net|$BI/net|g; s|/var/log/walpad-bluetooth.log|$BI/var/log/bt.log|; s|^\( *\)walpad-bluetooth start|\1$BI/bin/walpad-bluetooth start|; s|; walpad-bluetooth start|; $BI/bin/walpad-bluetooth start|" > "$BI/blk.sh"
     ( PATH=$BI/bin:$PATH sh "$BI/blk.sh"; sleep 1.5 )
     if [ "$sw" = on ]; then eq "init block (switch on) starts bluetooth once ($f)" "$(cat "$BI/calls")" "start"
     else eq "init block (switch off) starts nothing ($f)" "$(cat "$BI/calls")" ""; fi

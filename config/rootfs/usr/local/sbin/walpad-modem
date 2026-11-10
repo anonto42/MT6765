@@ -161,7 +161,10 @@ case ${1:-status} in
     # ro.vendor.mtk_md1_support selects /dev/ttyC0 instead of an external USB modem)
     if ! grep -q "^ro.vendor.mtk_md1_support=" $PROPS 2>/dev/null; then
       for f in /system/system/build.prop /vendor/build.prop /vendor/default.prop; do
-        [ -f "$f" ] && grep -E '^[a-zA-Z0-9_.-]+=' "$f" >> $PROPS
+        # never copy the connectivity keys (persist.vendor.connsys.chipid=-1 in vendor build.prop):
+        # walpad-wifi decides from this file whether wmt_loader already ran, and a stale "chipid"
+        # line made it skip the loader, so Wi-Fi and Bluetooth never started
+        [ -f "$f" ] && grep -E '^[a-zA-Z0-9_.-]+=' "$f" | grep -v -i -E 'connsys|chipid' >> $PROPS
       done
       echo "ro.boot.opt_sim_count=2" >> $PROPS
     fi

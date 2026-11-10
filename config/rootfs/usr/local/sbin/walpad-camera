@@ -72,9 +72,10 @@ mount_selinuxfs() {
 # Android build props as init would load them, plus what the camera path needs
 build_props() {
   mkdir -p "$(dirname "$PROPS")"
-  : > "$PROPS"
+  # append only: the file also carries the Wi-Fi chip's state (never truncate it), and the
+  # connectivity keys (connsys / chipid) of the build props are never copied (see walpad-modem)
   for f in "$SYS/build.prop" "$SYS/product/build.prop" "$R/vendor/build.prop" "$R/vendor/default.prop" "$R/vendor/odm/etc/build.prop"; do
-    [ -r "$f" ] && grep -E '^[A-Za-z0-9_.-]+=' "$f" >> "$PROPS"
+    [ -r "$f" ] && grep -E '^[A-Za-z0-9_.-]+=' "$f" | grep -v -i -E 'connsys|chipid' >> "$PROPS"
   done
   {
     echo "init.svc.vndservicemanager=running"
