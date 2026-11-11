@@ -14,6 +14,7 @@ mod lock;
 mod media;
 mod mobile;
 mod store;
+mod topbar;
 mod volume;
 mod vpn;
 
@@ -44,6 +45,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         mobile: Default::default(),
         phone: Default::default(),
         gps: Default::default(),
+        stats: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),

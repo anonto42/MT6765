@@ -4,11 +4,12 @@
 //! rebuilt only when its key changes (size, pinned apps, active destination, panel open).
 use crate::app::{Model, Target};
 use crate::panels::{battery_label, wifi_mark};
+use crate::topbar;
 use walpad_ui::art::{coffee_rect, draw_coffee};
 use walpad_ui::components::{Painter, Tab};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
-use walpad_ui::{Canvas, Icon, Rect};
+use walpad_ui::{Canvas, Face, Icon, Rect};
 
 /// Index of each sidebar destination in `Tab::ALL` (`Target::Nav`).
 pub const NAV_HOME: usize = 0;
@@ -272,8 +273,21 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         bt,
         gps,
     );
+    let clock_x = h.x + SP_5;
+    let mut clock_right = clock_x + h.w - pill_w - SP_4 - 2 * SP_5;
+    // live stats between the clock and the pill (owner request 2026-11-11)
+    if let Some(st) = m.status.as_ref().map(|s| &s.stats) {
+        let clock_end = clock_x + p.clock_time_w(&time, w.suffix);
+        let date_w = p.fonts.measure(&w.date, Face::Regular, SIZE_CAPTION).ceil() as i32;
+        let l = topbar::layout(p.fonts, st, h, clock_end, date_w, pill.x - SP_3);
+        if let Some(sp) = l.pill {
+            // the date keeps its room only while it fits left of the stats
+            clock_right = if l.date { sp.x - SP_3 } else { clock_end };
+            topbar::paint(p, &l);
+        }
+    }
     p.clock(
-        Rect::new(h.x + SP_5, h.y, h.w - pill_w - SP_4 - 2 * SP_5, h.h),
+        Rect::new(clock_x, h.y, clock_right - clock_x, h.h),
         &time,
         w.suffix,
         &w.date,

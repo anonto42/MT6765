@@ -62,6 +62,7 @@ fn status() -> Status {
         mobile: Default::default(),
         phone: Default::default(),
         gps: Default::default(),
+        stats: Default::default(),
         bluetooth: Default::default(),
         lock: Default::default(),
         vpn: Default::default(),

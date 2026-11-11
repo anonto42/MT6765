@@ -44,6 +44,7 @@ fn status(vpn: VpnStatus) -> Status {
         mobile: Default::default(),
         phone: Default::default(),
         gps: Default::default(),
+        stats: Default::default(),
         bluetooth: Default::default(),
         lock: Default::default(),
         audio: Default::default(),

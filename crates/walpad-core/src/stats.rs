@@ -15,6 +15,9 @@ const EVERY: Duration = Duration::from_secs(2);
 const MAX_GAP: Duration = Duration::from_secs(30);
 const MAX_FILE: u64 = 1 << 20;
 
+/// `(interface, rx_bytes, tx_bytes)` per counted interface.
+pub type NetCounters = Vec<(String, u64, u64)>;
+
 /// Cumulative CPU time: `(busy, total)` jiffies over all CPUs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CpuTimes {
@@ -137,7 +140,7 @@ pub struct Stats {
     every: Duration,
     next: Instant,
     prev_cpu: Option<CpuTimes>,
-    prev_net: Option<(Instant, Vec<(String, u64, u64)>)>,
+    prev_net: Option<(Instant, NetCounters)>,
 }
 
 impl Stats {

@@ -46,6 +46,7 @@ fn status(apps: &[&str]) -> Status {
         vpn: Default::default(),
         phone: Default::default(),
         gps: Default::default(),
+        stats: Default::default(),
         apps: apps
             .iter()
             .map(|a| AppState {

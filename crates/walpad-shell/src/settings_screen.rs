@@ -3,6 +3,7 @@
 use crate::app::Target;
 use crate::config::{read_gestures, DevdSettings};
 use crate::device_screen::{info_row, tone_color};
+use crate::topbar::StatItem;
 use walpad_hw::{sysfs, sysinfo, Root};
 use walpad_proto::Status;
 use walpad_ui::components::{Accessory, ButtonKind, ButtonState, Painter, Tone};
@@ -31,12 +32,14 @@ pub enum Page {
     Security,
     System,
     Clock,
+    /// Which live figures the header shows (owner request 2026-11-11).
+    TopBar,
     Maintenance,
     About,
     Logs,
 }
 
-pub const CATEGORIES: [(Page, &str, Icon); 15] = [
+pub const CATEGORIES: [(Page, &str, Icon); 16] = [
     (Page::Display, "Display", Icon::Sun),
     (Page::Sound, "Sound", Icon::Volume),
     (Page::Input, "Input", Icon::Keyboard),
@@ -50,6 +53,7 @@ pub const CATEGORIES: [(Page, &str, Icon); 15] = [
     (Page::Security, "Security", Icon::Lock),
     (Page::System, "System", Icon::Device),
     (Page::Clock, "Clock", Icon::Settings),
+    (Page::TopBar, "Top bar items", Icon::Device),
     (Page::Maintenance, "Maintenance", Icon::Refresh),
     (Page::About, "About", Icon::Globe),
 ];
@@ -312,6 +316,13 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
             c.clock_24h,
             Target::ClockToggle,
         )],
+        Page::TopBar => {
+            let it = c.status.as_ref().map(|s| s.stats.items).unwrap_or_default();
+            StatItem::ALL
+                .into_iter()
+                .map(|i| Row::Toggle(i.name(), i.on(&it), Target::Stat(i)))
+                .collect()
+        }
         Page::Maintenance => vec![
             Row::Link("View logs", Page::Logs),
             Row::Action {

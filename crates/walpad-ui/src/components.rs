@@ -1090,6 +1090,16 @@ impl Painter<'_> {
 
     // ------------------------------------------------------------------ Header: clock, quick pill
     /// Clock (and the 12-hour suffix) at the left of the header, the date after it in secondary.
+    /// Width of the clock without the date: the time and the AM/PM suffix, as `clock` places them.
+    pub fn clock_time_w(&mut self, time: &str, suffix: Option<&str>) -> i32 {
+        let tw = self.fonts.measure(time, Face::Regular, SIZE_CLOCK).ceil() as i32;
+        let sfx = suffix.map_or(0, |s| {
+            let sw = self.fonts.measure(s, Face::Regular, SIZE_CAPTION).ceil() as i32;
+            sw + SP_1 + 2
+        });
+        tw + SP_1 + sfx
+    }
+
     pub fn clock(&mut self, r: Rect, time: &str, suffix: Option<&str>, date: &str) {
         let style = Style::new(Face::Regular, SIZE_CLOCK, TEXT);
         let tw = self.fonts.measure(time, Face::Regular, SIZE_CLOCK).ceil() as i32;

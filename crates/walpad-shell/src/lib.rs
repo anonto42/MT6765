@@ -36,6 +36,7 @@ pub mod seltools;
 pub mod settings_screen;
 pub mod shell;
 pub mod store;
+pub mod topbar;
 pub mod volume_ui;
 pub mod vpn_screen;
 pub mod window;

@@ -19,12 +19,13 @@ use crate::panels;
 use crate::phone_ui::{self, PhoneModel, PhoneTarget};
 use crate::settings_screen::{self, Page, SysInfo};
 use crate::store::{self, StoreTarget, StoreView};
+use crate::topbar::StatItem;
 use crate::volume_ui::{self, Osd};
 use crate::vpn_screen;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use walpad_hw::Root;
-use walpad_proto::{Secret, ShellInput, Status};
+use walpad_proto::{Secret, ShellInput, StatsItems, Status};
 use walpad_ui::components::{Key, KeyboardLayer, Painter, Tab, Tone};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
@@ -222,6 +223,8 @@ pub enum Target {
     Page(Page),
     Back,
     ClockToggle,
+    /// Settings > Top bar items: one live figure on or off.
+    Stat(StatItem),
     RestartShell,
     Reboot,
     Shutdown,
@@ -371,6 +374,8 @@ pub enum Cmd {
     CallLogClear,
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
+    /// `stats_config`: show or hide one header figure.
+    Stats(StatItem, bool),
     /// `set_setting` with an allowlisted key.
     Setting(&'static str, Value),
     RestartShell,
@@ -586,6 +591,7 @@ impl Cmd {
             Cmd::CallLog => ("call_log", Value::Null),
             Cmd::CallLogClear => ("call_log_clear", Value::Null),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
+            Cmd::Stats(i, on) => ("stats_config", json!({ i.key(): on })),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
             Cmd::PowerMenuState(open) => ("power_menu", json!({"open": open})),
@@ -633,7 +639,7 @@ impl Cmd {
             | Cmd::ContactDelete(_)
             | Cmd::CallLogClear => Purpose::PhoneAction,
             Cmd::CloseApp(_) => Purpose::Close,
-            Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
+            Cmd::Setting(..) | Cmd::SetPinned(_) | Cmd::Stats(..) => Purpose::Setting,
             _ => Purpose::Other,
         }
     }
@@ -2230,6 +2236,14 @@ impl App {
                 };
                 self.scroll = 0;
                 self.content_hits.clear();
+            }
+            Target::Stat(i) if interactive => {
+                let on = self
+                    .model
+                    .status
+                    .as_ref()
+                    .map_or_else(StatsItems::default, |s| s.stats.items);
+                out.cmd(Cmd::Stats(i, !i.on(&on)))
             }
             Target::ClockToggle if interactive => {
                 out.cmd(Cmd::Setting("clock_24h", json!(!self.model.clock_24h)))

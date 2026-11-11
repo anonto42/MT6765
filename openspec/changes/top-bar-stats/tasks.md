@@ -4,9 +4,9 @@
 - [x] 1.3 Parser unit tests and IPC tests; walpad-ctl `stats`
 
 ## 2. Shell
-- [ ] 2.1 Header layout (pure, never overlaps the clock or the pill), render, redraw rules
-- [ ] 2.2 Settings > Top bar items page with four switches
-- [ ] 2.3 Snapshot goldens (portrait and landscape), app tests
+- [x] 2.1 Header layout (pure, never overlaps the clock or the pill), render, redraw rules
+- [x] 2.2 Settings > Top bar items page with four switches
+- [x] 2.3 Snapshot goldens (portrait and landscape), app tests
 
 ## 3. Check
 - [ ] 3.1 `scripts/check.sh` prints ALL CHECKS PASSED
