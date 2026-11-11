@@ -11,7 +11,10 @@ SYS=/system/system
 # the modem daemons are 32-bit ARM: 32-bit linker, libraries and property shim (tools/propshim32)
 LINKER=$SYS/bin/bootstrap/linker
 SHIM=/usr/local/lib/libwpdprops32.so
-PROPS=/tmp/wpd-props
+# The 32-bit shim has its OWN property file.  /tmp/wpd-props belongs to the Wi-Fi stack (64-bit shim,
+# reads only its first 8 KB): putting hundreds of build.prop lines there hid the chip id from
+# wmt_launcher and Wi-Fi/Bluetooth never started (2026-11-10).
+PROPS=/tmp/wpd-props32
 RUN=/run/walpad
 say() { echo "[modem] $*"; echo "WALPAD-MODEM: $*" > /dev/kmsg 2>/dev/null; }
 

@@ -12,7 +12,7 @@
 # The environment, all verified for /vendor/bin/factory on the tablet:
 #   * bootstrap linker /system/system/bin/bootstrap/linker64, started through a symlink named like
 #     the program under /run/walpad/android-bin (kernel drivers look at comm)
-#   * LD_PRELOAD=libwpdprops.so + the Android build props in /tmp/wpd-props
+#   * LD_PRELOAD=libwpdprops64b.so + the Android build props in /tmp/wpd-props64
 #   * LD_LIBRARY_PATH with the VNDK apex payload (mounted like walpad-gps does)
 #   * binderfs (/dev/vndbinder) + vndservicemanager, selinuxfs mounted (NEVER load a policy)
 #   * boot mode: the factory binary insists on atag,boot == 4.  libacdk itself does not read it, but
@@ -26,12 +26,12 @@
 R=${WALPAD_ROOT:-}
 SYS=$R/system/system
 LINKER=$SYS/bin/bootstrap/linker64
-SHIM=${WALPAD_CAM_SHIM:-$R/usr/local/lib/libwpdprops.so}
+SHIM=${WALPAD_CAM_SHIM:-$R/usr/local/lib/libwpdprops64b.so}
 HELPER=${WALPAD_CAM_HELPER:-$R/usr/local/bin/camacdk}
 RUN=$R/run/walpad
 LDIR=$RUN/android-bin
 APEX=$RUN/apex/vndk
-PROPS=${WALPAD_CAM_PROPS:-$R/tmp/wpd-props}
+PROPS=${WALPAD_CAM_PROPS:-$R/tmp/wpd-props64}   # never /tmp/wpd-props (the Wi-Fi stack's, 8 KB reader)
 ATAG_FILE=$RUN/fake-atag-boot
 ATAG_TARGET=$R/sys/firmware/devicetree/base/chosen/atag,boot
 LOG=$R/var/log/walpad-camera.log

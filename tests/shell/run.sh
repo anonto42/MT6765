@@ -694,7 +694,7 @@ export CAM_LOG=$CAM/calls; : > "$CAM_LOG"
 
 OUT=$(cam start); eq "camera: start without the property shim fails" "$?" 1
 case $OUT in *"property shim missing"*) ok "camera:   says why (shim)";; *) bad "camera:   says why (shim)" "$OUT" "property shim missing";; esac
-: > "$CR/usr/local/lib/libwpdprops.so"
+: > "$CR/usr/local/lib/libwpdprops64b.so"
 mv "$CR/system/system/bin/bootstrap/linker64" "$CAM/linker64.keep"
 OUT=$(cam start); eq "camera: start without /system fails" "$?" 1
 case $OUT in *"/system is not mounted"*) ok "camera:   says why (system)";; *) bad "camera:   says why (system)" "$OUT" "/system is not mounted";; esac
@@ -710,7 +710,7 @@ grep -q "^mount -t binder binder $CR/dev/binderfs" "$CAM_LOG" && ok "camera:   b
 grep -q "^mount -t selinuxfs selinuxfs $CR/sys/fs/selinux" "$CAM_LOG" && ok "camera:   selinuxfs mounted" || bad "camera:   selinuxfs mounted" "$(cat "$CAM_LOG")" selinuxfs
 grep -q "^mount -o loop,ro $CR/run/walpad/apex/tmp/apex_payload.img $CR/run/walpad/apex/vndk" "$CAM_LOG" && ok "camera:   VNDK apex payload mounted" || bad "camera:   VNDK apex payload mounted" "$(cat "$CAM_LOG")" "loop,ro"
 grep -q 'policy' "$CAM_LOG" && bad "camera:   never loads a SELinux policy" found absent || ok "camera:   never loads a SELinux policy"
-P=$CR/tmp/wpd-props
+P=$CR/tmp/wpd-props64
 grep -qx 'ro.build.version.sdk=30' "$P" && grep -qx 'ro.vendor.build.id=ABC' "$P" && grep -qx 'ro.boot.dynamic_partitions=true' "$P" && ok "camera:   build props loaded from the build.prop files" || bad "camera:   build props loaded" "$(cat "$P")" "system+vendor props"
 grep -q 'comment\|not a prop' "$P" && bad "camera:   comments and junk skipped" found absent || ok "camera:   comments and junk skipped"
 grep -qx 'init.svc.vndservicemanager=running' "$P" && ok "camera:   init.svc.vndservicemanager=running" || bad "camera:   init.svc.vndservicemanager" missing present
@@ -724,9 +724,9 @@ OUT=$(cam status); case $OUT in *"vndservicemanager: running"*"helper: installed
 eq "camera: capture main exits 0" "$(camrc capture main "$CAM/x.jpg")" 0
 [ -s "$CAM/x.jpg" ] && ok "camera:   the file arrived" || bad "camera:   the file arrived" missing present
 eq "camera:   helper arguments" "$(sed -n 's/^args: //p' "$CAM/helper.log")" "capture main $CAM/x.jpg"
-eq "camera:   LD_PRELOAD is the property shim" "$(sed -n 's/^preload=//p' "$CAM/helper.log")" "$CR/usr/local/lib/libwpdprops.so"
+eq "camera:   LD_PRELOAD is the property shim" "$(sed -n 's/^preload=//p' "$CAM/helper.log")" "$CR/usr/local/lib/libwpdprops64b.so"
 eq "camera:   LD_LIBRARY_PATH: bootstrap, vendor, VNDK apex, system" "$(sed -n 's/^libpath=//p' "$CAM/helper.log")" "$CR/system/system/lib64/bootstrap:$CR/vendor/lib64:$CR/run/walpad/apex/vndk/lib64:$CR/system/system/lib64"
-eq "camera:   helper told where the property file is" "$(sed -n 's/^props=//p' "$CAM/helper.log")" "$CR/tmp/wpd-props"
+eq "camera:   helper told where the property file is" "$(sed -n 's/^props=//p' "$CAM/helper.log")" "$CR/tmp/wpd-props64"
 eq "camera:   helper runs in /data" "$(sed -n 's/^cwd=//p' "$CAM/helper.log")" "$CR/data"
 grep -q '^unshare -m ' "$CAM_LOG" && ok "camera:   private mount namespace (unshare -m)" || bad "camera:   unshare -m" "$(cat "$CAM_LOG")" "unshare -m"
 grep -q "^mount --bind $CR/run/walpad/fake-atag-boot $CR/sys/firmware/devicetree/base/chosen/atag,boot" "$CAM_LOG" && ok "camera:   fake atag,boot bind-mounted over the sysfs one" || bad "camera:   atag bind mount" "$(cat "$CAM_LOG")" "mount --bind"
@@ -780,5 +780,13 @@ grep -q 'SENSOR_DEV_MAIN 1' tools/camacdk/camacdk.c && grep -q 'SENSOR_DEV_SUB 2
 # ===== walpad-vpn (owner request 2026-11-10, change vpn-and-dns): its own file =====
 VPNOUT=$(sh tests/shell/vpn.sh); echo "$VPNOUT"
 case $VPNOUT in *FAIL*) FAIL=$((FAIL+1));; esac
+
+# --- property files: the Wi-Fi stack's /tmp/wpd-props (8 KB reader) must never receive build props
+for f in walpad-modem walpad-gps walpad-camera; do
+  if sed 's/#.*$//' "$S/$f" | grep -q -E 'wpd-props([^0-9A-Za-z]|$)'; then
+    bad "$f never touches the Wi-Fi property file /tmp/wpd-props" present absent
+  else ok "$f never touches the Wi-Fi property file /tmp/wpd-props"; fi
+done
+grep -q '^PROPS=/tmp/wpd-props32' "$S/walpad-modem" && ok "modem uses its own property file" || bad "modem property file" other /tmp/wpd-props32
 
 exit $FAIL

@@ -23,13 +23,18 @@
  *
  * propshim32: the 32-bit ARM (EABI) twin of tools/propshim/wpdprops.c for the 32-bit MediaTek
  * modem daemons (ccci_mdinit, ccci_fsd, nvram_daemon).  Only the syscall numbers and the trap
- * sequence differ; the store (PROP_FILE) is the same file, so 32- and 64-bit vendor binaries see
- * the same properties.  tools/propshim itself is left untouched (AGENTS.md rule 4).
+ * sequence differ.  The store is /tmp/wpd-props32: a different file from the Wi-Fi stack's
+ * /tmp/wpd-props, which the (frozen, 8 KB) 64-bit shim reads: mixing them hid the chip id from
+ * wmt_launcher and took Wi-Fi down.  tools/propshim itself is left untouched (AGENTS.md rule 4).
  */
 
-#define PROP_FILE "/tmp/wpd-props"
+#ifndef PROP_FILE
+#define PROP_FILE "/tmp/wpd-props32"   /* its own file: never the Wi-Fi stack's /tmp/wpd-props */
+#endif
 #define PROP_VALUE_MAX 92
-#define BUFSZ 8192
+#ifndef BUFSZ
+#define BUFSZ 262144   /* the build.prop files alone are ~20 KB: the old 8 KB limit hid later entries */
+#endif
 
 #define AT_FDCWD (-100)
 #define O_RDONLY 0
@@ -81,6 +86,7 @@ static size_t s_strlen(const char *s)
 }
 
 /* Read the whole store.  Returns the byte count, 0 if it does not exist. */
+static char g_store[BUFSZ];
 static size_t load(char *buf, size_t cap)
 {
     int fd = s_open(PROP_FILE, O_RDONLY, 0);
@@ -100,9 +106,9 @@ static size_t load(char *buf, size_t cap)
 
 int property_get(const char *key, char *value, const char *default_value)
 {
-    char buf[BUFSZ];
+    char *buf = g_store;
     size_t klen = s_strlen(key);
-    size_t len = load(buf, sizeof(buf));
+    size_t len = load(buf, BUFSZ);
     const char *hit = 0;
     size_t i = 0;
 
