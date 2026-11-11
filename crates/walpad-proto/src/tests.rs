@@ -740,3 +740,62 @@ fn vpn_status_defaults_and_has_no_secret_fields() {
     let s: VpnStatus = serde_json::from_str("{}").unwrap();
     assert_eq!(s.state, VpnState::Off);
 }
+
+#[test]
+fn launch_takes_an_optional_validated_file_path() {
+    let (_, c) = req(r#"{"v":1,"id":1,"cmd":"launch","args":{"app":"browser"}}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::Launch {
+            app: "browser".into(),
+            args: None
+        }
+    );
+    let (_, c) = req(
+        r#"{"v":1,"id":1,"cmd":"launch","args":{"app":"mpv","args":{"path":"/mnt/sd/DCIM/a b.mp4"}}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        c,
+        Command::Launch {
+            app: "mpv".into(),
+            args: Some(LaunchArgs {
+                path: "/mnt/sd/DCIM/a b.mp4".into()
+            })
+        }
+    );
+    for p in [
+        "",
+        "-i",
+        "--script=x",
+        "relative.mp4",
+        "/etc/passwd",
+        "/root/../etc/passwd",
+        "/root/a/../b.mp4",
+        "/root//a.mp4",
+        "/root/./a.mp4",
+        "/root",
+        "/rootkit/a.mp4",
+        "/tmp/a.mp4",
+        "/tmp/Downloads",
+        "/root/.ssh/id_rsa",
+        "/root/-x.mp4",
+        "/root/a\\u0000.mp4",
+        "/root/a\\n.mp4",
+    ] {
+        let line = format!(
+            r#"{{"v":1,"id":1,"cmd":"launch","args":{{"app":"mpv","args":{{"path":"{p}"}}}}}}"#
+        );
+        assert_eq!(code(req(&line)), ErrorCode::InvalidArgs, "{p:?}");
+    }
+    let long = format!("/root/{}", "a".repeat(1100));
+    assert!(!valid_open_path(&long));
+    for ok in [
+        "/root/Pictures/a.jpg",
+        "/home/u/Music/x y.flac",
+        "/tmp/Downloads/v.mp4",
+        "/mnt/usb/disk1/DCIM/1.png",
+    ] {
+        assert!(valid_open_path(ok), "{ok}");
+    }
+}

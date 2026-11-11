@@ -5,8 +5,8 @@
   "files": "files",
   "terminal": "terminal",
   "video": "mpv",
-  "music": "audacious",
-  "image": "imv",
+  "music": "mpv",
+  "image": "gpicview",
   "pdf": "evince"
  }
 }

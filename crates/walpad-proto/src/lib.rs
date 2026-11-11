@@ -13,7 +13,8 @@ pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
     lock_secret_rule, valid_apn, valid_app_id, valid_attempt, valid_bt_address, valid_dns_server,
     valid_hotspot_secret, valid_hotspot_ssid, valid_lock_secret, valid_proxy, valid_sim_pin,
-    valid_vpn_import_path, valid_vpn_name, BrightnessArgs, Command, KeyboardMode, PowerAction,
+    valid_open_path, valid_vpn_import_path, valid_vpn_name, BrightnessArgs, Command, KeyboardMode,
+    LaunchArgs, PowerAction, OPEN_ROOTS,
     RawRequest, RotateMode, ScreenMode, ShellInput, Topic, ALLOWED_SETTINGS, COMMAND_NAMES,
     DEFAULT_ROLES,
 };

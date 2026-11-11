@@ -158,6 +158,12 @@ pub struct BrightnessArgs {
     pub delta: Option<i32>,
 }
 
+/// Optional argument of `launch`: one file to open.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct LaunchArgs {
+    pub path: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "cmd", content = "args", rename_all = "snake_case")]
 pub enum Command {
@@ -286,8 +292,13 @@ pub enum Command {
     },
     /// Importable files found in the user folders (names and paths, never content).
     VpnFiles,
+    /// Start an app by id. `args.path` (media viewer, change media-apps-capture) opens one file in
+    /// an app that declares `"open": true`; the core re-validates the path (allowed roots,
+    /// no symlink escape) and builds the argv itself.
     Launch {
         app: String,
+        #[serde(default)]
+        args: Option<LaunchArgs>,
     },
     /// Stop an app that the core started.
     CloseApp {
@@ -524,7 +535,20 @@ impl Command {
             Command::SimPin { pin } if !valid_sim_pin(pin.expose()) => {
                 Err("pin must be 4-8 digits".into())
             }
-            Command::Launch { app } | Command::CloseApp { app } => {
+            Command::Launch { app, args } => {
+                if !valid_app_id(app) {
+                    Err("app must be an id like \"browser\"".into())
+                } else if let Some(a) = args {
+                    if valid_open_path(&a.path) {
+                        Ok(())
+                    } else {
+                        Err("path must be an absolute file path in /root, /mnt, /home or /tmp/Downloads".into())
+                    }
+                } else {
+                    Ok(())
+                }
+            }
+            Command::CloseApp { app } => {
                 if valid_app_id(app) {
                     Ok(())
                 } else {
@@ -646,6 +670,31 @@ pub fn valid_vpn_import_path(s: &str) -> bool {
         && (s.ends_with(".conf") || s.ends_with(".ovpn"))
         && !s.split('/').any(|c| c == "..")
         && !s.chars().any(char::is_control)
+}
+
+/// Folders a `launch` file argument may come from (checked again by the core after resolving
+/// symlinks).
+pub const OPEN_ROOTS: &[&str] = &["/root", "/mnt", "/home", "/tmp/Downloads"];
+
+/// Syntax of the `launch` file argument: absolute, inside an allowed root, no `.`/`..`/empty/hidden
+/// component, no control characters or NUL, never option-looking, at most 1024 bytes. The core
+/// additionally resolves symlinks (`apps::resolve_open_path`).
+pub fn valid_open_path(s: &str) -> bool {
+    if s.is_empty() || s.len() > 1024 || s.starts_with('-') || s.chars().any(char::is_control) {
+        return false;
+    }
+    let Some(rest) = s.strip_prefix('/') else {
+        return false;
+    };
+    if !rest
+        .split('/')
+        .all(|c| !c.is_empty() && c != "." && c != ".." && !c.starts_with(['.', '-']))
+    {
+        return false;
+    }
+    OPEN_ROOTS
+        .iter()
+        .any(|r| s.strip_prefix(r).is_some_and(|t| t.starts_with('/')))
 }
 
 /// Access point name: 1-62 characters of A-Z a-z 0-9 . - _ (safe in an AT command and a file).

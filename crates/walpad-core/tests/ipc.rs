@@ -274,6 +274,28 @@ fn settings_launch_screenshot_power_and_restart_shell() {
         c.call(8, "launch", json!({"app":"zzz"}))["error"]["code"],
         "invalid_args"
     );
+    // a file argument: validated by the protocol, and only for apps that declare "open"
+    for (i, p) in ["/root/../etc/passwd", "-i", "/etc/passwd"].iter().enumerate() {
+        assert_eq!(
+            c.call(
+                60 + i as u64,
+                "launch",
+                json!({"app":"sleeper","args":{"path":p}})
+            )["error"]["code"],
+            "invalid_args",
+            "{p}"
+        );
+    }
+    let r = c.call(
+        63,
+        "launch",
+        json!({"app":"sleeper","args":{"path":"/root/Pictures/x.png"}}),
+    );
+    assert_eq!(r["error"]["code"], "invalid_args", "{r}");
+    assert!(
+        r["error"]["msg"].as_str().unwrap().contains("does not open files"),
+        "{r}"
+    );
     assert_eq!(
         c.call(9, "launch", json!({"app":"sleeper"}))["data"]["result"],
         "launched"

@@ -489,7 +489,7 @@ impl Daemon {
         }
     }
 
-    fn launch(&mut self, id: &str) -> Result<&'static str, (ErrorCode, String)> {
+    fn launch(&mut self, id: &str, path: Option<&str>) -> Result<&'static str, (ErrorCode, String)> {
         let Some(def) = self.apps.def(id).cloned() else {
             return Err((ErrorCode::InvalidArgs, format!("unknown app {id:?}")));
         };
@@ -502,7 +502,31 @@ impl Daemon {
                 format!("{id} is being installed or removed"),
             ));
         }
-        if def.single_instance {
+        // a file to open: resolved against the allowed roots here, argv built by the core
+        let file = match path {
+            None => None,
+            Some(p) => {
+                if !def.open {
+                    return Err((
+                        ErrorCode::InvalidArgs,
+                        format!("{id} does not open files"),
+                    ));
+                }
+                Some(
+                    crate::apps::resolve_open_path(&self.root, p)
+                        .map_err(|m| (ErrorCode::InvalidArgs, m))?,
+                )
+            }
+        };
+        if let Some(f) = &file {
+            // a player that is already open switches to the new file: close it, start again when
+            // it has gone (app_tick)
+            if self.apps.running(id) && self.apps.owns(id) {
+                self.apps.set_pending_open(id, f.clone());
+                self.close_app(id);
+                return Ok("replacing");
+            }
+        } else if def.single_instance {
             if !def.wm_class.is_empty()
                 && self.x_try(|b| b.focus_class(&def.wm_class)) == Some(true)
             {
@@ -512,7 +536,7 @@ impl Daemon {
                 return Ok("already_running");
             }
         }
-        let pid = self.apps.spawn(id, &self.root).map_err(|e| match e {
+        let pid = self.apps.spawn_open(id, &self.root, file.as_deref()).map_err(|e| match e {
             LaunchError::Closing => (
                 ErrorCode::Busy,
                 format!("{id} is still closing, try again in a moment"),
@@ -641,8 +665,12 @@ impl Daemon {
             .retain_mut(|c| matches!(c.try_wait(), Ok(None)));
         let now = Instant::now();
         let mut did = false;
+        let mut reopen_list: Vec<(String, String)> = Vec::new();
         for (id, exit) in self.apps.reap(now) {
             did = true;
+            if let Some(p) = self.apps.take_pending_open(&id) {
+                reopen_list.push((id.clone(), p));
+            }
             let name = self
                 .apps
                 .def(&id)
@@ -675,6 +703,11 @@ impl Daemon {
                     // back to the shell so the user is not left on a blank screen
                     self.x_try(|b| b.focus_title("WalPad Home"));
                 }
+            }
+        }
+        for (id, path) in reopen_list {
+            if let Err((_, m)) = self.launch(&id, Some(&path)) {
+                eprintln!("walpad-core: reopen {id}: {m}");
             }
         }
         if now >= self.apps_x_at {
@@ -862,7 +895,7 @@ impl Daemon {
                 Ok(None) => self.reload_cfg(),
                 Err(e) => eprintln!("walpad-core: bad ctl action {line:?}: {e}"),
             },
-            Action::Launch(id) => match self.launch(&id) {
+            Action::Launch(id) => match self.launch(&id, None) {
                 Ok(how) => eprintln!("walpad-core: launch {id}: {how}"),
                 Err((_, m)) => eprintln!("walpad-core: launch {id}: {m}"),
             },
@@ -1150,7 +1183,9 @@ impl Daemon {
                 let sent = self.x_try(|b| b.back());
                 Ok(json!({"sent": sent}))
             }
-            Command::Launch { app } => self.launch(&app).map(|how| json!({"result": how})),
+            Command::Launch { app, args } => self
+                .launch(&app, args.as_ref().map(|a| a.path.as_str()))
+                .map(|how| json!({"result": how})),
             Command::CloseApp { app } => {
                 if self.apps.def(&app).is_none() {
                     return Err((ErrorCode::InvalidArgs, format!("unknown app {app:?}")));

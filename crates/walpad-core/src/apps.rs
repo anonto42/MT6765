@@ -60,6 +60,38 @@ pub struct AppDef {
     /// press = right click) or "mouse" (a drag stays a mouse drag). Anything else = default.
     #[serde(default)]
     pub touch: Option<String>,
+    /// The app can open one file (`launch` with `args.path`): the core appends `open_args` to
+    /// `exec`, replacing the element `{path}` by the validated, symlink-resolved path.
+    #[serde(default)]
+    pub open: bool,
+    #[serde(default = "default_open_args")]
+    pub open_args: Vec<String>,
+}
+
+fn default_open_args() -> Vec<String> {
+    vec!["--".into(), "{path}".into()]
+}
+
+/// Validate and resolve the file a `launch` may open: syntax (`walpad_proto::valid_open_path`),
+/// then the real path after symlinks must still be a regular file under an allowed root. Returns
+/// the resolved path as the app will see it (absolute, no symlinks, never starting with `-`).
+pub fn resolve_open_path(root: &Root, raw: &str) -> Result<String, String> {
+    if !walpad_proto::valid_open_path(raw) {
+        return Err("path is not an allowed file path".into());
+    }
+    let host = std::fs::canonicalize(root.p(raw)).map_err(|_| "no such file".to_string())?;
+    let base = std::fs::canonicalize(root.base()).map_err(|e| e.to_string())?;
+    let rel = host
+        .strip_prefix(&base)
+        .map_err(|_| "path leaves the file system root".to_string())?;
+    let virt = format!("/{}", rel.to_string_lossy());
+    if !walpad_proto::valid_open_path(&virt) {
+        return Err("path resolves outside the allowed folders".into());
+    }
+    if !host.is_file() {
+        return Err("not a regular file".into());
+    }
+    Ok(virt)
 }
 
 /// How a child we started ended (M6.3: only `Crashed` raises a notice).
@@ -111,6 +143,8 @@ pub struct Apps {
     grace: Option<Duration>,
     /// System HTTP proxy for launched apps (vpn-and-dns; never carries credentials).
     proxy: Option<String>,
+    /// A file to open as soon as the old copy of the app (asked to close) is gone.
+    pending_open: HashMap<String, String>,
 }
 
 impl Apps {
@@ -133,7 +167,17 @@ impl Apps {
             ext: HashSet::new(),
             grace: None,
             proxy: None,
+            pending_open: HashMap::new(),
         }
+    }
+
+    /// Remember a file to open when `id` has exited (it was asked to close).
+    pub fn set_pending_open(&mut self, id: &str, path: String) {
+        self.pending_open.insert(id.to_string(), path);
+    }
+
+    pub fn take_pending_open(&mut self, id: &str) -> Option<String> {
+        self.pending_open.remove(id)
     }
 
     /// Set (or clear) the system proxy exported to apps started from now on.
@@ -290,7 +334,34 @@ impl Apps {
 
     /// Start an app; returns its pid.
     pub fn spawn(&mut self, id: &str, root: &Root) -> Result<u32, LaunchError> {
+        self.spawn_open(id, root, None)
+    }
+
+    /// The argv of an app, with the file to open (already resolved) when there is one.
+    pub fn argv(d: &AppDef, path: Option<&str>) -> Vec<String> {
+        let mut v = d.exec.clone();
+        if let Some(p) = path {
+            v.extend(
+                d.open_args
+                    .iter()
+                    .map(|a| if a == "{path}" { p.to_string() } else { a.clone() }),
+            );
+        }
+        v
+    }
+
+    /// Start an app, optionally opening one file (`path` is the output of `resolve_open_path`).
+    pub fn spawn_open(
+        &mut self,
+        id: &str,
+        root: &Root,
+        path: Option<&str>,
+    ) -> Result<u32, LaunchError> {
         let d = self.def(id).cloned().ok_or(LaunchError::Unknown)?;
+        if path.is_some() && !d.open {
+            return Err(LaunchError::Spawn("this app does not open files".into()));
+        }
+        let argv = Self::argv(&d, path);
         if !self.installed(&d, root) {
             return Err(LaunchError::NotInstalled);
         }
@@ -311,8 +382,8 @@ impl Apps {
                 .map(Stdio::from)
                 .unwrap_or_else(|_| Stdio::null())
         };
-        let child = Command::new(&d.exec[0])
-            .args(&d.exec[1..])
+        let child = Command::new(&argv[0])
+            .args(&argv[1..])
             .envs(CONTRACT_ENV.iter().copied())
             .envs(self.proxy_env())
             .envs(d.env.iter())
@@ -595,5 +666,95 @@ mod tests {
     fn bad_json_means_no_apps() {
         let r = root_with("not json", &[]);
         assert!(Apps::load(&r).status(&r).is_empty());
+    }
+
+    fn media_root() -> Root {
+        let r = root_with("[]", &["sh", "cat"]);
+        for d in ["root/Pictures", "mnt/sd/DCIM", "etc", "tmp/Downloads", "tmp/other"] {
+            std::fs::create_dir_all(r.p(&format!("/{d}"))).unwrap();
+        }
+        std::fs::write(r.p("/root/Pictures/a.png"), "x").unwrap();
+        std::fs::write(r.p("/mnt/sd/DCIM/b.mp4"), "x").unwrap();
+        std::fs::write(r.p("/root/Pictures/-rf.png"), "x").unwrap();
+        std::fs::write(r.p("/etc/shadow"), "secret").unwrap();
+        std::fs::write(r.p("/tmp/other/c.png"), "x").unwrap();
+        r
+    }
+
+    #[test]
+    fn open_path_accepts_files_under_the_allowed_roots_only() {
+        use std::os::unix::fs::symlink;
+        let r = media_root();
+        assert_eq!(
+            resolve_open_path(&r, "/root/Pictures/a.png").unwrap(),
+            "/root/Pictures/a.png"
+        );
+        assert_eq!(
+            resolve_open_path(&r, "/mnt/sd/DCIM/b.mp4").unwrap(),
+            "/mnt/sd/DCIM/b.mp4"
+        );
+        // traversal, relative, option-looking, outside the roots, a folder, a missing file
+        for bad in [
+            "/root/Pictures/../../etc/shadow",
+            "/root/../etc/shadow",
+            "root/Pictures/a.png",
+            "-rf",
+            "--help",
+            "/root/Pictures/-rf.png",
+            "/etc/shadow",
+            "/tmp/other/c.png",
+            "/root/Pictures",
+            "/root/Pictures/missing.png",
+            "/root/Pictures/a\n.png",
+            "/rootx/a.png",
+            "",
+        ] {
+            assert!(resolve_open_path(&r, bad).is_err(), "{bad:?} must be refused");
+        }
+        // symlinks: one that stays inside the roots works and is resolved, escapes are refused
+        symlink(r.p("/root/Pictures/a.png"), r.p("/root/Pictures/link.png")).unwrap();
+        symlink(r.p("/etc/shadow"), r.p("/root/Pictures/evil.png")).unwrap();
+        symlink(r.p("/etc"), r.p("/mnt/sd/etcdir")).unwrap();
+        symlink(r.p("/tmp/other"), r.p("/tmp/Downloads/o")).unwrap();
+        assert_eq!(
+            resolve_open_path(&r, "/root/Pictures/link.png").unwrap(),
+            "/root/Pictures/a.png"
+        );
+        for bad in [
+            "/root/Pictures/evil.png",
+            "/mnt/sd/etcdir/shadow",
+            "/tmp/Downloads/o/c.png",
+        ] {
+            assert!(resolve_open_path(&r, bad).is_err(), "{bad:?} escapes");
+        }
+    }
+
+    #[test]
+    fn open_builds_the_argv_itself_and_only_for_apps_that_declare_it() {
+        let r = media_root();
+        let out = r.p("/argv-seen");
+        let json = serde_json::json!([
+            {"id":"viewer","exec":["sh","-c","for a in \"$@\"; do echo \"$a\"; done > \"$OUT\"","sh"],
+             "open":true,"env":{"OUT":out.to_string_lossy()}},
+            {"id":"plain","exec":["sh","-c","true"]}
+        ]);
+        std::fs::write(r.p("/etc/walpad/apps.json"), json.to_string()).unwrap();
+        let mut a = Apps::load(&r);
+        let d = a.def("viewer").unwrap().clone();
+        assert_eq!(
+            Apps::argv(&d, Some("/root/Pictures/a.png")),
+            ["sh", "-c", "for a in \"$@\"; do echo \"$a\"; done > \"$OUT\"", "sh", "--", "/root/Pictures/a.png"]
+        );
+        assert_eq!(Apps::argv(&d, None).len(), 4);
+        assert!(matches!(
+            a.spawn_open("plain", &r, Some("/root/Pictures/a.png")),
+            Err(LaunchError::Spawn(_))
+        ));
+        a.spawn_open("viewer", &r, Some("/root/Pictures/a.png")).unwrap();
+        reap_all(&mut a, 1);
+        assert_eq!(
+            std::fs::read_to_string(&out).unwrap(),
+            "--\n/root/Pictures/a.png\n"
+        );
     }
 }

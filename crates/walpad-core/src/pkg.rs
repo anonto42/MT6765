@@ -49,6 +49,11 @@ pub const ROLE_MIMES: &[(&str, &[&str])] = &[
             "video/x-msvideo",
             "video/mpeg",
             "video/quicktime",
+            "video/ogg",
+            "video/3gpp",
+            "video/x-flv",
+            "video/x-ms-wmv",
+            "application/ogg",
         ],
     ),
     (
@@ -60,6 +65,14 @@ pub const ROLE_MIMES: &[(&str, &[&str])] = &[
             "audio/x-wav",
             "audio/mp4",
             "audio/x-vorbis+ogg",
+            "audio/aac",
+            "audio/x-flac",
+            "audio/opus",
+            "audio/x-opus+ogg",
+            "audio/x-m4a",
+            "audio/mp3",
+            "audio/x-mp3",
+            "audio/x-ms-wma",
         ],
     ),
     (
@@ -70,6 +83,7 @@ pub const ROLE_MIMES: &[(&str, &[&str])] = &[
             "image/gif",
             "image/webp",
             "image/bmp",
+            "image/tiff",
         ],
     ),
     ("pdf", &["application/pdf"]),
@@ -88,6 +102,9 @@ pub struct Entry {
     pub size_kb: u64,
     pub summary: String,
     pub roles: Vec<String>,
+    /// The app opens one file (`launch` with a path): `"open": true` (argv tail `-- {path}`) or an
+    /// array with the argv tail. Written to the apps.d entry.
+    pub open: Option<Vec<String>>,
     /// Shipped in the image: shown as built in, never uninstalled.
     pub system: bool,
 }
@@ -149,6 +166,14 @@ impl Entry {
                 .into_iter()
                 .filter(|r| DEFAULT_ROLES.contains(&r.as_str()))
                 .collect(),
+            open: match &v["open"] {
+                Value::Bool(true) => Some(vec!["--".to_string(), "{path}".to_string()]),
+                a @ Value::Array(_) => str_list(a).filter(|l| {
+                    l.iter().filter(|x| *x == "{path}").count() == 1
+                        && l.iter().all(|x| !x.contains('\0'))
+                }),
+                _ => None,
+            },
             system: v["system"].as_bool().unwrap_or(false),
             id,
         })
@@ -159,7 +184,7 @@ impl Entry {
         if self.exec.is_empty() {
             return None;
         }
-        Some(json!({
+        let mut j = json!({
             "id": self.id,
             "name": self.name,
             "icon": if self.icon.is_empty() { "apps" } else { self.icon.as_str() },
@@ -167,7 +192,12 @@ impl Entry {
             "env": {},
             "single_instance": !self.wm_class.is_empty(),
             "wm_class": self.wm_class,
-        }))
+        });
+        if let Some(a) = &self.open {
+            j["open"] = json!(true);
+            j["open_args"] = json!(a);
+        }
+        Some(j)
     }
 }
 
@@ -825,6 +855,33 @@ mod tests {
             c.get("font-x").unwrap().app_json().is_none(),
             "packages only: no icon"
         );
+    }
+
+    #[test]
+    fn open_entries_register_with_a_fixed_argv_tail() {
+        let mk = |open: serde_json::Value| {
+            Entry::parse(&json!({"id":"p","packages":["p"],"exec":["p"],"open":open})).unwrap()
+        };
+        let j = mk(json!(true)).app_json().unwrap();
+        assert_eq!(j["open"], json!(true));
+        assert_eq!(j["open_args"], json!(["--", "{path}"]));
+        let j = mk(json!(["--file", "{path}"])).app_json().unwrap();
+        assert_eq!(j["open_args"], json!(["--file", "{path}"]));
+        // no placeholder, two of them or a non-list: the app does not open files
+        for bad in [json!(["--"]), json!(["{path}", "{path}"]), json!("yes"), json!(false)] {
+            let j = mk(bad).app_json().unwrap();
+            assert!(j.get("open").is_none());
+        }
+        let shipped: Value = serde_json::from_str(include_str!(
+            "../../../config/rootfs/etc/walpad/catalogue.json"
+        ))
+        .unwrap();
+        let ids: Vec<&str> = ["mpv", "gpicview"].to_vec();
+        for e in shipped["entries"].as_array().unwrap() {
+            if ids.contains(&e["id"].as_str().unwrap()) {
+                assert!(Entry::parse(e).unwrap().open.is_some(), "{}", e["id"]);
+            }
+        }
     }
 
     #[test]
