@@ -71,6 +71,10 @@ static int wait_ms(long ms) {
     return 0;
 }
 static void msleep(long ms) { struct { long s, ns; } ts = { ms / 1000, (ms % 1000) * 1000000L }; sc3(SYS_nanosleep, &ts, 0, 0); }
+/* The panel reads the bytes of a pixel as R,G,B (measured on the device: bytes B,G,R,A painted solid red
+ * showed blue and solid blue showed red; red video came out purple).  X's pixel is 0x00RRGGBB (bytes B,G,R,X in
+ * memory), so swap the red and blue bytes and force alpha. */
+#define PX(v) ((((v) & 0xFF00FF00u) | (((v) & 0xFFu) << 16) | (((v) >> 16) & 0xFFu)) | 0xFF000000u)
 static u32 shadow[PAGE_PX];
 /* raw copy of the visible part of the X frame, compared in memory order (cheap) before the rotated pass */
 static u32 prevraw[1280 * 1280];
@@ -130,20 +134,20 @@ int cmain(long *sp) {
         }
         int changed = 0; u32 *sh = shadow;
         if (ori == 0) {
-            for (int y = 0; y < H; y++) { const u32 *r = src + (long)y * stride; for (int x = 0; x < W; x++) { u32 v = r[x] | 0xFF000000u; if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
+            for (int y = 0; y < H; y++) { const u32 *r = src + (long)y * stride; for (int x = 0; x < W; x++) { u32 v = PX(r[x]); if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
         } else if (ori == 180) {
-            for (int y = 0; y < H; y++) { const u32 *r = src + (long)(H - 1 - y) * stride; for (int x = 0; x < W; x++) { u32 v = r[W - 1 - x] | 0xFF000000u; if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
+            for (int y = 0; y < H; y++) { const u32 *r = src + (long)(H - 1 - y) * stride; for (int x = 0; x < W; x++) { u32 v = PX(r[W - 1 - x]); if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
         } else if (ori == 90) {   /* logical 1280x800, lx = py, ly = 799 - px */
             /* 16 output rows per pass: each source row (one per x) is read as one full cache line instead of
              * one pixel per cache miss (the plain column walk cost ~90 % of a core while a video played) */
             for (int yb = 0; yb < H; yb += 16) for (int x = 0; x < W; x++) {
                 const u32 *c = src + (long)(W - 1 - x) * stride + yb; u32 *o = shadow + (long)yb * W + x;
-                for (int k = 0; k < 16; k++) { u32 v = c[k] | 0xFF000000u; if (o[(long)k * W] != v) { o[(long)k * W] = v; changed = 1; } }
+                for (int k = 0; k < 16; k++) { u32 v = PX(c[k]); if (o[(long)k * W] != v) { o[(long)k * W] = v; changed = 1; } }
             }
         } else {                  /* 270: lx = 1279 - py, ly = px */
             for (int yb = 0; yb < H; yb += 16) for (int x = 0; x < W; x++) {
                 const u32 *c = src + (long)x * stride + (H - 16 - yb); u32 *o = shadow + (long)yb * W + x;
-                for (int k = 0; k < 16; k++) { u32 v = c[15 - k] | 0xFF000000u; if (o[(long)k * W] != v) { o[(long)k * W] = v; changed = 1; } }
+                for (int k = 0; k < 16; k++) { u32 v = PX(c[15 - k]); if (o[(long)k * W] != v) { o[(long)k * W] = v; changed = 1; } }
             }
         }
         if (changed || !inited) {
