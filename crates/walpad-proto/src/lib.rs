@@ -8,6 +8,7 @@ mod command;
 mod devd;
 mod secret;
 mod status;
+pub mod wm;
 
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
@@ -126,3 +127,5 @@ pub fn parse_request(line: &[u8]) -> Result<(u64, Command), Response> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod wm_tests;

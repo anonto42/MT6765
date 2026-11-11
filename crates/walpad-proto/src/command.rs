@@ -39,6 +39,13 @@ pub const COMMAND_NAMES: &[&str] = &[
     "vpn_files",
     "launch",
     "close_app",
+    "new_instance",
+    "windows",
+    "focus_window",
+    "close_window",
+    "window_rect",
+    "snap",
+    "layout",
     "home",
     "back",
     "keyboard",
@@ -84,6 +91,7 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "wifi_scan",
     "wifi_list_saved",
     "wifi_disconnect",
+    "windows",
     "home",
     "back",
     "restart_shell",
@@ -345,6 +353,43 @@ pub enum Command {
     CloseApp {
         app: String,
     },
+    /// Start one more instance of an app with `max_instances` > 1 (the terminal); owner request
+    /// 2026-11-11, change multitasking-windows.
+    NewInstance {
+        app: String,
+    },
+    /// List the app windows on screen (id, app, title, geometry, focused).
+    Windows,
+    FocusWindow {
+        window: u32,
+    },
+    /// Close one window (WM_DELETE_WINDOW, SIGTERM of its pid after the grace period).
+    CloseWindow {
+        window: u32,
+    },
+    /// Move/resize one window; the core clamps it to the work area and the minimum size.
+    WindowRect {
+        window: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    },
+    /// Put one window in a half or the whole work area.
+    Snap {
+        window: u32,
+        zone: crate::wm::SnapZone,
+    },
+    /// Read (no argument) or change the window layout: mode, split ratio (33, 50, 67), `swap`
+    /// exchanges the two tiles.
+    Layout {
+        #[serde(default)]
+        mode: Option<crate::wm::LayoutMode>,
+        #[serde(default)]
+        ratio: Option<u8>,
+        #[serde(default)]
+        swap: bool,
+    },
     Home,
     /// The Back control: Alt+Left to the focused window of the browser or the file manager, Esc
     /// to any other (answers `{"sent": "alt+Left"|"Escape"|null}`).
@@ -512,7 +557,7 @@ impl Command {
             // nothing to insert
         } else if !raw.args.is_null() {
             obj.insert("args".into(), raw.args.clone());
-        } else if matches!(raw.cmd.as_str(), "set_brightness") {
+        } else if matches!(raw.cmd.as_str(), "set_brightness" | "layout") {
             obj.insert("args".into(), Value::Object(Default::default()));
         }
         let cmd: Command = serde_json::from_value(Value::Object(obj))
@@ -652,6 +697,28 @@ impl Command {
                     Err("app must be an id like \"browser\"".into())
                 }
             }
+            Command::NewInstance { app } if !valid_app_id(app) => {
+                Err("app must be an id like \"terminal\"".into())
+            }
+            Command::FocusWindow { window }
+            | Command::CloseWindow { window }
+            | Command::WindowRect { window, .. }
+            | Command::Snap { window, .. }
+                if *window == 0 =>
+            {
+                Err("window must be a window id from `windows`".into())
+            }
+            Command::WindowRect { w, h, x, y, .. }
+                if !(1..=8192).contains(w)
+                    || !(1..=8192).contains(h)
+                    || !(-8192..=8192).contains(x)
+                    || !(-8192..=8192).contains(y) =>
+            {
+                Err("x, y, w, h must be within 8192".into())
+            }
+            Command::Layout {
+                ratio: Some(r), ..
+            } if !crate::wm::valid_ratio(*r) => Err("ratio must be 33, 50 or 67".into()),
             Command::PkgInstall { id } | Command::PkgRemove { id } => {
                 if valid_app_id(id) && !id.starts_with(['-', '_']) {
                     Ok(())
