@@ -66,6 +66,10 @@ pub struct AppDef {
     pub open: bool,
     #[serde(default = "default_open_args")]
     pub open_args: Vec<String>,
+    /// How many copies may run at once (the terminal: several windows, change
+    /// multitasking-windows). 0 and 1 mean one.
+    #[serde(default)]
+    pub max_instances: u32,
 }
 
 fn default_open_args() -> Vec<String> {
@@ -120,6 +124,26 @@ pub enum LaunchError {
     Spawn(String),
     /// A previous copy is still shutting down after Close app.
     Closing,
+    /// The app already runs as many copies as `max_instances` allows (or is single-instance).
+    Limit,
+}
+
+/// Key of instance `n` (1-based) of an app in the child table: the app id for the first copy,
+/// `<id>#<n>` for the others (app ids never contain '#').
+fn instance_key(id: &str, n: u32) -> String {
+    if n <= 1 {
+        id.to_string()
+    } else {
+        format!("{id}#{n}")
+    }
+}
+
+/// App id and 1-based instance number of a child-table key.
+fn split_key(key: &str) -> (&str, u32) {
+    match key.split_once('#') {
+        Some((id, n)) => (id, n.parse().unwrap_or(1)),
+        None => (key, 1),
+    }
 }
 
 /// Terminate a process politely. Refuses pid 0/1 and our own pid.
@@ -255,7 +279,8 @@ impl Apps {
                         Exit::Closed
                     } else if st.success()
                         || self.defs.iter().any(|d| {
-                            &d.id == id && st.code().is_some_and(|c| d.exit_ok.contains(&c))
+                            d.id == split_key(id).0
+                                && st.code().is_some_and(|c| d.exit_ok.contains(&c))
                         })
                     {
                         Exit::Clean
@@ -278,24 +303,59 @@ impl Apps {
                 }
             }
         }
-        for (id, _) in &gone {
-            self.children.remove(id);
-            self.ext.remove(id);
+        for (key, _) in &gone {
+            self.children.remove(key);
+            // an app that still has another copy keeps its running mark
+            let base = split_key(key).0;
+            if !self.children.keys().any(|k| split_key(k).0 == base) {
+                self.ext.remove(base);
+            }
         }
-        gone
+        gone.into_iter()
+            .map(|(k, e)| (split_key(&k).0.to_string(), e))
+            .collect()
+    }
+
+    /// Keys of the children of an app (every instance).
+    fn keys_of<'a>(&'a self, id: &'a str) -> impl Iterator<Item = &'a String> + 'a {
+        self.children.keys().filter(move |k| split_key(k).0 == id)
     }
 
     /// Do we own a live (possibly closing) child for this app?
     pub fn owns(&self, id: &str) -> bool {
-        self.children.contains_key(id)
+        self.keys_of(id).next().is_some()
     }
 
     /// Running = a child we started (not already closing) or a window found on screen.
     pub fn running(&self, id: &str) -> bool {
-        match self.children.get(id) {
-            Some(k) => k.closing.is_none(),
-            None => self.ext.contains(id),
+        if !self.owns(id) {
+            return self.ext.contains(id);
         }
+        self.keys_of(id)
+            .any(|k| self.children.get(k).is_some_and(|c| c.closing.is_none()))
+    }
+
+    /// How many copies of an app may run at once (at least 1).
+    pub fn max_instances(&self, id: &str) -> u32 {
+        self.def(id).map(|d| d.max_instances.max(1)).unwrap_or(1)
+    }
+
+    /// Copies we started that are not closing.
+    pub fn instance_count(&self, id: &str) -> usize {
+        self.keys_of(id)
+            .filter(|k| self.children.get(*k).is_some_and(|c| c.closing.is_none()))
+            .count()
+    }
+
+    /// App id and instance number of the child with this process id.
+    pub fn instance_of_pid(&self, pid: u32) -> Option<(String, u32)> {
+        self.children
+            .iter()
+            .find(|(_, k)| k.child.id() == pid)
+            .map(|(key, _)| {
+                let (id, n) = split_key(key);
+                (id.to_string(), n)
+            })
     }
 
     /// Apps with a wm_class we can look for on screen.
@@ -359,6 +419,28 @@ impl Apps {
         root: &Root,
         path: Option<&str>,
     ) -> Result<u32, LaunchError> {
+        self.spawn_key(id, 1, root, path)
+    }
+
+    /// Start one more copy of an app that allows several (`max_instances`): the lowest free
+    /// instance number. Returns (pid, instance number).
+    pub fn spawn_new(&mut self, id: &str, root: &Root) -> Result<(u32, u32), LaunchError> {
+        let d = self.def(id).ok_or(LaunchError::Unknown)?;
+        let max = d.max_instances.max(1);
+        let n = (1..=max)
+            .find(|n| !self.children.contains_key(&instance_key(id, *n)))
+            .ok_or(LaunchError::Limit)?;
+        self.spawn_key(id, n, root, None).map(|pid| (pid, n))
+    }
+
+    fn spawn_key(
+        &mut self,
+        id: &str,
+        n: u32,
+        root: &Root,
+        path: Option<&str>,
+    ) -> Result<u32, LaunchError> {
+        let key = instance_key(id, n);
         let d = self.def(id).cloned().ok_or(LaunchError::Unknown)?;
         if path.is_some() && !d.open {
             return Err(LaunchError::Spawn("this app does not open files".into()));
@@ -367,7 +449,7 @@ impl Apps {
         if !self.installed(&d, root) {
             return Err(LaunchError::NotInstalled);
         }
-        if let Some(k) = self.children.get_mut(id) {
+        if let Some(k) = self.children.get_mut(&key) {
             // an old copy that is still alive must not be forgotten (it would never be reaped)
             if matches!(k.child.try_wait(), Ok(None)) {
                 return Err(LaunchError::Closing);
@@ -396,7 +478,7 @@ impl Apps {
             .map_err(|e| LaunchError::Spawn(e.to_string()))?;
         let pid = child.id();
         self.children.insert(
-            id.to_string(),
+            key,
             Kid {
                 child,
                 closing: None,
@@ -409,16 +491,16 @@ impl Apps {
     /// Close an app we started: SIGTERM now, SIGKILL after the grace period; its exit is
     /// reported as `Exit::Closed`, never as a crash.
     pub fn request_close(&mut self, id: &str, now: Instant) -> bool {
-        match self.children.get_mut(id) {
-            Some(k) if k.closing.is_none() => {
+        let mut any = false;
+        for (key, k) in self.children.iter_mut() {
+            // every copy of the app; copies that are already closing are left alone
+            if split_key(key).0 == id && k.closing.is_none() {
                 k.closing = Some(now);
                 terminate_pid(k.child.id(), false);
-                true
+                any = true;
             }
-            // already closing: nothing more to do (and nothing new was closed)
-            Some(_) => false,
-            None => false,
         }
+        any
     }
 }
 

@@ -716,9 +716,9 @@ impl Command {
             {
                 Err("x, y, w, h must be within 8192".into())
             }
-            Command::Layout {
-                ratio: Some(r), ..
-            } if !crate::wm::valid_ratio(*r) => Err("ratio must be 33, 50 or 67".into()),
+            Command::Layout { ratio: Some(r), .. } if !crate::wm::valid_ratio(*r) => {
+                Err("ratio must be 33, 50 or 67".into())
+            }
             Command::PkgInstall { id } | Command::PkgRemove { id } => {
                 if valid_app_id(id) && !id.starts_with(['-', '_']) {
                     Ok(())

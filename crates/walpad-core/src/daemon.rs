@@ -30,6 +30,8 @@ use walpad_proto::{
     Topic, WifiRadio, WifiStatus, PROTO_VERSION,
 };
 
+mod windows;
+
 const STATUS_EVERY: Duration = Duration::from_secs(2);
 const BATTERY_EVERY: Duration = Duration::from_secs(10);
 const CLIENT_STALL: Duration = Duration::from_secs(5);
@@ -131,6 +133,10 @@ pub struct Daemon {
     helpers: std::cell::RefCell<Vec<std::process::Child>>,
     /// Until when (ms) the shell's power menu owns the volume and power keys.
     shell_menu_until: Option<u64>,
+    /// Window layout mode and the engine behind it (change multitasking-windows).
+    layout: crate::layout::Layout,
+    layout_at: Instant,
+    win_closes: Vec<windows::WinClose>,
 }
 
 /// Close app for an app we did not start: WM_DELETE_WINDOW sent, SIGTERM of its pid at `deadline`
@@ -324,6 +330,9 @@ impl Daemon {
             close_grace: Duration::from_secs(3),
             helpers: Default::default(),
             shell_menu_until: None,
+            layout: windows::load_layout(&root),
+            layout_at: now,
+            win_closes: Vec::new(),
             root,
         };
         // orientation is 0 at startup and the file is always written (struts need X: later)
@@ -542,7 +551,8 @@ impl Daemon {
                 self.close_app(id);
                 return Ok("replacing");
             }
-        } else if def.single_instance {
+        } else if def.single_instance || def.max_instances > 1 {
+            // one window of the app is enough: bring it to the front (`new_instance` adds more)
             if !def.wm_class.is_empty()
                 && self.x_try(|b| b.focus_class(&def.wm_class)) == Some(true)
             {
@@ -560,6 +570,7 @@ impl Daemon {
                     ErrorCode::Busy,
                     format!("{id} is still closing, try again in a moment"),
                 ),
+                LaunchError::Limit => (ErrorCode::Refused, format!("{id} is at its window limit")),
                 e => (ErrorCode::Internal, format!("{e:?}")),
             })?;
         self.publish(
@@ -709,7 +720,14 @@ impl Daemon {
                     }
                 })
                 .unwrap_or_else(|| id.clone());
+            // another window of the same app is still open: the app keeps running
+            let others = self.apps.running(&id);
             match exit {
+                Exit::Clean | Exit::Closed if others => self.publish(
+                    Topic::Apps,
+                    "apps",
+                    json!({"kind": "instance_closed", "app": id}),
+                ),
                 Exit::Clean | Exit::Closed => self.publish(
                     Topic::Apps,
                     "apps",
@@ -728,7 +746,9 @@ impl Daemon {
                         json!({"kind": "app_crashed", "app": id, "name": name}),
                     );
                     // back to the shell so the user is not left on a blank screen
-                    self.x_try(|b| b.focus_title("WalPad Home"));
+                    if !others {
+                        self.x_try(|b| b.focus_title("WalPad Home"));
+                    }
                 }
             }
         }
@@ -742,6 +762,7 @@ impl Daemon {
             did |= self.scan_app_windows();
         }
         did |= self.finish_ext_closes(now);
+        did |= self.windows_tick(now);
         did
     }
 
@@ -830,7 +851,10 @@ impl Daemon {
     }
 
     fn set_setting(&mut self, key: &str, value: Value) -> CmdResult {
-        let virt = if key == "clock_24h" || key == "pinned_apps" {
+        let virt = if matches!(
+            key,
+            "clock_24h" | "pinned_apps" | "windows_mode" | "split_ratio" | "split_swap"
+        ) {
             "/etc/walpad/shell.json"
         } else {
             "/etc/walpad/devd.json"
@@ -980,6 +1004,8 @@ impl Daemon {
                 }
                 Effect::Struts(o) => {
                     self.x_try(|b| b.set_struts(o));
+                    // tile again for the new orientation
+                    self.layout_at = Instant::now();
                 }
                 Effect::KeyboardDock(o) => {
                     self.x_try(|b| b.dock_keyboard(o).map(|_| ()));
@@ -1231,6 +1257,15 @@ impl Daemon {
                 let how = self.close_app(&app);
                 Ok(json!({"closed": how.is_some(), "how": how}))
             }
+            Command::NewInstance { app } => self.new_instance(&app),
+            Command::Windows => self.windows_cmd(),
+            Command::FocusWindow { window } => self.focus_window(window),
+            Command::CloseWindow { window } => self.close_window_cmd(window),
+            Command::WindowRect { window, x, y, w, h } => {
+                self.window_rect_cmd(window, walpad_proto::wm::WRect::new(x, y, w, h))
+            }
+            Command::Snap { window, zone } => self.snap_cmd(window, zone),
+            Command::Layout { mode, ratio, swap } => self.layout_cmd(mode, ratio, swap),
             Command::RestartShell => Ok(json!({"terminated": self.terminate("walpad-shell")})),
             Command::Screenshot => self.screenshot(),
             Command::SetSetting { key, value } => self.set_setting(&key, value),

@@ -636,3 +636,175 @@ fn status_never_lists_an_app_whose_executable_is_missing() {
     let st = c.call("get_status", Value::Null);
     assert_eq!(st["data"]["apps"], json!([]));
 }
+
+// ---- change multitasking-windows: instances, window list, split / free layout
+
+const MULTI: &str = r#"[{"id":"term","name":"Term","exec":["sleep","30"],"max_instances":2},{"id":"solo","name":"Solo","exec":["sleep","30"],"single_instance":true}]"#;
+
+fn geometry(sock: &Path, win: u32) -> (i32, i32, i32, i32) {
+    let xc = walpad_x::connect(sock).unwrap();
+    let g = xc.conn.get_geometry(win).unwrap().reply().unwrap();
+    let t = xc
+        .conn
+        .translate_coordinates(win, xc.root, 0, 0)
+        .unwrap()
+        .reply()
+        .unwrap();
+    (
+        t.dst_x as i32,
+        t.dst_y as i32,
+        g.width as i32,
+        g.height as i32,
+    )
+}
+
+fn app_win(sock: &Path, class: &str) -> TestWin {
+    TestWin::open(
+        sock,
+        WinSpec {
+            class: Some(class),
+            title: Some(class),
+            pid: None,
+            obey_delete: true,
+        },
+    )
+}
+
+#[test]
+fn new_instance_starts_more_copies_up_to_the_limit_and_only_for_apps_that_allow_it() {
+    let run = Running::start("multi", MULTI, None);
+    let mut c = Client::connect(&run, &["apps"]);
+    let r = c.call("new_instance", json!({"app":"term"}));
+    assert_eq!(r["data"]["instance"], 1, "{r}");
+    let r = c.call("new_instance", json!({"app":"term"}));
+    assert_eq!(r["data"]["instance"], 2, "{r}");
+    let r = c.call("new_instance", json!({"app":"term"}));
+    assert_eq!(r["error"]["code"], "refused", "{r}");
+    let r = c.call("new_instance", json!({"app":"solo"}));
+    assert_eq!(r["error"]["code"], "refused", "{r}");
+    let r = c.call("new_instance", json!({"app":"nope"}));
+    assert_eq!(r["error"]["code"], "invalid_args", "{r}");
+    assert_eq!(c.app_running("term"), Some(true));
+    // Close app closes every copy and the app is gone afterwards
+    let r = c.call("close_app", json!({"app":"term"}));
+    assert_eq!(r["data"]["closed"], true, "{r}");
+    c.wait_event("exited", kind("term", "exited"));
+    wait_for("not running", || c.app_running("term") == Some(false));
+}
+
+#[test]
+fn windows_lists_app_windows_and_close_window_closes_just_one() {
+    let Some(x) = xvfb() else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let run = Running::start("winlist", MULTI, Some(&x.1));
+    let mut c = Client::connect(&run, &[]);
+    let a = app_win(&x.1, "st");
+    let b = app_win(&x.1, "st");
+    let r = c.call("windows", Value::Null);
+    let list = r["data"]["windows"].as_array().unwrap().clone();
+    let ids: Vec<u64> = list.iter().map(|w| w["window"].as_u64().unwrap()).collect();
+    assert!(
+        ids.contains(&(a.id as u64)) && ids.contains(&(b.id as u64)),
+        "{r}"
+    );
+    assert_eq!(r["data"]["layout"]["mode"], "single");
+    // unknown windows are refused
+    let r = c.call("close_window", json!({"window": 12345}));
+    assert_eq!(r["error"]["code"], "invalid_args", "{r}");
+    let r = c.call("close_window", json!({"window": a.id}));
+    assert_eq!(r["ok"], true, "{r}");
+    wait_for("window a gone", || a.gone.load(Ordering::Relaxed));
+    assert!(!b.gone.load(Ordering::Relaxed));
+}
+
+#[test]
+fn split_tiles_two_windows_stacked_then_side_by_side_after_rotation() {
+    let Some(x) = xvfb() else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let run = Running::start("split", MULTI, Some(&x.1));
+    let mut c = Client::connect(&run, &["apps"]);
+    let a = app_win(&x.1, "alpha");
+    let b = app_win(&x.1, "beta");
+    // single mode: windows are left alone
+    assert_eq!(c.call("layout", Value::Null)["data"]["mode"], "single");
+    // placing by hand is a free-mode feature
+    let r = c.call(
+        "window_rect",
+        json!({"window": a.id, "x": 0, "y": 0, "w": 400, "h": 300}),
+    );
+    assert_eq!(r["error"]["code"], "refused", "{r}");
+    let r = c.call("layout", json!({"mode":"split"}));
+    assert_eq!(r["data"]["mode"], "split", "{r}");
+    c.wait_event("layout event", |e| e["data"]["kind"] == "layout");
+    // portrait (800 wide): stacked, the two together fill 800x1280
+    wait_for("stacked tiles", || {
+        let (ga, gb) = (geometry(&x.1, a.id), geometry(&x.1, b.id));
+        ga.2 == 800 && gb.2 == 800 && ga.3 + gb.3 + 4 == 1280 && ga.1 != gb.1
+    });
+    // rotate to landscape: side by side in 1280x800
+    let r = c.call("rotate", json!({"mode":"90"}));
+    assert_eq!(r["ok"], true, "{r}");
+    wait_for("side by side tiles", || {
+        let (ga, gb) = (geometry(&x.1, a.id), geometry(&x.1, b.id));
+        ga.3 == 800 && gb.3 == 800 && ga.2 + gb.2 + 4 == 1280 && ga.0 != gb.0
+    });
+    // ratio 1/3 and swap
+    let r = c.call("layout", json!({"ratio":33}));
+    assert_eq!(r["data"]["ratio"], 33);
+    wait_for("1/3 tile", || {
+        let (ga, gb) = (geometry(&x.1, a.id), geometry(&x.1, b.id));
+        ga.2.min(gb.2) == (1280 - 4) * 33 / 100
+    });
+    let before = (geometry(&x.1, a.id).0, geometry(&x.1, b.id).0);
+    c.call("layout", json!({"swap":true}));
+    wait_for("swapped", || {
+        let now = (geometry(&x.1, a.id).0, geometry(&x.1, b.id).0);
+        (now.0 > now.1) != (before.0 > before.1)
+    });
+    // a bad ratio is rejected by the parser
+    let r = c.call("layout", json!({"ratio":40}));
+    assert_eq!(r["error"]["code"], "invalid_args", "{r}");
+}
+
+#[test]
+fn free_mode_clamps_moves_and_resizes_and_snaps() {
+    let Some(x) = xvfb() else {
+        eprintln!("Xvfb not available: skipping");
+        return;
+    };
+    let run = Running::start("free", MULTI, Some(&x.1));
+    let mut c = Client::connect(&run, &[]);
+    let a = app_win(&x.1, "alpha");
+    c.call("layout", json!({"mode":"free"}));
+    // the work area is the portrait panel 800x1280 (rotation strut)
+    wait_for("floating window inside the panel", || {
+        let g = geometry(&x.1, a.id);
+        g.2 < 800 && g.2 >= 320 && g.0 + g.2 <= 800 && g.1 + g.3 <= 1280
+    });
+    // far outside and too small: clamped
+    let r = c.call(
+        "window_rect",
+        json!({"window": a.id, "x": 700, "y": 1200, "w": 100, "h": 100}),
+    );
+    assert_eq!(r["ok"], true, "{r}");
+    assert_eq!(
+        (r["data"]["w"].clone(), r["data"]["h"].clone()),
+        (json!(320), json!(240))
+    );
+    wait_for("clamped window", || {
+        geometry(&x.1, a.id) == (480, 1040, 320, 240)
+    });
+    let r = c.call("snap", json!({"window": a.id, "zone":"left"}));
+    assert_eq!(r["ok"], true, "{r}");
+    wait_for("left half", || geometry(&x.1, a.id) == (0, 0, 398, 1280));
+    let r = c.call("snap", json!({"window": a.id, "zone":"full"}));
+    assert_eq!(r["data"]["w"], 800);
+    wait_for("full", || geometry(&x.1, a.id) == (0, 0, 800, 1280));
+    // a window that is not ours is refused
+    let r = c.call("snap", json!({"window": 77, "zone":"full"}));
+    assert_eq!(r["error"]["code"], "invalid_args", "{r}");
+}
