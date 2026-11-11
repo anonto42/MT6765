@@ -87,6 +87,7 @@ buttons 56 high. Icons: 24 px grid, round 2 px strokes (28 px in 64 boxes).
 | Settings (+ subpages) | sidebar Settings, or the Settings icon on Home / in the Apps panel |
 | Power menu | long power press, or Settings > Maintenance > Power menu |
 | Mouse pad | sidebar chevron > Apps panel > Tools > Mouse pad |
+| Media (photos, videos, music, recent) | Home grid "Media", or Apps panel > Tools > Media (`Tab::Media`, scrolled screen; details in `docs/41-media.md`) |
 
 The old bottom navigation is gone. `Tab::Apps` is kept for compatibility and shows Home (the grid
 is the app list); `Target::Nav(1)` is the Apps-panel toggle.

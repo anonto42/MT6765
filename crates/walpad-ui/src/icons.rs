@@ -42,10 +42,14 @@ pub enum Icon {
     VolumeOff,
     /// Clipboard (Apps panel > Tools).
     Clipboard,
+    /// Media screen (change media-apps-capture): film frame with a play triangle, a picture, a note.
+    Media,
+    Image,
+    Music,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 33] = [
+    pub const ALL: [Icon; 36] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -79,6 +83,9 @@ impl Icon {
         Icon::Volume,
         Icon::VolumeOff,
         Icon::Clipboard,
+        Icon::Media,
+        Icon::Image,
+        Icon::Music,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -98,6 +105,9 @@ impl Icon {
             "sim" => Icon::Sim,
             "volume" => Icon::Volume,
             "clipboard" => Icon::Clipboard,
+            "media" | "video" => Icon::Media,
+            "image" | "photos" => Icon::Image,
+            "music" => Icon::Music,
             _ => return None,
         })
     }
@@ -369,6 +379,30 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((8.5, 12.0), (15.5, 12.0));
             p.line((8.5, 16.0), (13.0, 16.0));
         }
+        Icon::Media => {
+            p.rrect(3.0, 5.0, 18.0, 14.0, 2.5);
+            p.poly(&[(10.0, 9.0), (10.0, 15.0), (15.5, 12.0)], true);
+        }
+        Icon::Image => {
+            p.rrect(3.0, 4.5, 18.0, 15.0, 2.5);
+            p.poly(
+                &[
+                    (4.5, 17.5),
+                    (9.5, 11.5),
+                    (13.0, 15.0),
+                    (15.5, 12.5),
+                    (19.5, 17.5),
+                ],
+                false,
+            );
+            p.circle(16.0, 9.0, 1.8);
+        }
+        Icon::Music => {
+            p.poly(&[(9.0, 18.0), (9.0, 5.0), (19.0, 3.0), (19.0, 16.0)], false);
+            p.line((9.0, 9.0), (19.0, 7.0));
+            p.circle(6.5, 18.0, 2.5);
+            p.circle(16.5, 16.0, 2.5);
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -478,7 +512,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 33);
+        assert_eq!(Icon::ALL.len(), 36);
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }

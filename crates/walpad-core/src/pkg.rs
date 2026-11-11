@@ -868,7 +868,12 @@ mod tests {
         let j = mk(json!(["--file", "{path}"])).app_json().unwrap();
         assert_eq!(j["open_args"], json!(["--file", "{path}"]));
         // no placeholder, two of them or a non-list: the app does not open files
-        for bad in [json!(["--"]), json!(["{path}", "{path}"]), json!("yes"), json!(false)] {
+        for bad in [
+            json!(["--"]),
+            json!(["{path}", "{path}"]),
+            json!("yes"),
+            json!(false),
+        ] {
             let j = mk(bad).app_json().unwrap();
             assert!(j.get("open").is_none());
         }

@@ -81,9 +81,11 @@ pub enum Tab {
     Bluetooth,
     /// VPN, DNS and proxy (owner request 2026-11-10; reached from Settings).
     Vpn,
+    /// Media browser (owner request 2026-11-11; reached from the Apps panel and Home).
+    Media,
 }
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 9] = [
         Tab::Home,
         Tab::Apps,
         Tab::Network,
@@ -92,6 +94,7 @@ impl Tab {
         Tab::Mobile,
         Tab::Bluetooth,
         Tab::Vpn,
+        Tab::Media,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -103,6 +106,7 @@ impl Tab {
             Tab::Mobile => "Mobile network",
             Tab::Bluetooth => "Bluetooth",
             Tab::Vpn => "VPN and DNS",
+            Tab::Media => "Media",
         }
     }
     pub fn icon(self) -> Icon {
@@ -115,6 +119,7 @@ impl Tab {
             Tab::Mobile => Icon::Sim,
             Tab::Bluetooth => Icon::Bluetooth,
             Tab::Vpn => Icon::Lock,
+            Tab::Media => Icon::Media,
         }
     }
 }

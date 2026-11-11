@@ -11,6 +11,7 @@ use crate::gesture::{Gesture, Recogniser};
 use crate::ime::{FocusKbd, ImEvent, ImServer, KbdAction};
 use crate::keyboard::SysKeyboard;
 use crate::lock_window::{LockEvent, LockWindow};
+use crate::media_worker::Job;
 use crate::mousepad::MousePad;
 use crate::nav::Nav;
 use crate::seltools::{BarState, EditBar, EditOut};
@@ -72,6 +73,8 @@ pub struct Shell {
     /// Keeps the X cursor hidden (cursor.rs); None when XFixes is not available.
     _cursor: Option<CursorHider>,
     core: CoreClient,
+    /// Folder scan and thumbnails for the Media screen (media_worker.rs).
+    media: crate::media_worker::Worker,
     canvas: Canvas,
     fonts: Fonts,
     pub app: App,
@@ -218,6 +221,7 @@ impl Shell {
             bar: BarState::default(),
             _cursor: cursor,
             core,
+            media: crate::media_worker::Worker::start(opts.root.clone()),
             canvas,
             fonts,
             app: App::new(w, h, catalog, wall).with_pinned(read_pinned(&opts.root)),
@@ -350,6 +354,23 @@ impl Shell {
                 }
                 Cmd::ClipboardShow => {
                     self.show_clipboard_list();
+                    continue;
+                }
+                // the Media screen's background work (no core command)
+                Cmd::MediaScan => {
+                    self.media.send(Job::Scan);
+                    continue;
+                }
+                Cmd::MediaThumbs(v) => {
+                    self.media.send(Job::Thumbs(v));
+                    continue;
+                }
+                Cmd::MediaInfo(v) => {
+                    self.media.send(Job::Info(v));
+                    continue;
+                }
+                Cmd::MediaRemember(p) => {
+                    self.media.send(Job::Remember(p));
                     continue;
                 }
                 _ => {}
@@ -825,6 +846,9 @@ impl Shell {
             self.send(out.cmds);
         }
         self.dirty |= self.app.tick(now);
+        for ev in self.media.poll() {
+            self.dirty |= self.app.on_media(ev);
+        }
         let queued = self.app.take_cmds();
         self.send(queued);
         if Instant::now() >= self.next_minute {
@@ -888,6 +912,9 @@ impl Shell {
         }
         if !self.core.connected() {
             wait = wait.min(500); // reconnect attempts
+        }
+        if self.media.busy() {
+            wait = wait.min(100); // thumbnails arrive from the background thread
         }
         let wait = wait.max(1);
         let mut fds = vec![&self.win.xc.wait_fd];

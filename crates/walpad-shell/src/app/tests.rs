@@ -10,6 +10,7 @@ use walpad_ui::{Canvas, Fonts};
 mod bluetooth;
 mod hotspot;
 mod lock;
+mod media;
 mod mobile;
 mod store;
 mod volume;
@@ -269,7 +270,7 @@ fn home_tiles_are_the_pinned_installed_apps() {
     let all: Vec<&str> = app.model.apps.iter().map(|t| t.id.as_str()).collect();
     assert_eq!(
         all,
-        ["browser", "terminal", "settings"],
+        ["browser", "terminal", "media", "settings"],
         "the Wi-Fi app entry is the Network tab, not an app tile"
     );
     let off = App::new(800, 1280, catalog(), wall());
@@ -339,7 +340,7 @@ fn home_taps_launch_apps_or_navigate() {
     assert!(tap_at(&mut app, x, y, 1000).cmds.is_empty());
     assert!(app.model.overlay.is_none());
     // the Settings shortcut (Home grid; the sidebar has its own Settings button)
-    assert!(tap(&mut app, Target::AppTile(2)).cmds.is_empty());
+    assert!(tap(&mut app, Target::AppTile(3)).cmds.is_empty());
     assert_eq!(
         app.active,
         Tab::Settings,
@@ -400,7 +401,8 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
             Target::PanelClose(1),
             Target::PanelTool(0),
             Target::PanelTool(1),
-            Target::PanelTool(2)
+            Target::PanelTool(2),
+            Target::PanelTool(3)
         ]
     );
     // tapping the running app focuses it (launch = focus when it runs) and closes the panel

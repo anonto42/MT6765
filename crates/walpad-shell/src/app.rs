@@ -7,6 +7,7 @@ use crate::core_client::{CoreEvent, ReplyError};
 use crate::device_screen;
 use crate::gesture::Gesture;
 use crate::home;
+use crate::media::{self, MediaTarget};
 use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 mod lock_flow;
@@ -233,6 +234,8 @@ pub enum Target {
     Lock(LockAct),
     /// App store screen (change app-catalogue-manager).
     Store(StoreTarget),
+    /// Media screen (change media-apps-capture).
+    Media(MediaTarget),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,6 +261,17 @@ pub enum Cmd {
     /// The Back control (dock button): the core sends Alt+Left or Esc to the focused window.
     Back,
     Launch(String),
+    /// Open one file in an app that declares `open` (the core validates the path).
+    LaunchFile {
+        app: String,
+        path: String,
+    },
+    /// Media screen work for the shell's background thread (never sent to the core): scan the
+    /// folders, make thumbnails, read media facts, remember an opened file.
+    MediaScan,
+    MediaThumbs(Vec<String>),
+    MediaInfo(Vec<String>),
+    MediaRemember(String),
     CloseApp(String),
     SetPinned(Vec<String>),
     WifiScan,
@@ -381,6 +395,12 @@ impl Cmd {
             Cmd::ScreenOff => ("screen", json!({"mode": "off"})),
             Cmd::Back => ("back", Value::Null),
             Cmd::Launch(id) => ("launch", json!({"app": id})),
+            Cmd::LaunchFile { app, path } => {
+                ("launch", json!({"app": app, "args": {"path": path}}))
+            }
+            Cmd::MediaScan | Cmd::MediaThumbs(_) | Cmd::MediaInfo(_) | Cmd::MediaRemember(_) => {
+                ("media", Value::Null)
+            }
             Cmd::CloseApp(id) => ("close_app", json!({"app": id})),
             Cmd::SetPinned(ids) => ("set_setting", json!({"key": "pinned_apps", "value": ids})),
             Cmd::WifiScan => ("wifi_scan", Value::Null),
@@ -580,6 +600,8 @@ pub struct Model {
     pub lock_flow: Option<LockFlow>,
     /// App store screen state.
     pub store: store::StoreModel,
+    /// Media screen state (change media-apps-capture).
+    pub media: media::MediaModel,
 }
 
 impl Model {
@@ -610,6 +632,7 @@ impl Model {
             bt_busy: None,
             lock_flow: None,
             store: store::StoreModel::default(),
+            media: media::MediaModel::default(),
         }
     }
 
@@ -634,6 +657,7 @@ impl Model {
 
     fn spinning(&self) -> bool {
         self.net.scanning
+            || self.media.scanning
             || self.net.connecting.is_some()
             || self.bt_busy.is_some()
             || bluetooth::scanning(&self.status)
@@ -765,6 +789,12 @@ impl App {
             }
         }
         apps.push(Tile {
+            id: "media".into(),
+            name: "Media".into(),
+            icon: Icon::Media,
+            running: false,
+        });
+        apps.push(Tile {
             id: "settings".into(),
             name: "Settings".into(),
             icon: Icon::Settings,
@@ -836,6 +866,10 @@ impl App {
         }
         if tab == Tab::Vpn && self.model.connected {
             out.cmd(Cmd::VpnFiles);
+        }
+        if tab == Tab::Media {
+            self.model.media.scanning = true;
+            out.cmd(Cmd::MediaScan);
         }
         out.dirty = true;
     }
@@ -1413,6 +1447,14 @@ impl App {
             self.close_power_menu();
             dirty = true;
         }
+        if !self.model.media.want_thumbs.is_empty() {
+            let v = std::mem::take(&mut self.model.media.want_thumbs);
+            self.queued.push(Cmd::MediaThumbs(v));
+        }
+        if !self.model.media.want_info.is_empty() {
+            let v = std::mem::take(&mut self.model.media.want_info);
+            self.queued.push(Cmd::MediaInfo(v));
+        }
         if self.model.spinning() && now.saturating_sub(self.last_spin) >= SPIN_EVERY_MS {
             self.last_spin = now;
             self.model.spinner_deg = (self.model.spinner_deg + 30) % 360;
@@ -1470,7 +1512,13 @@ impl App {
     fn scrolls(&self) -> bool {
         matches!(
             self.active,
-            Tab::Network | Tab::Device | Tab::Settings | Tab::Mobile | Tab::Bluetooth | Tab::Vpn
+            Tab::Network
+                | Tab::Device
+                | Tab::Settings
+                | Tab::Mobile
+                | Tab::Bluetooth
+                | Tab::Vpn
+                | Tab::Media
         )
     }
 
@@ -1629,9 +1677,55 @@ impl App {
         }
     }
 
+    fn on_media_tap(&mut self, t: MediaTarget, out: &mut Outcome) {
+        match t {
+            MediaTarget::Section(i) => {
+                if let Some(s) = media::Section::ALL.get(i) {
+                    self.model.media.section = *s;
+                    self.scroll = 0;
+                    self.content_hits.clear();
+                }
+            }
+            MediaTarget::Refresh => {
+                self.model.media.scanning = true;
+                out.cmd(Cmd::MediaScan);
+            }
+            MediaTarget::Item(i) => {
+                let list = self.model.media.list();
+                let Some(it) = list.get(i) else { return };
+                match media::player_for(it.kind, &self.model.status) {
+                    Some(app) if self.model.connected => {
+                        out.cmd(Cmd::LaunchFile {
+                            app: app.to_string(),
+                            path: it.path.clone(),
+                        });
+                        out.cmd(Cmd::MediaRemember(it.path.clone()));
+                    }
+                    Some(_) => self.toast("Not connected to the system service", Tone::Warning),
+                    None => self.toast(it.kind.missing_hint(), Tone::Warning),
+                }
+            }
+        }
+    }
+
+    /// An answer from the Media background thread; true when the screen needs a redraw.
+    pub fn on_media(&mut self, ev: crate::media_worker::Event) -> bool {
+        use crate::media_worker::Event;
+        match ev {
+            Event::Scanned(items) => self.model.media.set_items(items),
+            Event::Recent(r) => self.model.media.set_recent(r),
+            Event::Thumb(p, png) => self.model.media.on_thumb(&p, png.as_deref()),
+            Event::Info(p, i) => self.model.media.on_info(&p, i),
+            Event::Dropped(p) => self.model.media.forget(&p),
+        }
+        self.active == Tab::Media
+    }
+
     fn activate(&mut self, id: &str, out: &mut Outcome) {
         if id == "settings" {
             self.go(Tab::Settings, out);
+        } else if id == "media" {
+            self.go(Tab::Media, out);
         } else if self.model.connected {
             out.cmd(Cmd::Launch(id.to_string()));
         }
@@ -1671,6 +1765,7 @@ impl App {
                     match tool.action {
                         panels::ToolAction::MousePad => out.cmd(Cmd::MousePadShow),
                         panels::ToolAction::Clipboard => out.cmd(Cmd::ClipboardShow),
+                        panels::ToolAction::Media => self.go(Tab::Media, out),
                         panels::ToolAction::AppStore => {
                             self.go(Tab::Settings, out);
                             self.model.settings_page = Some(Page::Apps);
@@ -1680,6 +1775,7 @@ impl App {
                     }
                 }
             }
+            Target::Media(t) => self.on_media_tap(t, out),
             Target::Page(Page::Vpn) => self.go(Tab::Vpn, out),
             Target::VpnSwitch if interactive && vpn_screen::switchable(&self.model.status) => {
                 out.cmd(Cmd::Vpn(!vpn_screen::is_on(&self.model.status)))
@@ -2497,7 +2593,18 @@ impl App {
     /// at (0, view.y - scroll); primitives skip what falls outside the frame. No off-screen copy.
     fn render_scrolled(&mut self, p: &mut Painter) {
         let frame = self.frame;
+        let media_list = if self.active == Tab::Media {
+            let list = self.model.media.list();
+            let lay = media::layout(&frame, self.model.media.section, list.len());
+            if let Some((a, b)) = media::visible_range(&lay, self.scroll, self.view.h) {
+                self.model.media.note_visible(&list, a, b);
+            }
+            list
+        } else {
+            Vec::new()
+        };
         let total = match self.active {
+            Tab::Media => media::layout(&frame, self.model.media.section, media_list.len()).total,
             Tab::Vpn => {
                 vpn_screen::layout(&frame, &self.model.status, self.model.vpn_files.len()).total
             }
@@ -2576,6 +2683,17 @@ impl App {
                     files: &m.vpn_files,
                     online: m.connected,
                     pressed: m.pressed,
+                },
+            ),
+            Tab::Media => media::render(
+                p,
+                &frame,
+                &media::View {
+                    m: &m.media,
+                    list: &media_list,
+                    st: &m.status,
+                    pressed: m.pressed,
+                    spinner_deg: m.spinner_deg,
                 },
             ),
             Tab::Home | Tab::Apps => Vec::new(),

@@ -341,11 +341,13 @@ impl Apps {
     pub fn argv(d: &AppDef, path: Option<&str>) -> Vec<String> {
         let mut v = d.exec.clone();
         if let Some(p) = path {
-            v.extend(
-                d.open_args
-                    .iter()
-                    .map(|a| if a == "{path}" { p.to_string() } else { a.clone() }),
-            );
+            v.extend(d.open_args.iter().map(|a| {
+                if a == "{path}" {
+                    p.to_string()
+                } else {
+                    a.clone()
+                }
+            }));
         }
         v
     }
@@ -670,7 +672,13 @@ mod tests {
 
     fn media_root() -> Root {
         let r = root_with("[]", &["sh", "cat"]);
-        for d in ["root/Pictures", "mnt/sd/DCIM", "etc", "tmp/Downloads", "tmp/other"] {
+        for d in [
+            "root/Pictures",
+            "mnt/sd/DCIM",
+            "etc",
+            "tmp/Downloads",
+            "tmp/other",
+        ] {
             std::fs::create_dir_all(r.p(&format!("/{d}"))).unwrap();
         }
         std::fs::write(r.p("/root/Pictures/a.png"), "x").unwrap();
@@ -709,7 +717,10 @@ mod tests {
             "/rootx/a.png",
             "",
         ] {
-            assert!(resolve_open_path(&r, bad).is_err(), "{bad:?} must be refused");
+            assert!(
+                resolve_open_path(&r, bad).is_err(),
+                "{bad:?} must be refused"
+            );
         }
         // symlinks: one that stays inside the roots works and is resolved, escapes are refused
         symlink(r.p("/root/Pictures/a.png"), r.p("/root/Pictures/link.png")).unwrap();
@@ -743,14 +754,22 @@ mod tests {
         let d = a.def("viewer").unwrap().clone();
         assert_eq!(
             Apps::argv(&d, Some("/root/Pictures/a.png")),
-            ["sh", "-c", "for a in \"$@\"; do echo \"$a\"; done > \"$OUT\"", "sh", "--", "/root/Pictures/a.png"]
+            [
+                "sh",
+                "-c",
+                "for a in \"$@\"; do echo \"$a\"; done > \"$OUT\"",
+                "sh",
+                "--",
+                "/root/Pictures/a.png"
+            ]
         );
         assert_eq!(Apps::argv(&d, None).len(), 4);
         assert!(matches!(
             a.spawn_open("plain", &r, Some("/root/Pictures/a.png")),
             Err(LaunchError::Spawn(_))
         ));
-        a.spawn_open("viewer", &r, Some("/root/Pictures/a.png")).unwrap();
+        a.spawn_open("viewer", &r, Some("/root/Pictures/a.png"))
+            .unwrap();
         reap_all(&mut a, 1);
         assert_eq!(
             std::fs::read_to_string(&out).unwrap(),

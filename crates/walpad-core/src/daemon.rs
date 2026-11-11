@@ -489,7 +489,11 @@ impl Daemon {
         }
     }
 
-    fn launch(&mut self, id: &str, path: Option<&str>) -> Result<&'static str, (ErrorCode, String)> {
+    fn launch(
+        &mut self,
+        id: &str,
+        path: Option<&str>,
+    ) -> Result<&'static str, (ErrorCode, String)> {
         let Some(def) = self.apps.def(id).cloned() else {
             return Err((ErrorCode::InvalidArgs, format!("unknown app {id:?}")));
         };
@@ -507,10 +511,7 @@ impl Daemon {
             None => None,
             Some(p) => {
                 if !def.open {
-                    return Err((
-                        ErrorCode::InvalidArgs,
-                        format!("{id} does not open files"),
-                    ));
+                    return Err((ErrorCode::InvalidArgs, format!("{id} does not open files")));
                 }
                 Some(
                     crate::apps::resolve_open_path(&self.root, p)
@@ -536,13 +537,16 @@ impl Daemon {
                 return Ok("already_running");
             }
         }
-        let pid = self.apps.spawn_open(id, &self.root, file.as_deref()).map_err(|e| match e {
-            LaunchError::Closing => (
-                ErrorCode::Busy,
-                format!("{id} is still closing, try again in a moment"),
-            ),
-            e => (ErrorCode::Internal, format!("{e:?}")),
-        })?;
+        let pid = self
+            .apps
+            .spawn_open(id, &self.root, file.as_deref())
+            .map_err(|e| match e {
+                LaunchError::Closing => (
+                    ErrorCode::Busy,
+                    format!("{id} is still closing, try again in a moment"),
+                ),
+                e => (ErrorCode::Internal, format!("{e:?}")),
+            })?;
         self.publish(
             Topic::Apps,
             "apps",

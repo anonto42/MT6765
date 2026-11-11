@@ -275,7 +275,10 @@ fn settings_launch_screenshot_power_and_restart_shell() {
         "invalid_args"
     );
     // a file argument: validated by the protocol, and only for apps that declare "open"
-    for (i, p) in ["/root/../etc/passwd", "-i", "/etc/passwd"].iter().enumerate() {
+    for (i, p) in ["/root/../etc/passwd", "-i", "/etc/passwd"]
+        .iter()
+        .enumerate()
+    {
         assert_eq!(
             c.call(
                 60 + i as u64,
@@ -293,7 +296,10 @@ fn settings_launch_screenshot_power_and_restart_shell() {
     );
     assert_eq!(r["error"]["code"], "invalid_args", "{r}");
     assert!(
-        r["error"]["msg"].as_str().unwrap().contains("does not open files"),
+        r["error"]["msg"]
+            .as_str()
+            .unwrap()
+            .contains("does not open files"),
         "{r}"
     );
     assert_eq!(

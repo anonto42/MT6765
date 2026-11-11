@@ -18,6 +18,8 @@ pub mod ime;
 pub mod keyboard;
 pub mod lock_screen;
 pub mod lock_window;
+pub mod media;
+pub mod media_worker;
 pub mod mobile;
 pub mod mousepad;
 pub mod nav;

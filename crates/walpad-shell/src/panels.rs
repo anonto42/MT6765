@@ -420,6 +420,8 @@ pub enum ToolAction {
     Clipboard,
     /// Open the app store at the catalogue (Settings > Apps).
     AppStore,
+    /// Open the Media screen (pictures, videos, music).
+    Media,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -430,7 +432,7 @@ pub struct Tool {
 }
 
 /// The TOOLS section, in grid order. Add a tool here (and its action in `App::on_tap`).
-pub const TOOLS: [Tool; 3] = [
+pub const TOOLS: [Tool; 4] = [
     Tool {
         icon: Icon::Mouse,
         label: "Mouse pad",
@@ -445,6 +447,11 @@ pub const TOOLS: [Tool; 3] = [
         icon: Icon::Apps,
         label: "App store",
         action: ToolAction::AppStore,
+    },
+    Tool {
+        icon: Icon::Media,
+        label: "Media",
+        action: ToolAction::Media,
     },
 ];
 
