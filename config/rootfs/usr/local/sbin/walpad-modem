@@ -144,14 +144,33 @@ confirm_ifst() {  # tid type up|down
   return 1
 }
 
+# The modem boots with the radio off (AT+CFUN: 0): SIM "busy", no registration, no data.  Switch it
+# on (full functionality) and wait for the SIM and the network.  Safe to repeat.
+radio_on() {
+  [ -e "$AT_TTY" ] || return 1
+  fun=$(at "AT+CFUN?" 2>/dev/null | sed -n 's/^+CFUN: *\([0-9]*\).*/\1/p' | tail -n 1)
+  if [ "$fun" != 1 ]; then say "radio was off (CFUN ${fun:-?}): switching on"; at "AT+CFUN=1" 20 >/dev/null; fi
+  i=0
+  while [ $i -lt 90 ]; do
+    reg=$(at "AT+CREG?" 2>/dev/null | sed -n 's/^+CREG: *[0-9]*, *\([0-9]*\).*/\1/p' | tail -n 1)
+    case $reg in 1|5) say "registered (CREG $reg) after ${i}s"; return 0 ;; esac
+    sleep 2; i=$((i+2))
+  done
+  say "not registered after 90s (CREG ${reg:-?})"; return 1
+}
+
 data_on_run() {
   mkdir -p "${DATA_STATE%/*}"
   [ -e "$AT_TTY" ] || { result failed "the modem is not running"; return 1; }
+  radio_on
   apn=$(sed -n 's/^apn=//p' "$MOBILE_CONF" 2>/dev/null | tail -n 1)
   case $apn in *[!A-Za-z0-9._-]*) apn= ;; esac
   if [ -z "$apn" ]; then
     at "AT+COPS=3,0" >/dev/null
-    op=$(at "AT+COPS?" | sed -n 's/^+COPS: *[0-9]*,[0-9]*,"\([^"]*\)".*/\1/p')
+    j=0; op=
+    while [ $j -lt 8 ] && [ -z "$op" ]; do   # the operator name appears a moment after registration
+      op=$(at "AT+COPS?" 8 | sed -n 's/^+COPS: *[0-9]*,[0-9]*,"\([^"]*\)".*/\1/p'); [ -n "$op" ] || sleep 2; j=$((j+1))
+    done
     apn=$(apn_for "$op")
   fi
   say "data on: apn $apn"
@@ -159,9 +178,20 @@ data_on_run() {
   # what NetAgent::init sends once: the AP handles interface configuration (capability bitmap 3)
   [ -e "$RUNDIR/mobile-eifconfig" ] || { atn "AT+EIFCONFIG=3" >/dev/null; : > "$RUNDIR/mobile-eifconfig"; }
   urc_start
-  at "AT+CGDCONT=1,\"IP\",\"$apn\"" >/dev/null || { result failed "the modem rejected the APN" "" "$apn"; return 1; }
-  at "AT+CGACT=1,1" 25 >/dev/null || { result failed "could not activate the data context (no network?)" "" "$apn"; return 1; }
-  ip=$(at "AT+CGPADDR=1" | sed -n 's/^+CGPADDR: *1, *"\{0,1\}\([0-9.]*\).*/\1/p')
+  # a context left active by an earlier try makes AT+CGACT=1 fail: start from a clean one
+  at "AT+CGACT=0,1" 15 >/dev/null 2>&1; sleep 1; : > "$URC_LOG"
+  k=0; until at "AT+CGDCONT=1,\"IP\",\"$apn\"" 20 >/dev/null; do   # the modem answers slowly after a deactivate
+    k=$((k+1)); [ $k -ge 3 ] && { result failed "the modem rejected the APN" "" "$apn"; return 1; }; sleep 2
+  done
+  # the modem's answers can lag a command behind, so a timeout here is not a failure by itself:
+  # an ERROR is, otherwise the context counts as active once it has an IP address
+  at "AT+CGACT=1,1" 30 >/dev/null 2>&1; rc=$?
+  [ $rc = 1 ] && { result failed "could not activate the data context (no network?)" "" "$apn"; return 1; }
+  k=0; ip=
+  while [ -z "$ip" ] || [ "$ip" = 0.0.0.0 ]; do
+    ip=$(at "AT+CGPADDR=1" 8 | sed -n 's/^+CGPADDR: *1, *"\{0,1\}\([0-9.]*\).*/\1/p')
+    k=$((k+1)); [ $k -ge 5 ] && break; [ -n "$ip" ] && [ "$ip" != 0.0.0.0 ] || sleep 3
+  done
   dns=$(at "AT+CGCONTRDP=1" | sed -n 's/^+CGCONTRDP: *//p' | head -n 1 | tr -d '"')
   dns1=$(echo "$dns" | cut -d, -f6); dns2=$(echo "$dns" | cut -d, -f7)
   [ -n "$ip" ] || { result failed "the network gave no IP address" "" "$apn"; return 1; }
@@ -252,6 +282,7 @@ case ${1:-status} in
     vendor_daemon gsm0710muxd -s /dev/ttyC0 -f 512 -n 8 -m basic
     i=0; while [ $i -lt 20 ] && [ ! -e /dev/radio/pttycmd1 ]; do sleep 1; i=$((i+1)); done
     say "AT channels: $(ls /dev/radio 2>/dev/null | tr '\n' ' ')"
+    radio_on
     ;;
   status)
     echo "md_en: $(md_state | tr '\n' ' ')"
