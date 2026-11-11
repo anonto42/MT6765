@@ -426,17 +426,34 @@ if command -v python3 >/dev/null 2>&1 && command -v busybox >/dev/null 2>&1; the
   grep -q '^AT+EDALLOW=1$' "$MR/at.log" && grep -q '^AT+CGACT=1,1$' "$MR/at.log" && ok "  EDALLOW + CGACT" || bad "  EDALLOW + CGACT" "$(cat "$MR/at.log")" present
   eq "  status after a failed start is off" "$(md status)" state=off
   # the hook binds the link: data is on; the configured APN wins over the operator map
-  printf '#!/bin/sh\necho "$*" >> %s/hook.log\n' "$MR" > "$MR/usr/local/sbin/walpad-modem-link"; chmod +x "$MR/usr/local/sbin/walpad-modem-link"
+  printf '#!/bin/sh\necho "$WALPAD_MOBILE_IF $*" >> %s/hook.log\n' "$MR" > "$MR/usr/local/sbin/walpad-modem-link"; chmod +x "$MR/usr/local/sbin/walpad-modem-link"
   printf '# x\napn=my.apn\n' > "$MR/etc/walpad/mobile.conf"
+  : > "$MR/at.log"; rm -f "$MR/run/walpad/mobile-eifconfig"
   OUT=$(md on); eq "with the hook: data on" "$?/$(kv "$OUT" state)/$(kv "$OUT" apn)" "0/on/my.apn"
-  eq "  hook got ip and DNS" "$(cat "$MR/hook.log")" "up 10.20.30.40 8.8.8.8 8.8.4.4"
+  eq "  hook got the interface (302 -> ccmni2), ip, DNS and MTU" "$(cat "$MR/hook.log")" "ccmni2 up 10.20.30.40 8.8.8.8 8.8.4.4 1428"
+  grep -q '^NW:AT+EIFCONFIG=3$' "$MR/at.log" && ok "  capability sync on the netagent channel" || bad "  capability sync" "$(cat "$MR/at.log")" EIFCONFIG
+  grep -q '^NW:AT+EIF=302, "ifst", "up", 1$' "$MR/at.log" && ok "  ifst up confirmed on the netagent channel" || bad "  ifst up confirmed" "$(cat "$MR/at.log")" ifst
+  eq "  order: EIFCONFIG, activation, then the confirmation" "$(grep -e EIFCONFIG -e 'CGACT=1,1' -e '"up"' "$MR/at.log" | tr '\n' '|')" 'NW:AT+EIFCONFIG=3|AT+CGACT=1,1|NW:AT+EIF=302, "ifst", "up", 1|' 
   eq "  status reports on" "$(kv "$(md status)" state)/$(kv "$(md status)" ip)" "on/10.20.30.40"
   OUT=$(md off); eq "data off" "$?/$OUT" "0/state=off"
-  eq "  hook down, context deactivated" "$(tail -n 1 "$MR/hook.log")/$(grep -c '^AT+CGACT=0,1$' "$MR/at.log")" "down/1"
+  eq "  hook down, context deactivated" "$(tail -n 1 "$MR/hook.log")/$(grep -c '^AT+CGACT=0,1$' "$MR/at.log")" "ccmni2 down/1"
+  grep -q '^NW:AT+EIF=302, "ifst", "down", 1$' "$MR/at.log" && ok "  ifst down confirmed" || bad "  ifst down confirmed" "$(cat "$MR/at.log")" ifst
   eq "  status off" "$(md status)" state=off
   printf 'apn=bad apn;AT\n' > "$MR/etc/walpad/mobile.conf"
   : > "$MR/at.log"; md on >/dev/null
   grep -q '"gpinternet"' "$MR/at.log" && ok "  an invalid stored APN is ignored" || bad "  an invalid stored APN is ignored" "$(cat "$MR/at.log")" gpinternet
+  kill $FAKE 2>/dev/null; wait $FAKE 2>/dev/null
+  # no ifup URC: the documented fallback id 302; the modem refusing the confirmation keeps the link
+  : > "$MR/at.log"; : > "$MR/hook.log"
+  FAKE_AT_NO_URC=1 FAKE_AT_IFST_FAIL=1 python3 -I tests/shell/fake_at.py "$MR/dev/radio/pttycmd1" "$MR/at.log" & FAKE=$!
+  sleep 0.5; OUT=$(md on)
+  eq "no ifup URC: still on, fallback interface, no MTU" "$(kv "$OUT" state)/$(cat "$MR/hook.log")" "on/ccmni2 up 10.20.30.40 8.8.8.8 8.8.4.4"
+  kill $FAKE 2>/dev/null; wait $FAKE 2>/dev/null
+  # a muxer without the netagent channels: the confirmation goes to the main channel
+  rm -f "$MR/dev/radio/pttynwcmd" "$MR/dev/radio/pttynwurc"; : > "$MR/at.log"
+  FAKE_AT_NO_NW=1 python3 -I tests/shell/fake_at.py "$MR/dev/radio/pttycmd1" "$MR/at.log" & FAKE=$!
+  sleep 0.5; OUT=$(md on)
+  eq "no netagent channels: on, confirmation tried on the main channel" "$(kv "$OUT" state)/$(grep -c '^AT+EIF=302, "ifst", "up", 1$' "$MR/at.log")" "on/1"
   kill $FAKE 2>/dev/null; wait $FAKE 2>/dev/null
   FAKE_AT_CGACT_FAIL=1 python3 -I tests/shell/fake_at.py "$MR/dev/radio/pttycmd1" "$MR/at.log" & FAKE=$!
   sleep 0.5
@@ -446,13 +463,45 @@ if command -v python3 >/dev/null 2>&1 && command -v busybox >/dev/null 2>&1; the
   printf '#!/bin/sh\nexec sleep 30\n' > "$MR/silent"; rm -f "$MR/dev/radio/pttycmd1"; mkfifo "$MR/dev/radio/pttycmd1"
   ( exec 4<>"$MR/dev/radio/pttycmd1"; sleep 12 ) & HOLD=$!
   t0=$(date +%s); OUT=$(md off); t1=$(date +%s)
-  [ $((t1 - t0)) -le 20 ] && ok "  a silent channel times out ($((t1 - t0)) s)" || bad "  a silent channel times out" "$((t1 - t0)) s" "<= 20 s"
+  [ $((t1 - t0)) -le 25 ] && ok "  a silent channel times out ($((t1 - t0)) s)" || bad "  a silent channel times out" "$((t1 - t0)) s" "<= 25 s"
   eq "  reported as failed" "$(kv "$OUT" state)" failed
   kill $HOLD 2>/dev/null; wait $HOLD 2>/dev/null
   OUT=$(WALPAD_MODEM_ROOT=$MR busybox sh "$MS" data bogus 2>/dev/null); eq "data: unknown verb" "$?" 2
 else
   echo "SKIP walpad-modem data tests (python3 or busybox missing)"
 fi
+
+# ===== walpad-modem-link up|down: fake ip(8), fake root =====
+ML=$S/walpad-modem-link
+sh -n "$ML" && ok "syntax walpad-modem-link" || bad "syntax walpad-modem-link" error ok
+LK=$T/link; mkdir -p "$LK/run/walpad" "$LK/etc" "$LK/bin"
+printf 'nameserver 192.168.1.1\n' > "$LK/etc/resolv.conf"
+# fake ip: logs every call; `route show default` prints $LK/routes
+cat > "$LK/bin/ip" <<EOF
+#!/bin/sh
+echo "\$*" >> $LK/ip.log
+[ "\$1 \$2 \$3" = "route show default" ] && cat $LK/routes 2>/dev/null
+exit 0
+EOF
+chmod +x "$LK/bin/ip"
+lk() { WALPAD_LINK_ROOT=$LK PATH=$LK/bin:$PATH sh "$ML" "$@" 2>/dev/null; }
+: > "$LK/routes"
+WALPAD_MOBILE_IF=ccmni2 lk up 10.20.30.40 8.8.8.8 8.8.4.4 1428; eq "link up exits 0" "$?" 0
+eq "  commands in NetAgent order" "$(tr '\n' '|' < "$LK/ip.log")" "link set dev ccmni2 down|addr flush dev ccmni2|link set dev ccmni2 up|addr add 10.20.30.40/32 dev ccmni2|link set dev ccmni2 mtu 1428|route replace default dev ccmni2 metric 500|route show default|"
+eq "  DNS written without another default route" "$(tr '\n' ' ' < "$LK/etc/resolv.conf")" "nameserver 8.8.8.8 nameserver 8.8.4.4 "
+eq "  interface remembered" "$(cat "$LK/run/walpad/mobile-if")" ccmni2
+lk down; eq "link down exits 0" "$?" 0
+eq "  DNS restored" "$(cat "$LK/etc/resolv.conf")" "nameserver 192.168.1.1"
+eq "  down uses the remembered interface" "$(tail -n 3 "$LK/ip.log" | tr '\n' '|')" "route del default dev ccmni2|addr flush dev ccmni2|link set dev ccmni2 down|"
+# Wi-Fi connected: resolv.conf stays
+echo "default via 192.168.1.1 dev wlan0 metric 10" > "$LK/routes"
+WALPAD_MOBILE_IF=ccmni2 lk up 10.20.30.40 8.8.8.8 8.8.4.4
+eq "link up with Wi-Fi: resolv.conf untouched" "$(cat "$LK/etc/resolv.conf")" "nameserver 192.168.1.1"
+lk down
+# refusals
+WALPAD_MOBILE_IF=eth0 lk up 10.20.30.40 8.8.8.8 8.8.4.4; eq "link up refuses a non-ccmni interface" "$?" 1
+WALPAD_MOBILE_IF=ccmni2 lk up 'x;reboot' 8.8.8.8 8.8.4.4; eq "link up refuses a bad address" "$?" 1
+lk bogus; eq "link: unknown verb" "$?" 2
 
 # --- walpad-bluetooth (fake root, fake insmod/mknod/bridge/bluetoothd)
 BT=$T/bt; BR=$BT/root; BTS=$S/walpad-bluetooth

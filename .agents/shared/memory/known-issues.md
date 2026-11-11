@@ -48,3 +48,4 @@
 - `LK Load MD: Disabled` (`cat /sys/kernel/ccci/lk_md`): the bootloader did not load the modem this
   boot (seen after a restart via the flash tool); no software can start it, reboot normally.
 - zsh does not word-split unquoted variables: use arrays or sh -c.
+- Mobile data link (static RE 2026-11-11, `docs/42-mobile-data-link.md`): the interface for `+EIF: <id>, ifup` is `ccmni<id%100>` (302 = ccmni2, not ccmni0) and the RIL confirms it with `AT+EIF=<id>, "ifst", "up", <type>` (quotes and spaces exactly) on `/dev/radio/pttynwcmd`. Device-verified result pending: if downlink still fails see the experiment list there.

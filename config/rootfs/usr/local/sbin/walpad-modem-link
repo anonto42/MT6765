@@ -1,0 +1,64 @@
+#!/bin/sh
+# walpad-modem-link: bind the mobile data context to its ccmni interface (what MediaTek's NetAgent
+# does inside the RIL: docs/42-mobile-data-link.md).  Called by `walpad-modem data on|off`.
+#   walpad-modem-link up <ip> <dns1> <dns2> [mtu]
+#   walpad-modem-link down
+# The interface is ccmni<transIntfId % 100> (the number in "+EIF: <id>, ifup"): walpad-modem passes
+# it in WALPAD_MOBILE_IF and remembers it in /run/walpad/mobile-if for `down`.
+# Wi-Fi keeps priority: our default route has metric 500, and /etc/resolv.conf is only replaced when
+# no other default route exists.  WALPAD_LINK_ROOT prefixes the paths (host tests only).
+LR=${WALPAD_LINK_ROOT:-}
+IFFILE=$LR/run/walpad/mobile-if
+DNSMARK=$LR/run/walpad/mobile-dns-saved
+RESOLV=$LR/etc/resolv.conf
+METRIC=500
+
+ifname() {
+  n=${WALPAD_MOBILE_IF:-$(cat "$IFFILE" 2>/dev/null)}
+  case $n in ccmni[0-9]|ccmni[0-9][0-9]) echo "$n" ;; *) return 1 ;; esac
+}
+valid_ip() { case $1 in ""|*[!0-9.]*) return 1 ;; esac; return 0; }
+other_default() {  # a default route that is not ours (Wi-Fi, USB): 0 when there is one
+  ip route show default 2>/dev/null | grep -v " dev $1 " | grep -q .
+}
+
+up() {
+  ip=$1 dns1=$2 dns2=$3 mtu=$4
+  IF=$(ifname) || { echo "no ccmni interface" >&2; return 1; }
+  valid_ip "$ip" || { echo "bad address" >&2; return 1; }
+  [ -d "/sys/class/net/$IF" ] || [ -n "$LR" ] || { echo "$IF does not exist" >&2; return 1; }
+  # the same order as NetAgent: down, then up, then the address (SIOCSIFADDR), then the MTU
+  ip link set dev "$IF" down 2>/dev/null
+  ip addr flush dev "$IF" 2>/dev/null
+  ip link set dev "$IF" up || return 1
+  ip addr add "$ip/32" dev "$IF" || return 1
+  case $mtu in ""|*[!0-9]*) ;; *) [ "$mtu" -ge 576 ] && [ "$mtu" -le 1500 ] && ip link set dev "$IF" mtu "$mtu" ;; esac
+  # ccmni is a raw-IP, NOARP device: no gateway, the route goes straight to the device
+  ip route replace default dev "$IF" metric $METRIC || return 1
+  mkdir -p "${IFFILE%/*}"; echo "$IF" > "$IFFILE"
+  if other_default "$IF"; then
+    echo "link: another default route exists, DNS left alone" >&2
+  elif valid_ip "$dns1"; then
+    [ -e "$DNSMARK" ] || { cp "$RESOLV" "$DNSMARK" 2>/dev/null || : > "$DNSMARK"; }
+    { echo "nameserver $dns1"; valid_ip "$dns2" && echo "nameserver $dns2"; } > "$RESOLV.new" && mv -f "$RESOLV.new" "$RESOLV"
+  fi
+  return 0
+}
+
+down() {
+  IF=$(ifname) || return 0
+  ip route del default dev "$IF" 2>/dev/null
+  ip addr flush dev "$IF" 2>/dev/null
+  ip link set dev "$IF" down 2>/dev/null
+  if [ -e "$DNSMARK" ]; then   # only undo a resolv.conf this hook wrote
+    cp "$DNSMARK" "$RESOLV" 2>/dev/null; rm -f "$DNSMARK"
+  fi
+  rm -f "$IFFILE"
+  return 0
+}
+
+case $1 in
+  up) shift; up "$@" ;;
+  down) down ;;
+  *) echo "usage: $0 up <ip> <dns1> <dns2> [mtu] | down" >&2; exit 2 ;;
+esac

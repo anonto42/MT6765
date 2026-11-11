@@ -56,22 +56,30 @@ vendor_daemon() {  # name args...: run a vendor binary through the bionic linker
 
 md_state() { timeout 2 cat /sys/kernel/ccci/md_en 2>/dev/null; }
 
-# ---- mobile data (owner request 2026-11-10) -----------------------------------------------------
+# ---- mobile data (owner request 2026-11-10; link sequence: docs/42-mobile-data-link.md) ---------
 # The AT channel is gsm0710muxd's pseudo-terminal; one opener at a time (walpad-core pauses its own
 # AT polling while this runs).  WALPAD_MODEM_ROOT prefixes the paths (host tests only).
+# MediaTek's NetAgent (inside libmtk-ril) owns two more channels: pttynwcmd (commands: the interface
+# confirmation `AT+EIF=<id>, "ifst", "up", <type>`) and pttynwurc (URCs: `+EIF: <id>, ifup, ...`).
 MR=${WALPAD_MODEM_ROOT:-}
 AT_TTY=$MR/dev/radio/pttycmd1
+NW_CMD=$MR/dev/radio/pttynwcmd
+NW_URC=$MR/dev/radio/pttynwurc
 MOBILE_CONF=$MR/etc/walpad/mobile.conf
 LINK_HOOK=$MR/usr/local/sbin/walpad-modem-link
 DATA_STATE=$MR/run/walpad/mobile-data
+NW_STATE=$MR/run/walpad/mobile-nw     # tid=<transIntfId> type=<address type>, read by `data off`
+URC_LOG=$MR/run/walpad/nwurc.log
+RUNDIR=$MR/run/walpad
 
-# at "<command>" [timeout_s]: one AT command; prints the reply lines (echo and OK removed).
-# 0 = OK, 1 = ERROR / +CME ERROR (printed), 2 = no channel or timeout.  Runs in a subshell so a
-# failed open never ends the script.
-at() (
-  [ -e "$AT_TTY" ] || exit 2
-  exec 3<>"$AT_TTY" || exit 2
-  stty -F "$AT_TTY" raw -echo 2>/dev/null
+# at_tty <device> "<command>" [timeout_s]: one AT command; prints the reply lines (echo and OK
+# removed).  0 = OK, 1 = ERROR / +CME ERROR (printed), 2 = no channel or timeout.  Runs in a
+# subshell so a failed open never ends the script.
+at_tty() (
+  tty=$1; shift
+  [ -e "$tty" ] || exit 2
+  exec 3<>"$tty" || exit 2
+  stty -F "$tty" raw -echo 2>/dev/null
   printf '%s\r' "$1" >&3
   end=$(( $(date +%s) + ${2:-5} ))
   while :; do
@@ -86,6 +94,9 @@ at() (
     esac
   done
 )
+at() { at_tty "$AT_TTY" "$@"; }
+# NetAgent commands go to the netagent channel; without it (other muxer setups) to the main one
+atn() { if [ -e "$NW_CMD" ]; then at_tty "$NW_CMD" "$@"; else at_tty "$AT_TTY" "$@"; fi; }
 
 apn_for() {  # operator name -> APN (Bangladesh operators; "internet" otherwise)
   case $(printf '%s' "$1" | tr 'A-Z' 'a-z') in
@@ -103,7 +114,37 @@ result() {  # state reason ip apn: the key=value answer, also kept for `data sta
   cat "$DATA_STATE" 2>/dev/null || echo "state=$1"
 }
 
-data_on() {
+# NetAgent URC reader: started BEFORE the context is activated, because `+EIF: <id>, ifup, ...`
+# arrives while AT+CGACT is still running.  <id> % 100 is the ccmni interface number.
+urc_start() {
+  URC_PID=; mkdir -p "${URC_LOG%/*}"; : > "$URC_LOG"
+  [ -e "$NW_URC" ] || return 0
+  stty -F "$NW_URC" raw -echo 2>/dev/null
+  cat "$NW_URC" >> "$URC_LOG" 2>/dev/null &
+  URC_PID=$!
+}
+urc_stop() { [ -n "$URC_PID" ] && kill "$URC_PID" 2>/dev/null; URC_PID=; }
+urc_lines() { tr -d '\r' < "$URC_LOG" 2>/dev/null; }
+wait_ifup() {  # [seconds]: prints the last "+EIF: <id>, ifup, <type>, <ip>, ..." line; 1 = none
+  i=0
+  while :; do
+    l=$(urc_lines | grep -a '^+EIF: *[0-9][0-9]*, *ifup,' | tail -n 1)
+    [ -n "$l" ] && { echo "$l"; return 0; }
+    [ $i -ge ${1:-8} ] && return 1
+    sleep 1; i=$((i+1))
+  done
+}
+
+# NetAgent::confirmInterfaceState: tells the modem the AP side of the interface is up/down.
+# The exact line the RIL builds: AT+EIF=<transIntfId>, "ifst", "up"|"down", <addr type 1=v4>
+confirm_ifst() {  # tid type up|down
+  c="AT+EIF=$1, \"ifst\", \"$3\", $2"
+  atn "$c" >/dev/null && return 0
+  [ -e "$NW_CMD" ] && at "$c" >/dev/null && return 0   # the main channel as a fallback
+  return 1
+}
+
+data_on_run() {
   mkdir -p "${DATA_STATE%/*}"
   [ -e "$AT_TTY" ] || { result failed "the modem is not running"; return 1; }
   apn=$(sed -n 's/^apn=//p' "$MOBILE_CONF" 2>/dev/null | tail -n 1)
@@ -115,26 +156,50 @@ data_on() {
   fi
   say "data on: apn $apn"
   at "AT+EDALLOW=1" >/dev/null   # MediaTek: allow packet data (harmless where unknown)
+  # what NetAgent::init sends once: the AP handles interface configuration (capability bitmap 3)
+  [ -e "$RUNDIR/mobile-eifconfig" ] || { atn "AT+EIFCONFIG=3" >/dev/null; : > "$RUNDIR/mobile-eifconfig"; }
+  urc_start
   at "AT+CGDCONT=1,\"IP\",\"$apn\"" >/dev/null || { result failed "the modem rejected the APN" "" "$apn"; return 1; }
   at "AT+CGACT=1,1" 25 >/dev/null || { result failed "could not activate the data context (no network?)" "" "$apn"; return 1; }
   ip=$(at "AT+CGPADDR=1" | sed -n 's/^+CGPADDR: *1, *"\{0,1\}\([0-9.]*\).*/\1/p')
   dns=$(at "AT+CGCONTRDP=1" | sed -n 's/^+CGCONTRDP: *//p' | head -n 1 | tr -d '"')
   dns1=$(echo "$dns" | cut -d, -f6); dns2=$(echo "$dns" | cut -d, -f7)
   [ -n "$ip" ] || { result failed "the network gave no IP address" "" "$apn"; return 1; }
-  # binding the context to a ccmni interface is the hook's job (not working on this tablet yet)
+  # which interface? the modem names it in "+EIF: <id>, ifup, <type>, <ip>, ..." (id 302 = ccmni2)
+  tid= ; type=1; mtu=
+  if line=$(wait_ifup 8); then
+    tid=$(echo "$line" | sed 's/^+EIF: *\([0-9]*\),.*/\1/')
+    t=$(echo "$line" | cut -d, -f3 | tr -d ' '); case $t in [123]) type=$t ;; esac
+    sleep 1   # the MTU URC follows the ifup one
+    mtu=$(urc_lines | grep -a "^+EIF: *$tid, *mtu," | tail -n 1 | sed 's/.*, *\([0-9][0-9]*\) *$/\1/')
+  else
+    tid=302; say "data on: no ifup URC, assuming transIntfId $tid (unverified)"
+  fi
+  # binding the context to its ccmni interface is the hook's job (docs/42-mobile-data-link.md)
   if [ ! -x "$LINK_HOOK" ]; then
     say "data on: context active ($ip), no link hook"
     result failed "data link not supported yet" "$ip" "$apn"; return 1
   fi
-  if "$LINK_HOOK" up "$ip" "$dns1" "$dns2" >/dev/null 2>&1; then
+  nif=ccmni$((tid % 100)); say "data on: transIntfId $tid -> $nif, ip $ip, mtu ${mtu:-default}"
+  if WALPAD_MOBILE_IF=$nif "$LINK_HOOK" up "$ip" "$dns1" "$dns2" $mtu >/dev/null 2>&1; then
+    echo "tid=$tid type=$type" > "$NW_STATE"
+    confirm_ifst "$tid" "$type" up && say "data on: interface confirmed to the modem" || say "data on: the modem did not accept the ifst confirmation"
     result on "" "$ip" "$apn"
   else
     result failed "the data link did not come up" "$ip" "$apn"; return 1
   fi
 }
 
+data_on() { data_on_run; rc=$?; urc_stop; return $rc; }
+
 data_off() {
-  [ -x "$LINK_HOOK" ] && "$LINK_HOOK" down >/dev/null 2>&1
+  nif=
+  if [ -f "$NW_STATE" ]; then
+    tid=$(sed -n 's/^tid=\([0-9]*\) .*/\1/p' "$NW_STATE"); type=$(sed -n 's/.* type=\([0-9]*\)$/\1/p' "$NW_STATE")
+    [ -n "$tid" ] && { nif=ccmni$((tid % 100)); confirm_ifst "$tid" "${type:-1}" down; }
+    rm -f "$NW_STATE"
+  fi
+  [ -x "$LINK_HOOK" ] && WALPAD_MOBILE_IF=$nif "$LINK_HOOK" down >/dev/null 2>&1
   if [ -e "$AT_TTY" ] && ! at "AT+CGACT=0,1" 15 >/dev/null; then
     result failed "could not deactivate the data context"; return 1
   fi
