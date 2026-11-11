@@ -422,6 +422,8 @@ pub enum ToolAction {
     AppStore,
     /// Open the Media screen (pictures, videos, music).
     Media,
+    /// Open the Phone screen (owner request 2026-11-11); the tile carries the unread badge.
+    Phone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -452,6 +454,9 @@ pub const TOOLS: [Tool; 4] = [
         icon: Icon::Media,
         label: "Media",
         action: ToolAction::Media,
+        icon: Icon::Phone,
+        label: "Phone",
+        action: ToolAction::Phone,
     },
 ];
 
@@ -615,6 +620,9 @@ pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect
     for (i, (cell, t)) in g.tools.iter().zip(TOOLS.iter()).enumerate() {
         let target = Target::PanelTool(i);
         panel_icon(p, *cell, t.icon, t.label, m.pressed == Some(target));
+        if t.action == ToolAction::Phone {
+            crate::phone_ui::paint_badge(p, cell_box(*cell), crate::phone_ui::unread(&m.status));
+        }
         hits.push((*cell, target));
     }
     hits

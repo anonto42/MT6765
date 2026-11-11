@@ -31,6 +31,13 @@ pub enum SheetPurpose {
     LockRemove(LockKind),
     LockNew(LockKind),
     LockRepeat(LockKind),
+    /// Phone (owner request 2026-11-11): contact search, contact name, contact number, a message
+    /// and the number of a new conversation. Typed text stays in the sheet until it is sent.
+    PhoneSearch,
+    PhoneContactName,
+    PhoneContactNumber,
+    PhoneCompose,
+    PhoneNewNumber,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +134,34 @@ impl PasswordSheet {
             ..PasswordSheet::new(String::new(), title.into())
         }
     }
+    /// A text sheet of the Phone screen; `title` names the field, `initial` pre-fills it. Number
+    /// fields open on the digits layer.
+    pub fn phone(purpose: SheetPurpose, title: &str, initial: &str) -> Self {
+        let layer = match purpose {
+            SheetPurpose::PhoneContactNumber | SheetPurpose::PhoneNewNumber => {
+                KeyboardLayer::Symbols
+            }
+            _ => KeyboardLayer::Lower,
+        };
+        PasswordSheet {
+            secret: initial.to_string(),
+            shown: true,
+            layer,
+            purpose,
+            ..PasswordSheet::new(String::new(), title.into())
+        }
+    }
+    /// The sheet belongs to the Phone screen (search, contacts, messages).
+    pub fn is_phone(&self) -> bool {
+        matches!(
+            self.purpose,
+            SheetPurpose::PhoneSearch
+                | SheetPurpose::PhoneContactName
+                | SheetPurpose::PhoneContactNumber
+                | SheetPurpose::PhoneCompose
+                | SheetPurpose::PhoneNewNumber
+        )
+    }
     /// The DNS or proxy sheet of the VPN screen.
     pub fn vpn(purpose: SheetPurpose, initial: &str) -> Self {
         let title = match purpose {
@@ -173,6 +208,12 @@ impl PasswordSheet {
             SheetPurpose::LockNew(k) | SheetPurpose::LockRepeat(k) => {
                 walpad_proto::valid_lock_secret(k, &self.secret)
             }
+            SheetPurpose::PhoneSearch => true,
+            SheetPurpose::PhoneContactName => walpad_proto::valid_contact_name(&self.secret),
+            SheetPurpose::PhoneContactNumber | SheetPurpose::PhoneNewNumber => {
+                walpad_proto::valid_sms_number(&self.secret)
+            }
+            SheetPurpose::PhoneCompose => walpad_proto::valid_sms_text(&self.secret),
         }
     }
     /// Longest text the field takes (bytes).
@@ -189,6 +230,10 @@ impl PasswordSheet {
             | SheetPurpose::LockRemove(_)
             | SheetPurpose::LockNew(_)
             | SheetPurpose::LockRepeat(_) => 64,
+            SheetPurpose::PhoneSearch => 40,
+            SheetPurpose::PhoneContactName => 96,
+            SheetPurpose::PhoneContactNumber | SheetPurpose::PhoneNewNumber => 21,
+            SheetPurpose::PhoneCompose => 1200,
         }
     }
 }
@@ -246,6 +291,8 @@ pub enum Overlay {
     QuickSettings,
     /// The Apps panel next to the sidebar (running and installed apps). A tap outside closes it.
     AppsPanel,
+    /// A Phone sheet: contact actions, message actions, confirmations.
+    Phone(crate::phone_ui::PhoneSheet),
 }
 
 impl Overlay {
@@ -326,6 +373,11 @@ pub fn render_password(
         SheetPurpose::LockNew(LockKind::Pin) => ("4-12 digits", true, "Next"),
         SheetPurpose::LockNew(_) => ("4-64 characters", true, "Next"),
         SheetPurpose::LockRepeat(_) => ("Type it again", true, "Save"),
+        SheetPurpose::PhoneSearch => ("Name or number", false, "Search"),
+        SheetPurpose::PhoneContactName => ("Name", false, "Next"),
+        SheetPurpose::PhoneContactNumber => ("e.g. 01712345678", false, "Save"),
+        SheetPurpose::PhoneCompose => ("Message", false, "Send"),
+        SheetPurpose::PhoneNewNumber => ("Number to write to", false, "Next"),
     };
     if let Some(eye) = p.text_field(
         g.field,

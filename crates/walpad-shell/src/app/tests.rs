@@ -41,6 +41,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         },
         hotspot: Default::default(),
         mobile: Default::default(),
+        phone: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),
@@ -270,7 +271,7 @@ fn home_tiles_are_the_pinned_installed_apps() {
     let all: Vec<&str> = app.model.apps.iter().map(|t| t.id.as_str()).collect();
     assert_eq!(
         all,
-        ["browser", "terminal", "media", "settings"],
+        ["browser", "terminal", "media", "phone", "settings"],
         "the Wi-Fi app entry is the Network tab, not an app tile"
     );
     let off = App::new(800, 1280, catalog(), wall());

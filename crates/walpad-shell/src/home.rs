@@ -112,6 +112,11 @@ pub fn render(p: &mut Painter, frame: &Frame, m: &Model, banner_h: i32) -> Vec<(
             m.pressed == Some(target),
             t.running,
         );
+        if t.id == "phone" {
+            // the unread text messages (owner request 2026-11-11)
+            let b = Rect::new(r.x + (r.w - BOX_GRID) / 2, r.y, BOX_GRID, BOX_GRID);
+            crate::phone_ui::paint_badge(p, b, crate::phone_ui::unread(&m.status));
+        }
         hits.push((*r, target));
     }
     hits

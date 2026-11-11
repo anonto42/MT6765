@@ -2,6 +2,8 @@
 //! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
 //! after the first frame is on screen (the boot ramdisk health check).
 use crate::app::{load_catalog, read_clock_24h, read_pinned, App, Cmd, WallTime};
+use crate::call_screen::CallAct;
+use crate::call_window::CallWindow;
 use crate::clipboard::{ClipEvent, Keeper};
 use crate::config::read_devd;
 use crate::core_client::{CoreClient, CoreEvent};
@@ -61,6 +63,12 @@ pub struct Shell {
     /// Id of the `unlock` request in flight.
     lock_pending: Option<u64>,
     lock_reopen_at: u64,
+    /// The call screen: incoming / running call over every app and over the lock screen (None
+    /// when its X connection could not be opened or died; retried while a call is on).
+    call: Option<CallWindow>,
+    /// The last phone status of the core (a call is on while its state is not idle).
+    call_status: walpad_proto::PhoneStatus,
+    call_reopen_at: u64,
     sock: PathBuf,
     /// Text-input focus -> keyboard visibility.
     focus: FocusKbd,
@@ -200,6 +208,13 @@ impl Shell {
                 None
             }
         };
+        let call = match CallWindow::open(&sock, (w, h)) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                eprintln!("walpad-shell: call screen disabled: {}", e.0);
+                None
+            }
+        };
         let mut shell = Shell {
             win,
             dock,
@@ -214,6 +229,9 @@ impl Shell {
             lock_retry_in_s: None,
             lock_pending: None,
             lock_reopen_at: 0,
+            call,
+            call_status: Default::default(),
+            call_reopen_at: 0,
             sock,
             focus: FocusKbd::new(),
             edit,
@@ -323,6 +341,78 @@ impl Shell {
             Ok(()) => self.lock = Some(l),
             Err(e) => eprintln!("walpad-shell: lock screen error: {}", e.0),
         }
+    }
+
+    // ------------------------------------------------------------------ call screen
+    /// A call is on (ringing, dialling, running, or just ended): the call screen is wanted.
+    fn call_wanted(&self) -> bool {
+        self.call_status.call != walpad_proto::CallState::Idle
+    }
+
+    /// Bring the call window in line with the last phone status, and pause / resume the lock
+    /// screen under it.
+    fn sync_call(&mut self) {
+        let now = self.now_ms();
+        let wanted = self.call_wanted();
+        if self.call.is_none() && wanted && now >= self.call_reopen_at {
+            self.call_reopen_at = now + 1000;
+            match CallWindow::open(&self.sock, self.win.size) {
+                Ok(c) => self.call = Some(c),
+                Err(e) => eprintln!("walpad-shell: call screen unavailable: {}", e.0),
+            }
+        }
+        let was_visible = self.call.as_ref().is_some_and(|c| c.visible());
+        if let Some(mut c) = self.call.take() {
+            let r = if wanted {
+                if !was_visible {
+                    // the strips of the shell go away: the call screen is the only thing on top
+                    self.set_keyboard(false, true);
+                    self.set_pad(false);
+                }
+                // the lock screen steps aside before the call screen grabs the pointer
+                if let Some(l) = self.lock.as_mut() {
+                    if let Err(e) = l.set_paused(true) {
+                        eprintln!("walpad-shell: lock screen: {}", e.0);
+                    }
+                }
+                c.update(&self.call_status, now, &mut self.fonts)
+            } else {
+                let r = c.update(&self.call_status, now, &mut self.fonts);
+                if let Some(l) = self.lock.as_mut() {
+                    if let Err(e) = l.set_paused(false) {
+                        eprintln!("walpad-shell: lock screen: {}", e.0);
+                    }
+                }
+                r
+            };
+            match r {
+                Ok(()) => self.call = Some(c),
+                Err(e) => {
+                    eprintln!("walpad-shell: call screen error: {}", e.0);
+                    self.call_reopen_at = now + 1000;
+                    if let Some(l) = self.lock.as_mut() {
+                        let _ = l.set_paused(false);
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_phone_status(&mut self, st: &walpad_proto::PhoneStatus) {
+        self.call_status = st.clone();
+        self.sync_call();
+    }
+
+    /// What the owner tapped on the call screen goes to the core (never logged: no number in it).
+    fn on_call_act(&mut self, a: CallAct) {
+        let (name, args) = match a {
+            CallAct::Answer => ("phone_answer", serde_json::Value::Null),
+            CallAct::Hangup => ("phone_hangup", serde_json::Value::Null),
+            CallAct::Mute(on) => ("phone_mute", serde_json::json!({ "on": on })),
+            CallAct::Speaker(on) => ("phone_speaker", serde_json::json!({ "on": on })),
+            CallAct::Dtmf(c) => ("phone_dtmf", serde_json::json!({ "digit": c.to_string() })),
+        };
+        let _ = self.core.send(name, args);
     }
 
     fn now_ms(&self) -> u64 {
@@ -642,6 +732,11 @@ impl Shell {
                     eprintln!("walpad-shell: lock screen: {}", e.0);
                 }
             }
+            if let Some(c) = self.call.as_mut() {
+                if let Err(e) = c.set_shell_size(w, h, &mut self.fonts) {
+                    eprintln!("walpad-shell: call screen: {}", e.0);
+                }
+            }
             if let Some(d) = &mut self.dock {
                 if let Err(e) = d.set_shell_size(w, h) {
                     eprintln!("walpad-shell: system dock: {}", e.0);
@@ -705,6 +800,26 @@ impl Shell {
                 Err(e) => {
                     eprintln!("walpad-shell: lock screen error: {}", e.0);
                     self.lock_reopen_at = now + 1000;
+                }
+            }
+        }
+        if self.call_wanted() && self.call.is_none() {
+            self.sync_call();
+        }
+        if let Some(mut c) = self.call.take() {
+            match c.poll(now, &mut self.fonts) {
+                Ok(acts) => {
+                    self.call = Some(c);
+                    for a in acts {
+                        self.on_call_act(a);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("walpad-shell: call screen error: {}", e.0);
+                    self.call_reopen_at = now + 1000;
+                    if let Some(l) = self.lock.as_mut() {
+                        let _ = l.set_paused(false);
+                    }
                 }
             }
         }
@@ -812,7 +927,15 @@ impl Shell {
                     // a (re)started core learns the keyboard state from us
                     self.report_keyboard();
                 }
-                CoreEvent::Status(s) => self.on_lock_status(&s.lock),
+                CoreEvent::Status(s) => {
+                    self.on_lock_status(&s.lock);
+                    self.on_phone_status(&s.phone);
+                }
+                // the core is gone: no call can be controlled, the screen must not stay up
+                CoreEvent::Disconnected => {
+                    self.call_status = Default::default();
+                    self.sync_call();
+                }
                 CoreEvent::Reply {
                     id,
                     ok,
@@ -907,6 +1030,12 @@ impl Shell {
         if let Some(d) = self.lock.as_ref().and_then(|l| l.next_deadline(now)) {
             wait = wait.min(d);
         }
+        if let Some(d) = self.call.as_ref().and_then(|c| c.next_deadline(now)) {
+            wait = wait.min(d);
+        }
+        if self.call_wanted() && self.call.is_none() {
+            wait = wait.min(500); // the call window is retried
+        }
         if self.lock_wanted && self.lock.is_none() {
             wait = wait.min(500); // the lock window is retried
         }
@@ -927,6 +1056,7 @@ impl Shell {
         fds.extend(self.keeper.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.edit.as_ref().map(|e| e.wait_fd()));
         fds.extend(self.lock.as_ref().map(|l| l.wait_fd()));
+        fds.extend(self.call.as_ref().map(|c| c.wait_fd()));
         walpad_x::wait_any(&fds, Some(wait));
         Ok(())
     }

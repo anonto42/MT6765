@@ -60,6 +60,7 @@ fn status() -> Status {
         },
         hotspot: Default::default(),
         mobile: Default::default(),
+        phone: Default::default(),
         bluetooth: Default::default(),
         lock: Default::default(),
         vpn: Default::default(),

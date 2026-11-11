@@ -31,28 +31,8 @@ fn write_json<T: Serialize>(p: &Path, v: &T) -> bool {
     }
 }
 
-/// The digits of a number (no `+`, no separators).
-pub fn digits(n: &str) -> String {
-    n.chars().filter(char::is_ascii_digit).collect()
-}
-
-/// Do two numbers name the same party? `01711234567` and `+8801711234567` do: one is the
-/// suffix of the other, with at least 7 digits in common.
-pub fn same_number(a: &str, b: &str) -> bool {
-    let (a, b) = (digits(a), digits(b));
-    if a.is_empty() || b.is_empty() {
-        return false;
-    }
-    if a == b {
-        return true;
-    }
-    let (long, short) = if a.len() >= b.len() {
-        (&a, &b)
-    } else {
-        (&b, &a)
-    };
-    short.len() >= 7 && long.ends_with(short.as_str())
-}
+/// Do two numbers name the same party (national and international form)? Shared with the shell.
+pub use walpad_proto::same_number;
 
 // ---------------------------------------------------------------------------- messages
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

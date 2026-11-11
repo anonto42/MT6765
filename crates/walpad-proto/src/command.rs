@@ -818,6 +818,25 @@ pub fn valid_apn(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
 }
 
+/// Do two numbers name the same party? `01711234567` and `+8801711234567` do: one is the suffix
+/// of the other (digits only), with at least 7 digits in common; short numbers match exactly.
+pub fn same_number(a: &str, b: &str) -> bool {
+    let digits = |s: &str| s.chars().filter(char::is_ascii_digit).collect::<String>();
+    let (a, b) = (digits(a), digits(b));
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    if a == b {
+        return true;
+    }
+    let (long, short) = if a.len() >= b.len() {
+        (&a, &b)
+    } else {
+        (&b, &a)
+    };
+    short.len() >= 7 && long.ends_with(short.as_str())
+}
+
 /// A number to dial: 1-32 of `0-9 + * # ,` (a `,` is a pause). Nothing else reaches the modem.
 pub fn valid_dial_number(s: &str) -> bool {
     (1..=32).contains(&s.len())

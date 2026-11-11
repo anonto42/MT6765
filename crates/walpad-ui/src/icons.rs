@@ -50,6 +50,18 @@ pub enum Icon {
 
 impl Icon {
     pub const ALL: [Icon; 36] = [
+    /// Phone handset, speech bubble, person, microphone (muted), dial pad (owner request
+    /// 2026-11-11, `phone-dialer`).
+    Phone,
+    Message,
+    Person,
+    Mic,
+    MicOff,
+    Keypad,
+}
+
+impl Icon {
+    pub const ALL: [Icon; 39] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -86,6 +98,12 @@ impl Icon {
         Icon::Media,
         Icon::Image,
         Icon::Music,
+        Icon::Phone,
+        Icon::Message,
+        Icon::Person,
+        Icon::Mic,
+        Icon::MicOff,
+        Icon::Keypad,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -108,6 +126,8 @@ impl Icon {
             "media" | "video" => Icon::Media,
             "image" | "photos" => Icon::Image,
             "music" => Icon::Music,
+            "phone" => Icon::Phone,
+            "message" | "messages" => Icon::Message,
             _ => return None,
         })
     }
@@ -402,6 +422,47 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((9.0, 9.0), (19.0, 7.0));
             p.circle(6.5, 18.0, 2.5);
             p.circle(16.5, 16.0, 2.5);
+        Icon::Phone => {
+            // a handset: earpiece top-left, mouthpiece bottom-right, the curved grip between
+            p.stroke.move_to(6.0, 3.5);
+            p.stroke.line_to(9.5, 3.5);
+            p.stroke.line_to(11.0, 8.5);
+            p.stroke.line_to(8.5, 10.0);
+            p.stroke.quad_to(9.5, 14.5, 14.0, 15.5);
+            p.stroke.line_to(15.5, 13.0);
+            p.stroke.line_to(20.5, 14.5);
+            p.stroke.line_to(20.5, 18.0);
+            p.stroke.quad_to(20.5, 20.5, 18.0, 20.5);
+            p.stroke.quad_to(3.5, 20.0, 3.5, 6.0);
+            p.stroke.quad_to(3.5, 3.5, 6.0, 3.5);
+            p.stroke.close();
+        }
+        Icon::Message => {
+            p.rrect(3.0, 4.0, 18.0, 13.0, 2.5);
+            p.poly(&[(8.0, 17.0), (8.0, 21.0), (12.5, 17.0)], false);
+            p.line((7.5, 9.0), (16.5, 9.0));
+            p.line((7.5, 12.5), (13.0, 12.5));
+        }
+        Icon::Person => {
+            p.circle(12.0, 8.0, 4.0);
+            p.arc(12.0, 21.0, 8.0, 180.0, 360.0);
+        }
+        Icon::Mic | Icon::MicOff => {
+            p.rrect(9.0, 3.0, 6.0, 11.0, 3.0);
+            p.arc(12.0, 11.0, 6.5, 0.0, 180.0);
+            p.line((12.0, 17.5), (12.0, 21.0));
+            p.line((8.5, 21.0), (15.5, 21.0));
+            if icon == Icon::MicOff {
+                p.line((4.0, 4.0), (20.0, 20.0));
+            }
+        }
+        Icon::Keypad => {
+            for y in [5.0, 11.0, 17.0] {
+                for x in [6.0, 12.0, 18.0] {
+                    p.dot(x, y, 1.7);
+                }
+            }
+            p.dot(12.0, 22.0, 1.7);
         }
     }
     (p.stroke.finish(), p.dots.finish())
@@ -513,6 +574,8 @@ mod tests {
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
         assert_eq!(Icon::ALL.len(), 36);
+        assert_eq!(Icon::ALL.len(), 39);
+        assert_eq!(Icon::from_name("phone"), Some(Icon::Phone));
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
 }

@@ -4,6 +4,8 @@
 
 pub mod app;
 pub mod bluetooth;
+pub mod call_screen;
+pub mod call_window;
 pub mod chrome;
 pub mod clipboard;
 pub mod config;
@@ -26,6 +28,7 @@ pub mod nav;
 pub mod network;
 pub mod overlay;
 pub mod panels;
+pub mod phone_ui;
 pub mod present;
 pub mod recents;
 pub mod seltools;

@@ -83,6 +83,8 @@ pub enum Tab {
     Vpn,
     /// Media browser (owner request 2026-11-11; reached from the Apps panel and Home).
     Media,
+    /// Phone: dialer, recent calls, contacts, messages (owner request 2026-11-11).
+    Phone,
 }
 impl Tab {
     pub const ALL: [Tab; 9] = [
@@ -95,6 +97,7 @@ impl Tab {
         Tab::Bluetooth,
         Tab::Vpn,
         Tab::Media,
+        Tab::Phone,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -107,6 +110,7 @@ impl Tab {
             Tab::Bluetooth => "Bluetooth",
             Tab::Vpn => "VPN and DNS",
             Tab::Media => "Media",
+            Tab::Phone => "Phone",
         }
     }
     pub fn icon(self) -> Icon {
@@ -120,6 +124,7 @@ impl Tab {
             Tab::Bluetooth => Icon::Bluetooth,
             Tab::Vpn => Icon::Lock,
             Tab::Media => Icon::Media,
+            Tab::Phone => Icon::Phone,
         }
     }
 }
@@ -1716,6 +1721,7 @@ mod tests {
                 "Bluetooth",
                 "VPN and DNS",
                 "Media",
+                "Phone",
             ]
         );
     }

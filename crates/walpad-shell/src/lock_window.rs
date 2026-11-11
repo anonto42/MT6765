@@ -52,6 +52,9 @@ pub struct LockWindow {
     root_size: (i32, i32),
     shown: bool,
     grabbed: bool,
+    /// The call screen is over the lock screen (owner request 2026-11-11): no re-raising and no
+    /// grabbing until the call is over.
+    paused: bool,
     screen: LockScreen,
     canvas: Canvas,
     next_guard: u64,
@@ -125,6 +128,7 @@ impl LockWindow {
             root_size,
             shown: false,
             grabbed: false,
+            paused: false,
             screen: LockScreen::new(LockKind::Pin, area, wall),
             canvas: Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("lock canvas")?,
             next_guard: 0,
@@ -192,6 +196,9 @@ impl LockWindow {
     }
 
     fn raise(&self) -> Result<(), XError> {
+        if self.paused {
+            return Ok(());
+        }
         self.xc.conn.configure_window(
             self.win,
             &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
@@ -246,9 +253,30 @@ impl LockWindow {
         Ok(())
     }
 
+    /// Let the call screen sit over the lock screen (true), or take the screen back (false).
+    pub fn set_paused(&mut self, paused: bool) -> Result<(), XError> {
+        if paused == self.paused {
+            return Ok(());
+        }
+        self.paused = paused;
+        if self.shown {
+            if paused {
+                self.release()?;
+            } else {
+                self.next_guard = 0; // raise and grab again at once
+            }
+            self.xc.conn.flush()?;
+        }
+        Ok(())
+    }
+
+    pub fn paused(&self) -> bool {
+        self.paused
+    }
+
     /// Repair the stacking and the grabs.
     fn guard(&mut self, now: u64) -> Result<(), XError> {
-        if !self.shown || now < self.next_guard {
+        if !self.shown || self.paused || now < self.next_guard {
             return Ok(());
         }
         self.next_guard = now + GUARD_EVERY_MS;
@@ -397,7 +425,7 @@ impl LockWindow {
             }
         }
         if self.shown {
-            if restack {
+            if restack && !self.paused {
                 self.raise()?;
                 self.xc.conn.flush()?;
             }

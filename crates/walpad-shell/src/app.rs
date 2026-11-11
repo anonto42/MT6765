@@ -11,9 +11,11 @@ use crate::media::{self, MediaTarget};
 use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
 mod lock_flow;
+mod phone_flow;
 
 use crate::overlay::{self, AppSheet, Overlay, PasswordSheet, SheetPurpose};
 use crate::panels;
+use crate::phone_ui::{self, PhoneModel, PhoneTarget};
 use crate::settings_screen::{self, Page, SysInfo};
 use crate::store::{self, StoreTarget, StoreView};
 use crate::volume_ui::{self, Osd};
@@ -236,6 +238,8 @@ pub enum Target {
     Store(StoreTarget),
     /// Media screen (change media-apps-capture).
     Media(MediaTarget),
+    /// Phone screen and its sheets (owner request 2026-11-11, change phone-dialer).
+    Phone(PhoneTarget),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -336,6 +340,25 @@ pub enum Cmd {
         role: String,
         app: String,
     },
+    /// Phone (owner request 2026-11-11): numbers and texts are `Secret`s, so a Debug print of a
+    /// command can never leak them.
+    PhoneDial(Secret),
+    SmsSend {
+        number: Secret,
+        text: Secret,
+    },
+    SmsList,
+    SmsDelete(u64),
+    SmsRead(Secret),
+    ContactList,
+    ContactSave {
+        id: Option<String>,
+        name: String,
+        number: Secret,
+    },
+    ContactDelete(String),
+    CallLog,
+    CallLogClear,
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `set_setting` with an allowlisted key.
@@ -368,6 +391,12 @@ pub enum Purpose {
     PkgCatalogue,
     PkgAction,
     DefaultApp,
+    /// Phone data (owner request 2026-11-11): what the reply fills in.
+    PhoneSms,
+    PhoneContacts,
+    PhoneCalls,
+    /// A send / delete / save whose success refreshes the lists and whose failure is a toast.
+    PhoneAction,
     /// A VPN command whose failure is shown as a toast.
     Vpn,
     VpnSheet,
@@ -513,6 +542,34 @@ impl Cmd {
             Cmd::PkgInstall(id) => ("pkg_install", json!({"id": id})),
             Cmd::PkgRemove(id) => ("pkg_remove", json!({"id": id})),
             Cmd::DefaultApp { role, app } => ("default_app", json!({"role": role, "app": app})),
+            // serialized onto the control socket only, never a log
+            Cmd::PhoneDial(n) => (
+                "phone_dial",
+                json!({"number": serde_json::to_value(n).unwrap_or(Value::Null)}),
+            ),
+            Cmd::SmsSend { number, text } => (
+                "sms_send",
+                json!({"number": serde_json::to_value(number).unwrap_or(Value::Null),
+                    "text": serde_json::to_value(text).unwrap_or(Value::Null)}),
+            ),
+            Cmd::SmsList => ("sms_list", Value::Null),
+            Cmd::SmsDelete(id) => ("sms_delete", json!({"id": id})),
+            Cmd::SmsRead(n) => (
+                "sms_read",
+                json!({"number": serde_json::to_value(n).unwrap_or(Value::Null)}),
+            ),
+            Cmd::ContactList => ("contact_list", Value::Null),
+            Cmd::ContactSave { id, name, number } => {
+                let mut a = json!({"name": name,
+                    "numbers": [serde_json::to_value(number).unwrap_or(Value::Null)]});
+                if let Some(i) = id {
+                    a["id"] = json!(i);
+                }
+                ("contact_save", a)
+            }
+            Cmd::ContactDelete(id) => ("contact_delete", json!({"id": id})),
+            Cmd::CallLog => ("call_log", Value::Null),
+            Cmd::CallLogClear => ("call_log_clear", Value::Null),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
@@ -549,6 +606,16 @@ impl Cmd {
             Cmd::PkgCatalogue => Purpose::PkgCatalogue,
             Cmd::PkgInstall(_) | Cmd::PkgRemove(_) => Purpose::PkgAction,
             Cmd::DefaultApp { .. } => Purpose::DefaultApp,
+            Cmd::SmsList => Purpose::PhoneSms,
+            Cmd::ContactList => Purpose::PhoneContacts,
+            Cmd::CallLog => Purpose::PhoneCalls,
+            Cmd::PhoneDial(_)
+            | Cmd::SmsSend { .. }
+            | Cmd::SmsDelete(_)
+            | Cmd::SmsRead(_)
+            | Cmd::ContactSave { .. }
+            | Cmd::ContactDelete(_)
+            | Cmd::CallLogClear => Purpose::PhoneAction,
             Cmd::CloseApp(_) => Purpose::Close,
             Cmd::Setting(..) | Cmd::SetPinned(_) => Purpose::Setting,
             _ => Purpose::Other,
@@ -602,6 +669,8 @@ pub struct Model {
     pub store: store::StoreModel,
     /// Media screen state (change media-apps-capture).
     pub media: media::MediaModel,
+    /// Phone screen: dial pad, recents, contacts, messages (owner request 2026-11-11).
+    pub phone: PhoneModel,
 }
 
 impl Model {
@@ -633,6 +702,7 @@ impl Model {
             lock_flow: None,
             store: store::StoreModel::default(),
             media: media::MediaModel::default(),
+            phone: PhoneModel::default(),
         }
     }
 
@@ -788,6 +858,13 @@ impl App {
                 }
             }
         }
+        // Phone is a shell-internal destination, not an exec app: pinnable like one
+        apps.push(Tile {
+            id: "phone".into(),
+            name: "Phone".into(),
+            icon: Icon::Phone,
+            running: false,
+        });
         apps.push(Tile {
             id: "media".into(),
             name: "Media".into(),
@@ -870,6 +947,8 @@ impl App {
         if tab == Tab::Media {
             self.model.media.scanning = true;
             out.cmd(Cmd::MediaScan);
+        if tab == Tab::Phone {
+            self.open_phone(out);
         }
         out.dirty = true;
     }
@@ -883,6 +962,9 @@ impl App {
                 self.model.connected = true;
                 if self.active == Tab::Network {
                     out.cmd(Cmd::WifiListSaved);
+                }
+                if self.active == Tab::Phone {
+                    self.open_phone(&mut out);
                 }
                 out.dirty = true;
             }
@@ -926,6 +1008,20 @@ impl App {
             }
             CoreEvent::Notice(v) if v["kind"].as_str().is_some_and(|k| k.starts_with("pkg_")) => {
                 self.on_pkg_notice(v, &mut out)
+            }
+            CoreEvent::Notice(v)
+                if matches!(
+                    v["kind"].as_str(),
+                    Some(
+                        "incoming_call"
+                            | "call_ended"
+                            | "sms_received"
+                            | "sms_sent"
+                            | "phone_error"
+                    )
+                ) =>
+            {
+                self.on_phone_notice(v, &mut out)
             }
             CoreEvent::Notice(v) => {
                 if v["kind"] == "app_crashed" {
@@ -1329,6 +1425,10 @@ impl App {
                     }
                 }
             }
+            (Purpose::PhoneSms | Purpose::PhoneContacts | Purpose::PhoneCalls, true) => {
+                self.on_phone_data(purpose, data)
+            }
+            (Purpose::PhoneAction, ok) => self.on_phone_action_reply(ok, data, error, out),
             (Purpose::PkgCatalogue, true) => self.model.store.apply_catalogue(data),
             (Purpose::PkgCatalogue, false) => {
                 self.model.store.error =
@@ -1519,6 +1619,7 @@ impl App {
                 | Tab::Bluetooth
                 | Tab::Vpn
                 | Tab::Media
+                | Tab::Phone
         )
     }
 
@@ -1726,6 +1827,8 @@ impl App {
             self.go(Tab::Settings, out);
         } else if id == "media" {
             self.go(Tab::Media, out);
+        } else if id == "phone" {
+            self.go(Tab::Phone, out);
         } else if self.model.connected {
             out.cmd(Cmd::Launch(id.to_string()));
         }
@@ -1766,6 +1869,7 @@ impl App {
                         panels::ToolAction::MousePad => out.cmd(Cmd::MousePadShow),
                         panels::ToolAction::Clipboard => out.cmd(Cmd::ClipboardShow),
                         panels::ToolAction::Media => self.go(Tab::Media, out),
+                        panels::ToolAction::Phone => self.go(Tab::Phone, out),
                         panels::ToolAction::AppStore => {
                             self.go(Tab::Settings, out);
                             self.model.settings_page = Some(Page::Apps);
@@ -2058,6 +2162,7 @@ impl App {
                 self.content_hits.clear();
             }
             Target::Store(t) if interactive => self.on_store_tap(t, out),
+            Target::Phone(t) => self.on_phone_tap(t, out),
             Target::Back => {
                 self.model.settings_page = match self.model.settings_page {
                     Some(Page::Logs) => Some(Page::Maintenance),
@@ -2314,6 +2419,7 @@ impl App {
         }
         self.model.net.connecting = None;
         self.model.lock_flow = None;
+        self.model.phone.draft = None;
         self.model.overlay = None;
     }
 
@@ -2368,6 +2474,9 @@ impl App {
     fn try_connect(&mut self, out: &mut Outcome) {
         if matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_lock()) {
             return self.lock_submit(out);
+        }
+        if matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_phone()) {
+            return self.phone_submit(out);
         }
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
             if s.is_vpn() {
@@ -2579,6 +2688,11 @@ impl App {
             }
             Some(Overlay::QuickSettings) => panels::render_quick_settings(p, &frame, &self.model),
             Some(Overlay::AppsPanel) => panels::render_apps_panel(p, &frame, &self.model),
+            Some(Overlay::Phone(s)) => {
+                let mut hits = vec![(frame.screen(), Target::Phone(PhoneTarget::SheetClose))];
+                hits.extend(phone_ui::render_sheet(p, &frame, s, &self.model.phone));
+                hits
+            }
             None => Vec::new(),
         };
         if let Some(t) = &self.model.toast {
@@ -2619,6 +2733,7 @@ impl App {
             }
             Tab::Mobile => mobile::layout(&frame, &self.model.status).total,
             Tab::Bluetooth => bluetooth::layout(&frame, &self.model.status).total,
+            Tab::Phone => phone_ui::layout_total(&frame, &self.model.phone, &self.model.status),
             _ => 0,
         }
         .max(self.view.h);
@@ -2694,6 +2809,14 @@ impl App {
                     st: &m.status,
                     pressed: m.pressed,
                     spinner_deg: m.spinner_deg,
+            Tab::Phone => phone_ui::render(
+                p,
+                &frame,
+                &phone_ui::View {
+                    st: &m.status,
+                    m: &m.phone,
+                    online: m.connected,
+                    pressed: m.pressed,
                 },
             ),
             Tab::Home | Tab::Apps => Vec::new(),
