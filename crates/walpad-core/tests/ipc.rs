@@ -93,7 +93,7 @@ fn status_has_fixture_values_and_honest_battery() {
     let r = c.call(2, "get_status", Value::Null);
     let d = &r["data"];
     assert_eq!(d["battery"]["source"], "voltage_estimate");
-    assert_eq!(d["battery"]["percent"], 62);
+    assert_eq!(d["battery"]["percent"], 66);
     assert_eq!(d["brightness"], 120);
     assert_eq!(d["wifi"]["radio"], "up");
     assert_eq!(d["wifi"]["ip"], "192.168.0.100");

@@ -7,6 +7,7 @@ pub mod key_gestures;
 pub mod power_key;
 pub mod rotation;
 pub mod screen_timeout;
+pub mod soc;
 pub mod touch_map;
 
 /// Monotonic milliseconds.

@@ -116,12 +116,18 @@ pub fn items(st: &Option<Status>, d: &DevdSettings) -> Vec<Item> {
         .and_then(|b| b.temp_c)
         .map(|t| (format!("{t:.1} °C"), Tone::Info))
         .unwrap_or_else(unknown);
-    for (l, (val, tone)) in [
-        ("Level", level),
-        ("State", state),
-        ("Voltage", volt),
-        ("Temperature", temp),
-    ] {
+    let mut rows = vec![("Level", level), ("State", state)];
+    if let Some(t) = b.and_then(crate::panels::battery_time_text) {
+        let label = if b.is_some_and(|b| b.time_left_min.is_none() && b.time_to_full_min.is_some())
+        {
+            "Time to full"
+        } else {
+            "Time left"
+        };
+        rows.push((label, (t, Tone::Info)));
+    }
+    rows.extend([("Voltage", volt), ("Temperature", temp)]);
+    for (l, (val, tone)) in rows {
         v.push(Item::Info(l.into(), val, tone));
     }
     v.push(Item::Info(

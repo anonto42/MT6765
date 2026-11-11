@@ -107,6 +107,25 @@ pub fn battery_label(m: &Model) -> String {
     }
 }
 
+/// "~5 h 20 min left" / "~1 h 10 min to full" (rounded to 5 min), "calculating..." while the current
+/// data is too short, None when unknown (owner request 2026-11-11).
+pub fn battery_time_text(b: &walpad_proto::Battery) -> Option<String> {
+    let (min, tail) = match (b.time_left_min, b.time_to_full_min) {
+        (Some(m), _) => (m, "left"),
+        (None, Some(m)) => (m, "to full"),
+        _ if b.time_calculating => return Some("calculating...".into()),
+        _ => return None,
+    };
+    let m = (min + 2) / 5 * 5;
+    let m = m.max(5);
+    let (h, r) = (m / 60, m % 60);
+    Some(match (h, r) {
+        (0, r) => format!("~{r} min {tail}"),
+        (h, 0) => format!("~{h} h {tail}"),
+        (h, r) => format!("~{h} h {r} min {tail}"),
+    })
+}
+
 /// Quick Settings battery row: "Battery (~62%)" + its caveat. Unavailable stays labelled, an
 /// estimate stays tagged as one.
 pub fn battery_row(m: &Model) -> (String, Option<(String, Color)>) {
@@ -114,14 +133,15 @@ pub fn battery_row(m: &Model) -> (String, Option<(String, Color)>) {
         return ("Battery (unavailable)".into(), None);
     };
     let b = &st.battery;
+    let time = battery_time_text(b).map(|t| (t, TEXT_SECONDARY));
     match (b.percent, b.source) {
         (Some(p), BatterySource::VoltageEstimate) => (
             format!("Battery (~{p}%)"),
-            Some(("Estimated from voltage".into(), WARNING)),
+            time.or(Some(("Estimated from voltage".into(), WARNING))),
         ),
         (Some(p), BatterySource::Gauge) => (
             format!("Battery ({p}%)"),
-            b.state.clone().map(|s| (s, TEXT_SECONDARY)),
+            time.or(b.state.clone().map(|s| (s, TEXT_SECONDARY))),
         ),
         _ => ("Battery (unavailable)".into(), None),
     }
@@ -651,6 +671,33 @@ pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn battery_time_text_rounds_to_five_minutes() {
+        let mut b = walpad_proto::Battery {
+            percent: Some(50),
+            source: BatterySource::VoltageEstimate,
+            state: None,
+            mv: None,
+            temp_c: None,
+            low: false,
+            time_left_min: Some(322),
+            time_to_full_min: None,
+            time_calculating: false,
+        };
+        assert_eq!(battery_time_text(&b).unwrap(), "~5 h 20 min left");
+        b.time_left_min = Some(120);
+        assert_eq!(battery_time_text(&b).unwrap(), "~2 h left");
+        b.time_left_min = Some(40);
+        assert_eq!(battery_time_text(&b).unwrap(), "~40 min left");
+        b.time_left_min = None;
+        b.time_to_full_min = Some(70);
+        assert_eq!(battery_time_text(&b).unwrap(), "~1 h 10 min to full");
+        b.time_to_full_min = None;
+        assert_eq!(battery_time_text(&b), None);
+        b.time_calculating = true;
+        assert_eq!(battery_time_text(&b).unwrap(), "calculating...");
+    }
 
     fn overlaps(a: Rect, b: Rect) -> bool {
         a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()

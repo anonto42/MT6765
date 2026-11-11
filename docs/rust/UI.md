@@ -113,6 +113,7 @@ is the app list); `Target::Nav(1)` is the Apps-panel toggle.
   signal bars left of the switch while a SIM is present; the row opens Mobile network, the switch toggles
   data); GPS (owner request 2026-11-11, map-pin icon; subtitle Off / Starting... / Stopping... / Searching... or "Searching, N satellites" / "Fix, within N m" / Failed; the row opens the GPS screen, the switch toggles the GPS and is dead while it starts or stops); Bluetooth (owner request 2026-11-10; subtitle Off / Starting... / On / Connected: <name> / N devices connected / Scanning... / Failed to start / Not available; the row opens Bluetooth, the switch toggles it); Battery (NN %) (opens Device;
   "Battery (~62%)" + "Estimated from voltage" in warning for an estimate, "Battery (unavailable)"
+  Owner request 2026-11-11: the Battery row subtitle shows "~5 h 20 min left" / "~1 h 10 min to full" (rounded to 5 min), "calculating..." for the first minutes, nothing extra when unknown; the Device battery card has a Time left / Time to full row.
   when there is no reading, the charge state for a gauge); divider; Brightness label + percent and
   the slider; Volume (owner request 2026-11-10: speaker icon, label + percent / "Muted" / "Unavailable",
   the slider and at its right a round outlined mute button, the speaker crossed out and warning-coloured

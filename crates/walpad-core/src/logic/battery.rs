@@ -3,6 +3,8 @@ use serde::Deserialize;
 use walpad_hw::battery::RawBattery;
 use walpad_proto::{Battery, BatterySource};
 
+use super::soc;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Cfg {
@@ -10,6 +12,9 @@ pub struct Cfg {
     pub critical_batt_mv: u32,
     /// Consecutive readings below critical before shutdown (decision D4: starts at 1).
     pub critical_readings: u32,
+    /// Battery capacity in mAh from the label on the battery (owner request 2026-11-11); used for the
+    /// time estimates. Unset or implausible: `charge_full` when >= 1500 mAh, else 3000.
+    pub battery_mah: Option<u32>,
 }
 impl Default for Cfg {
     fn default() -> Self {
@@ -17,6 +22,7 @@ impl Default for Cfg {
             low_batt_mv: 3550,
             critical_batt_mv: 3350,
             critical_readings: 1,
+            battery_mah: None,
         }
     }
 }
@@ -72,7 +78,35 @@ pub fn charging_percent(mv: u32, current_ua: Option<i64>, full: bool) -> u8 {
     }
 }
 
-pub fn model(raw: &RawBattery, low: bool) -> Battery {
+/// Input for the estimator from one raw reading.
+pub fn soc_input(raw: &RawBattery, cfg: &Cfg) -> soc::Input {
+    let state = effective_status(raw);
+    let s = state.as_deref().unwrap_or("").to_ascii_lowercase();
+    let full = s.starts_with("full");
+    let dir = if s.starts_with("charg") {
+        soc::Dir::Charging
+    } else if s.starts_with("dischar") {
+        soc::Dir::Discharging
+    } else {
+        soc::Dir::Idle
+    };
+    soc::Input {
+        mv: raw.mv,
+        current_ua: raw.current_ua,
+        dir,
+        full,
+        gauge: raw
+            .capacity
+            .filter(|c| (0..=100).contains(c))
+            .map(|c| c as u8),
+        r_int_ohm: soc::r_int_ohm(raw.r_int_mohm),
+        capacity_mah: soc::capacity_mah(cfg.battery_mah, raw.charge_full_uah),
+    }
+}
+
+/// The battery model. `est` is the smoothed estimator output; without it (tests, no estimator yet)
+/// the percent is the instantaneous voltage estimate.
+pub fn model(raw: &RawBattery, low: bool, est: Option<&soc::Output>) -> Battery {
     let (mut p, source) = percent(raw.capacity, raw.mv);
     let state = effective_status(raw);
     let charging = state
@@ -86,7 +120,16 @@ pub fn model(raw: &RawBattery, low: bool) -> Battery {
             p = Some(charging_percent(mv, raw.current_ua, full));
         }
     }
+    if let Some(e) = est {
+        if source == BatterySource::VoltageEstimate && e.percent.is_some() {
+            p = e.percent;
+        }
+    }
+    let e = est.copied().unwrap_or_default();
     Battery {
+        time_left_min: e.time_left_min,
+        time_to_full_min: e.time_to_full_min,
+        time_calculating: e.time_calculating,
         percent: p,
         source,
         state,
@@ -149,18 +192,18 @@ mod tests {
         let mut r = raw(Some(-1), "Discharging", Some(4336));
         r.charger_online = true;
         r.current_ua = Some(685_500);
-        let b = model(&r, false);
+        let b = model(&r, false, None);
         assert_eq!(b.state.as_deref(), Some("Charging"));
         // 4336 mV - 0.12 ohm * 685 mA = about 4254 mV -> 95 %
         assert_eq!(b.percent, Some(95));
         r.status = Some("Full".into());
-        assert_eq!(model(&r, false).percent, Some(100));
+        assert_eq!(model(&r, false, None).percent, Some(100));
         r.charger_online = false;
         r.status = Some("Charging".into());
         r.mv = Some(4400);
         r.current_ua = None;
         assert_eq!(
-            model(&r, false).percent,
+            model(&r, false, None).percent,
             Some(99),
             "never 100 % before Full"
         );
@@ -274,12 +317,32 @@ mod tests {
     }
 
     #[test]
+    fn model_uses_the_estimator_output_for_the_percent_and_times() {
+        let r = raw(Some(-1), "Discharging", Some(3920));
+        let e = soc::Output {
+            percent: Some(47),
+            time_left_min: Some(300),
+            ..Default::default()
+        };
+        let b = model(&r, false, Some(&e));
+        assert_eq!((b.percent, b.time_left_min), (Some(47), Some(300)));
+        assert_eq!(b.source, BatterySource::VoltageEstimate);
+        // a working gauge is never replaced
+        let b = model(&raw(Some(80), "Discharging", Some(3920)), false, Some(&e));
+        assert_eq!((b.percent, b.source), (Some(80), BatterySource::Gauge));
+        // charger online forces the Charging direction for the estimator
+        let mut c = raw(Some(-1), "Discharging", Some(4100));
+        c.charger_online = true;
+        assert_eq!(soc_input(&c, &Cfg::default()).dir, soc::Dir::Charging);
+    }
+
+    #[test]
     fn model_marks_source_and_temperature() {
-        let b = model(&raw(Some(-1), "Discharging", Some(3920)), false);
+        let b = model(&raw(Some(-1), "Discharging", Some(3920)), false, None);
         assert_eq!(b.source, BatterySource::VoltageEstimate);
         assert_eq!(b.percent, Some(62));
         assert_eq!(b.temp_c, Some(34.0));
-        let u = model(&RawBattery::default(), false);
+        let u = model(&RawBattery::default(), false, None);
         assert_eq!((u.percent, u.source), (None, BatterySource::Unknown));
     }
 }

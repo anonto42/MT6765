@@ -423,6 +423,9 @@ fn sample_status() -> Status {
             mv: Some(3920),
             temp_c: Some(34.0),
             low: false,
+            time_left_min: None,
+            time_to_full_min: None,
+            time_calculating: false,
         },
         screen: ScreenState::On,
         brightness: 180,
@@ -461,6 +464,22 @@ fn sample_status() -> Status {
 }
 
 #[test]
+fn battery_time_fields_are_optional_for_old_peers() {
+    // owner request 2026-11-11: an old core that does not send the time fields still parses
+    let old = r#"{"percent":62,"source":"voltage_estimate","state":"Discharging","mv":3920,"temp_c":34.0,"low":false}"#;
+    let b: Battery = serde_json::from_str(old).unwrap();
+    assert_eq!(
+        (b.time_left_min, b.time_to_full_min, b.time_calculating),
+        (None, None, false)
+    );
+    let mut n = b.clone();
+    n.time_left_min = Some(320);
+    let v = serde_json::to_value(&n).unwrap();
+    assert_eq!(v["time_left_min"], 320);
+    assert_eq!(serde_json::from_value::<Battery>(v).unwrap(), n);
+}
+
+#[test]
 fn unknown_battery_is_null() {
     let mut s = sample_status();
     s.battery = Battery {
@@ -470,6 +489,9 @@ fn unknown_battery_is_null() {
         mv: None,
         temp_c: None,
         low: false,
+        time_left_min: None,
+        time_to_full_min: None,
+        time_calculating: false,
     };
     let v = serde_json::to_value(&s).unwrap();
     assert!(v["battery"]["percent"].is_null());

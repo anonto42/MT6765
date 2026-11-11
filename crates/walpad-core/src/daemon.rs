@@ -7,7 +7,7 @@ use crate::gnss::{Gnss, GnssError};
 use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
 use crate::lock::{Lock, LockError, Unlock};
-use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
+use crate::logic::{battery, key_gestures::Action, screen_timeout as st, soc, touch_map as tm};
 use crate::modem::{MobileError, Modem};
 use crate::pkg::{Op, Pkg, PkgError};
 use crate::stats::Stats;
@@ -107,6 +107,11 @@ pub struct Daemon {
     last_pushed: Option<Status>,
     next_status: Instant,
     next_battery: Instant,
+    /// Smoothed battery percent / time estimator (docs/44-battery-soc.md), stepped every 10 s.
+    soc: soc::Estimator,
+    soc_out: soc::Output,
+    next_soc: Instant,
+    soc_saved: Option<(Instant, u8)>,
     sock_path: PathBuf,
     shadow: Option<crate::shadow_live::Live>,
     live: Option<LiveState>,
@@ -306,6 +311,14 @@ impl Daemon {
             last_pushed: None,
             next_status: now,
             next_battery: now,
+            soc: soc::Estimator::new(
+                std::fs::read_to_string(root.p(soc::PERSIST_PATH))
+                    .ok()
+                    .and_then(|t| soc::parse_persisted(&t, wall_ms() / 1000)),
+            ),
+            soc_out: soc::Output::default(),
+            next_soc: now,
+            soc_saved: None,
             started: now,
             sock_path,
             shadow: None,
@@ -340,6 +353,7 @@ impl Daemon {
         let mut fx = Vec::new();
         Brain::rotation_effects(init, &mut fx);
         d.apply(fx, true);
+        d.soc_tick(now);
         // mimeapps.list follows what is installed (app store, change app-catalogue-manager)
         let _ = d.pkg.apply_defaults();
         // a hotspot can outlive a core restart: pick up its real state
@@ -448,7 +462,36 @@ impl Daemon {
         }
     }
 
+    /// Step the battery estimator and save the shown percent (at most every 5 min when it changed).
+    fn soc_tick(&mut self, now: Instant) {
+        self.next_soc = now + BATTERY_EVERY;
+        let raw = read_battery(&self.root);
+        let inp = battery::soc_input(&raw, &self.brain.batt_cfg);
+        let ms = now.duration_since(self.started).as_millis() as u64;
+        self.soc_out = self.soc.step(ms, &inp);
+        if let Some(p) = self.soc_out.percent.filter(|_| inp.mv.is_some()) {
+            let due = self.soc_saved.is_none_or(|(t, last)| {
+                last != p && now.duration_since(t) >= Duration::from_secs(300)
+            });
+            if due {
+                self.soc_saved = Some((now, p));
+                self.soc_write();
+            }
+        }
+    }
+
+    fn soc_write(&self) {
+        if let Some(p) = self.soc.shown() {
+            let path = self.root.p(soc::PERSIST_PATH);
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = write_atomic(&path, soc::to_json(p, wall_ms() / 1000).as_bytes());
+        }
+    }
+
     fn halt(&self, cmd: &str) {
+        self.soc_write();
         if !self.real_root() {
             eprintln!("walpad-core: (test root) would run `{cmd} -f`");
             return;
@@ -1073,7 +1116,7 @@ impl Daemon {
         let bt = self.bluetooth.status();
         let ok = |b: bool| if b { "ok" } else { "unavailable" }.to_string();
         Status {
-            battery: battery::model(&raw, self.brain.guard.low()),
+            battery: battery::model(&raw, self.brain.guard.low(), Some(&self.soc_out)),
             screen: self.brain.screen.state(),
             brightness: self.brain.screen.brightness(),
             orientation: self.brain.rotation.orientation(),
@@ -1768,6 +1811,10 @@ impl Daemon {
             did = true;
         }
         let now = Instant::now();
+        if now >= self.next_soc {
+            self.soc_tick(now);
+            did = true;
+        }
         // outside live device mode the battery guard only logs (the Python daemon owns shutdown)
         if self.live.as_ref().is_none_or(|l| !l.device) && now >= self.next_battery {
             self.next_battery = now + BATTERY_EVERY;

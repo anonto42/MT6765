@@ -297,7 +297,7 @@ mod tests {
             unreachable!()
         };
         assert_eq!(s.brightness, 120);
-        assert_eq!(s.battery.percent, Some(62));
+        assert_eq!(s.battery.percent, Some(66));
 
         // a command changes state and the status event follows
         c.send("set_brightness", json!({"value": 200}));

@@ -31,6 +31,15 @@ pub struct Battery {
     pub mv: Option<u32>,
     pub temp_c: Option<f32>,
     pub low: bool,
+    /// Estimated minutes of use left while discharging (owner request 2026-11-11); None = unknown.
+    #[serde(default)]
+    pub time_left_min: Option<u32>,
+    /// Estimated minutes to full while charging; None = unknown.
+    #[serde(default)]
+    pub time_to_full_min: Option<u32>,
+    /// A time estimate is coming but there is not enough current data yet.
+    #[serde(default)]
+    pub time_calculating: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
