@@ -4,7 +4,7 @@
 # period/buffer the driver accepts; mmap=0 (plain read/write access); and ignore_dB=1:
 # pulse never touches the codec's mixer (walpad-audio owns the amp switches), volume is software.
 load-module module-native-protocol-unix auth-anonymous=1 socket=/run/pulse/native
-load-module module-alsa-sink device=hw:0,0 sink_name=walpad tsched=0 fragments=4 fragment_size=4408 rate=44100 format=s16le channels=2 mmap=0 ignore_dB=1
+load-module module-alsa-sink device=hw:0,0 sink_name=walpad tsched=0 fragments=4 fragment_size=48000 rate=44100 format=s16le channels=2 mmap=0 ignore_dB=1
 set-default-sink walpad
 # release the card after 10 s of silence (an idle PCM must not stay open)
 # no suspend-on-idle: closing and re-opening the codec PCM repeatedly hung the tablet (2026-11-11)
