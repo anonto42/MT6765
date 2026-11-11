@@ -31,3 +31,20 @@
   limit and must be resumed with SendMessage.
 - Never register binfmt_misc entries from a privileged container: the registry is host-global
   (a bad entry broke every exec on the PC until reboot).
+- `/tmp/wpd-props` is the Wi-Fi stack's property file and the (frozen) 64-bit shim reads only its
+  first 8 KB. Never append build.prop lines to it: the chip id behind them is invisible, wmt_launcher
+  never serves, no Wi-Fi/Bluetooth. Modem/GPS use `/tmp/wpd-props32`, the camera `/tmp/wpd-props64`.
+  Opening `/dev/stpbt` (Bluetooth) before wmt_launcher serves also wedges CONNSYS: Bluetooth starts
+  only once `wlan0` exists (walpad-init).
+- Never extract a tar built on the PC onto the tablet as root without `--no-same-owner`/ownership
+  forced: PC uid 1000 owned `/` and `/root`, dropbear then refused the key (no SSH). Recovery that
+  worked: read-only mtk dump, fix inodes on a copy with debugfs, `jr` replay, write back only the
+  changed blocks, read back and compare (owner approved each write).
+- The USB serial console `/dev/ttyACM0` (after boot) is a root shell of the ramdisk; the system is
+  under `/newroot`. `build/tools/ser.py 'cmd'` (run with tools/mtk/.venv/bin/python) sends one
+  command. Use it when Wi-Fi is down.
+- `find / -user 1000 -exec chown` also hits the NV partition roots (nvdata 0:1000, nvcfg/protect_f/
+  protect_s 1000:1000): exclude `/mnt/vendor` (restored from the backups once).
+- `LK Load MD: Disabled` (`cat /sys/kernel/ccci/lk_md`): the bootloader did not load the modem this
+  boot (seen after a restart via the flash tool); no software can start it, reboot normally.
+- zsh does not word-split unquoted variables: use arrays or sh -c.
