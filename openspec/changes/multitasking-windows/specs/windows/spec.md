@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Several terminals
-The core SHALL start an additional instance of an app that declares `max_instances` greater than 1 when `new_instance` (or `launch` with `args.new`) is sent, up to that limit, and SHALL list every instance window in `windows`.
+The core SHALL start an additional instance of an app that declares `max_instances` greater than 1 when `new_instance` is sent, up to that limit, and SHALL list every instance window in `windows`.
 
 #### Scenario: a second terminal
 - **WHEN** a terminal runs and `new_instance terminal` is sent

@@ -8,7 +8,7 @@ Today `launch terminal` only focuses the running `st`, and every window is maxim
 
 ## What changes
 
-- Terminal: apps.json gets `max_instances` (terminal and Kali: 6). `launch` with `args.new = true` starts one more instance; the core tracks instances by process id and window id. A shell "window bar" strip shows one tab per window of the app in front (tap = focus, x = close) and a "+" button.
+- Terminal: apps.json gets `max_instances` (terminal 6, Kali 3). `new_instance` starts one more instance; the core tracks instances by process id and window id. A shell "window bar" strip shows one tab per window of the app in front (tap = focus, x = close) and a "+" button.
 - Window layout in walpad-core (`logic`-style pure math in `walpad-proto::wm`, X side in `xbridge.rs`): modes `single` (today), `split` (two apps side by side in landscape, stacked in portrait, ratio 1/3, 1/2 or 2/3, swap sides) and `free` (floating windows, move/resize, clamped to the work area, minimum size).
 - Work area comes from the window manager's `_NET_WORKAREA` (struts of the dock, keyboard strip, mouse pad and the window bar), with the visible panel as fallback; rotation re-tiles.
 - New IPC commands: `windows`, `new_instance`, `focus_window`, `close_window`, `window_rect`, `snap`, `layout` (CONTRACTS.md). Mode and ratio persist in `/etc/walpad/shell.json` (`windows_mode`, `split_ratio`) through `set_setting`.
