@@ -1,19 +1,45 @@
 #!/bin/sh
 # walpad-gps: bring up the MediaTek GNSS stack (CONNSYS GPS) with the stock vendor pieces.
 #   walpad-gps start   load gps_drv.ko (needs wmt_drv from walpad-wifi), create the device nodes,
-#                      mount the VNDK APEX (32-bit libcurl & co for mnld), start mnld
-#   walpad-gps stop    stop mnld (the kernel module stays: never rmmod CONNSYS modules)
+#                      mount the VNDK APEX (32-bit libcurl & co for mnld), start mnld, then
+#                      walpad-gnss (takes the Android GNSS HAL's place on mnld's sockets and
+#                      publishes /run/walpad/gnss.json and the NMEA pty /run/walpad/nmea)
+#   walpad-gps stop    stop walpad-gnss (it tells mnld to stop), then mnld (the kernel module
+#                      stays: never rmmod CONNSYS modules)
 #   walpad-gps status
-# Positions are not exported yet: mnld talks to the GNSS HAL over its sockets (mtk_hal2mnl /
-# mtk_mnl2hal); a client for that is the next step.  Nothing here writes to a partition.
-SYS=/system/system
+# Called by walpad-core (GPS switch) with a timeout; prints key=value lines (state=on|off|failed,
+# reason, mnld, gnssd) and exits 0 when the requested state was reached.  Protocol and evidence:
+# docs/43-gnss.md.  Nothing here writes to a partition.
+# Test hook: WALPAD_GPS_ROOT prefixes every file path; WALPAD_GPS_MNLD_PATTERN overrides the
+# pgrep pattern that finds mnld.
+R=${WALPAD_GPS_ROOT:-}
+SYS=$R/system/system
 LINKER=$SYS/bin/bootstrap/linker
 SHIM=/usr/local/lib/libwpdprops32.so
-RUN=/run/walpad
+RUN=$R/run/walpad
 LDIR=$RUN/android-bin
 APEX=$RUN/apex/vndk
-say() { echo "[gps] $*"; echo "WALPAD-GPS: $*" > /dev/kmsg 2>/dev/null; }
-running() { pgrep -f "^$LDIR/mnld /vendor/bin/mnld" >/dev/null 2>&1; }
+GNSS_PID=$RUN/gnss.pid
+GNSS_JSON=$RUN/gnss.json
+LOG=$R/var/log/walpad-mnld.log
+GLOG=$R/var/log/walpad-gnss.log
+MPAT=${WALPAD_GPS_MNLD_PATTERN:-^$LDIR/mnld /vendor/bin/mnld}
+say() { echo "[gps] $*"; echo "WALPAD-GPS: $*" > $R/dev/kmsg 2>/dev/null; }
+fail() { say "$*"; echo state=failed; echo "reason=$*"; exit 1; }
+running() { pgrep -f "$MPAT" >/dev/null 2>&1; }
+gnss_alive() {
+  p=$(cat "$GNSS_PID" 2>/dev/null) || return 1
+  [ -n "$p" ] && kill -0 "$p" 2>/dev/null || return 1
+  case $(cat "$R/proc/$p/comm" 2>/dev/null) in walpad-gnss*|"") return 0;; *) return 1;; esac
+}
+stop_gnss() {
+  if gnss_alive; then
+    p=$(cat "$GNSS_PID"); kill "$p" 2>/dev/null     # SIGTERM: it sends stop to mnld and exits
+    i=0; while kill -0 "$p" 2>/dev/null && [ $i -lt 30 ]; do sleep 0.1 2>/dev/null || sleep 1; i=$((i+1)); done
+    kill -9 "$p" 2>/dev/null
+  fi
+  rm -f "$GNSS_PID"
+}
 
 mount_vndk() {
   mountpoint -q $APEX && return 0
@@ -24,29 +50,47 @@ mount_vndk() {
 
 nodes() {
   for c in stpgps gpsemi gpsfwlog; do
-    n=$(ls /sys/class/$c 2>/dev/null | head -1); [ -n "$n" ] || continue
-    d=$(cat /sys/class/$c/$n/dev) || continue
-    [ -e /dev/$n ] || mknod /dev/$n c "${d%%:*}" "${d##*:}"
+    n=$(ls $R/sys/class/$c 2>/dev/null | head -1); [ -n "$n" ] || continue
+    d=$(cat $R/sys/class/$c/$n/dev) || continue
+    [ -e $R/dev/$n ] || mknod $R/dev/$n c "${d%%:*}" "${d##*:}"
   done
 }
 
+state_json() { sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' "$GNSS_JSON" 2>/dev/null | head -n 1; }
+
 case ${1:-status} in
   start)
-    [ -x "$LINKER" ] || { say "bootstrap linker missing: /system not mounted"; exit 1; }
-    grep -q "^wmt_drv " /proc/modules || { say "wmt_drv not loaded (Wi-Fi stack down)"; exit 1; }
-    grep -q "^gps_drv " /proc/modules || insmod /vendor/lib/modules/gps_drv.ko || { say "cannot load gps_drv"; exit 1; }
+    [ -x "$LINKER" ] || fail "bootstrap linker missing: /system not mounted"
+    grep -q "^wmt_drv " $R/proc/modules || fail "turn Wi-Fi on first: the GPS shares its radio chip (wmt_drv not loaded)"
+    grep -q "^gps_drv " $R/proc/modules || insmod /vendor/lib/modules/gps_drv.ko || fail "cannot load gps_drv"
     nodes
-    mount_vndk || { say "cannot mount the VNDK apex"; exit 1; }
-    mkdir -p /data/vendor/gps /dev/socket $LDIR
+    mount_vndk || fail "cannot mount the VNDK apex"
+    mkdir -p $R/data/vendor/gps $R/dev/socket $LDIR "${LOG%/*}"
     ln -sfn "$LINKER" "$LDIR/mnld"
     running || ( export LD_LIBRARY_PATH=$SYS/lib/bootstrap:/vendor/lib:$APEX/lib:$SYS/lib LD_PRELOAD=$SHIM
-      setsid "$LDIR/mnld" /vendor/bin/mnld >> /var/log/walpad-mnld.log 2>&1 < /dev/null & )
-    sleep 2; running && say "mnld running" || { say "mnld did not start"; exit 1; }
-    ;;
+      setsid "$LDIR/mnld" /vendor/bin/mnld >> "$LOG" 2>&1 < /dev/null & )
+    sleep 2; running || fail "mnld did not start"
+    say "mnld running"
+    command -v walpad-gnss >/dev/null 2>&1 || fail "walpad-gnss is not installed"
+    if ! gnss_alive; then
+      rm -f "$GNSS_JSON"
+      setsid walpad-gnss >> "$GLOG" 2>&1 < /dev/null &
+      echo $! > "$GNSS_PID"
+      i=0; while [ ! -s "$GNSS_JSON" ] && [ $i -lt 30 ]; do sleep 0.2 2>/dev/null || sleep 1; i=$((i+1)); done
+      gnss_alive || fail "walpad-gnss did not start (see /var/log/walpad-gnss.log)"
+    fi
+    say "walpad-gnss running"
+    echo state=on ;;
   stop)
-    for p in $(pgrep -f "^$LDIR/mnld /vendor/bin/mnld"); do kill "$p"; done; say "mnld stopped" ;;
+    stop_gnss
+    for p in $(pgrep -f "$MPAT"); do kill "$p"; done
+    say "mnld stopped"; echo state=off ;;
   status)
-    printf 'gps_drv: %s\n' "$(grep -q '^gps_drv ' /proc/modules && echo loaded || echo absent)"
-    printf 'mnld: %s\n' "$(running && echo running || echo stopped)" ;;
+    printf 'mnld=%s\n' "$(running && echo running || echo stopped)"
+    printf 'gnssd=%s\n' "$(gnss_alive && echo running || echo stopped)"
+    printf 'gps_drv=%s\n' "$(grep -q '^gps_drv ' $R/proc/modules && echo loaded || echo absent)"
+    if running && gnss_alive; then
+      echo state=on; s=$(state_json); [ -n "$s" ] && echo "fix_state=$s"
+    else echo state=off; fi ;;
   *) echo "usage: $0 start|stop|status" >&2; exit 2 ;;
 esac

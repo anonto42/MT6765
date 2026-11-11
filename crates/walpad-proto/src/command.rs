@@ -17,6 +17,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "wifi_enable",
     "hotspot",
     "hotspot_config",
+    "gps",
     "mobile_radio",
     "mobile_data",
     "mobile_apn",
@@ -235,6 +236,11 @@ pub enum Command {
         ssid: Option<String>,
         #[serde(default)]
         secret: Option<Secret>,
+    },
+    /// GPS on/off (owner request 2026-11-11): runs /usr/local/sbin/walpad-gps (mnld + walpad-gnss).
+    /// Persisted in /var/lib/walpad/gps-enabled.
+    Gps {
+        on: bool,
     },
     /// Mobile radio on/off (owner request 2026-11-10): AT+CFUN=1/0 over the modem's AT channel;
     /// off is the airplane mode. Persisted in /var/lib/walpad/mobile-radio.

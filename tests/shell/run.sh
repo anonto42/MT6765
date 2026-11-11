@@ -852,6 +852,10 @@ case $MEDIAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 CAOUT=$(sh tests/shell/callaudio.sh); echo "$CAOUT"
 case $CAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 
+# --- walpad-gps (owner request 2026-11-11): fake root, fake linker and daemon
+GPSOUT=$(sh tests/shell/gps.sh); echo "$GPSOUT"
+case $GPSOUT in *FAIL*) FAIL=$((FAIL+1));; esac
+
 # --- property files: the Wi-Fi stack's /tmp/wpd-props (8 KB reader) must never receive build props
 for f in walpad-modem walpad-gps walpad-camera; do
   if sed 's/#.*$//' "$S/$f" | grep -q -E 'wpd-props([^0-9A-Za-z]|$)'; then

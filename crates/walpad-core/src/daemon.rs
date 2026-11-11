@@ -3,6 +3,7 @@
 use crate::apps::{terminate_pid, Apps, Exit, LaunchError};
 use crate::bluetooth::{Bluetooth, BluetoothError};
 use crate::brain::{Brain, Effect};
+use crate::gnss::{Gnss, GnssError};
 use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
 use crate::lock::{Lock, LockError, Unlock};
@@ -109,6 +110,7 @@ pub struct Daemon {
     apps: Apps,
     wifi: Wifi,
     hotspot: Hotspot,
+    gnss: Gnss,
     bluetooth: Bluetooth,
     pkg: Pkg,
     vpn: Vpn,
@@ -219,6 +221,16 @@ fn pkg_err(e: PkgError) -> (ErrorCode, String) {
     }
 }
 
+fn gnss_err(e: GnssError) -> (ErrorCode, String) {
+    match e {
+        GnssError::Busy => (
+            ErrorCode::Busy,
+            "the GPS is starting or stopping".into(),
+        ),
+        GnssError::Failed(m) => (ErrorCode::Internal, m),
+    }
+}
+
 fn hotspot_err(e: HotspotError) -> (ErrorCode, String) {
     match e {
         HotspotError::Busy => (
@@ -296,6 +308,7 @@ impl Daemon {
             apps,
             wifi: Wifi::new(&root),
             hotspot: Hotspot::new(&root),
+            gnss: Gnss::new(&root),
             bluetooth: Bluetooth::new(&root),
             pkg: Pkg::new(&root),
             vpn: Vpn::new(&root),
@@ -322,6 +335,8 @@ impl Daemon {
         let _ = d.pkg.apply_defaults();
         // a hotspot can outlive a core restart: pick up its real state
         d.hotspot.probe(now);
+        // GPS (owner request 2026-11-11): a switched-on GPS comes up again after a boot
+        d.gnss.probe(now);
         // VPN: pick up a running tunnel, apply the stored DNS and proxy (owner request 2026-11-10)
         d.vpn.startup(now);
         let px = d.vpn.proxy().map(str::to_string);
@@ -590,6 +605,10 @@ impl Daemon {
         self.publish(Topic::Wifi, "wifi", data);
     }
 
+    /// Test hook: shorter GPS script timeouts.
+    pub fn gnss_mut(&mut self) -> &mut Gnss {
+        &mut self.gnss
+    }
     /// Test hook: shorter hotspot script timeouts.
     pub fn hotspot_mut(&mut self) -> &mut Hotspot {
         &mut self.hotspot
@@ -1035,6 +1054,7 @@ impl Daemon {
             vpn: self.vpn.status().clone(),
             mobile: self.modem.status().clone(),
             phone: self.modem.phone_status(Instant::now()),
+            gps: self.gnss.status().clone(),
             bluetooth: bt.clone(),
             audio: self.volume.status(),
             lock: self.lock.status(wall_ms()),
@@ -1101,6 +1121,14 @@ impl Daemon {
             _ => return,
         };
         self.publish(Topic::Wifi, "wifi", data);
+    }
+
+    /// `gps` event on the status topic with the current GPS status (owner request 2026-11-11).
+    /// The position is private: it goes only to subscribed clients, never to a log.
+    fn publish_gps(&mut self) {
+        if let Ok(v) = serde_json::to_value(self.gnss.status()) {
+            self.publish(Topic::Status, "gps", v);
+        }
     }
 
     fn write_status_json(&self, s: &Status) {
@@ -1243,6 +1271,11 @@ impl Daemon {
                     self.publish_hotspot();
                 }
                 Ok(reply)
+            }
+            Command::Gps { on } => {
+                let st = self.gnss.set_on(on, Instant::now()).map_err(gnss_err)?;
+                self.publish_gps();
+                Ok(json!({"enabled": on, "state": st}))
             }
             Command::Vpn { on } => {
                 let st = self.vpn.set_on(on, Instant::now()).map_err(vpn_err)?;
@@ -1655,6 +1688,10 @@ impl Daemon {
         }
         if self.hotspot.tick(Instant::now()) {
             self.publish_hotspot();
+            did = true;
+        }
+        if self.gnss.tick(Instant::now()) {
+            self.publish_gps();
             did = true;
         }
         did |= self.bluetooth.tick(Instant::now());

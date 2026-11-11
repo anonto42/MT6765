@@ -191,6 +191,34 @@ fn wifi_enable_and_hotspot_commands() {
 }
 
 #[test]
+fn gps_command() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"gps","args":{"on":true}}"#)
+            .unwrap()
+            .1,
+        Command::Gps { on: true }
+    );
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"gps"}"#,
+        r#"{"v":1,"id":1,"cmd":"gps","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"gps","args":{"on":1}}"#,
+    ] {
+        assert_eq!(code(req(bad)), ErrorCode::InvalidArgs, "{bad}");
+    }
+}
+
+#[test]
+fn gps_status_defaults_and_roundtrip() {
+    let g = GpsStatus::default();
+    assert!(!g.enabled && g.state == GpsState::Off && g.lat.is_none());
+    let j = serde_json::to_string(&g).unwrap();
+    assert_eq!(serde_json::from_str::<GpsStatus>(&j).unwrap(), g);
+    // an old status without the field still decodes
+    let g: GpsStatus = serde_json::from_str("{}").unwrap();
+    assert_eq!(g, GpsStatus::default());
+}
+
+#[test]
 fn hotspot_config_is_validated_and_redacted() {
     let (_, c) = req(
         r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"WalPad Café","secret":"hunter2hunter2"}}"#,
@@ -378,6 +406,7 @@ fn sample_status() -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         phone: Default::default(),
+        gps: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),

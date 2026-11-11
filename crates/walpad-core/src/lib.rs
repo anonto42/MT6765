@@ -6,6 +6,7 @@ pub mod bluetooth;
 pub mod brain;
 pub mod daemon;
 pub mod fake;
+pub mod gnss;
 pub mod hotspot;
 pub mod inputs;
 pub mod lock;

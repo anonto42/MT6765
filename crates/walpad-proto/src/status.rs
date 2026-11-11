@@ -88,6 +88,47 @@ pub struct HotspotStatus {
     pub exclusive: bool,
 }
 
+/// GPS receiver state (owner request 2026-11-11).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpsState {
+    /// Switched off or not running.
+    #[default]
+    Off,
+    /// `walpad-gps start`/`stop` is running.
+    Starting,
+    /// `walpad-gps stop` is running.
+    Stopping,
+    /// Running, no position yet (a cold start can take minutes under open sky).
+    Searching,
+    /// A recent position.
+    Fix,
+    /// The start failed (see `reason`).
+    Failed,
+}
+
+/// GPS status. The position is private: it is shown to the owner and never logged. Coordinates are
+/// rounded to 5 decimals (about a metre) and the accuracy to whole metres, for display only.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpsStatus {
+    /// The owner's switch (/var/lib/walpad/gps-enabled; missing = off).
+    pub enabled: bool,
+    pub state: GpsState,
+    /// Why it failed or cannot start (e.g. the Wi-Fi stack is down).
+    pub reason: Option<String>,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+    pub alt_m: Option<i32>,
+    pub accuracy_m: Option<u32>,
+    pub satellites_used: Option<u32>,
+    pub satellites_view: Option<u32>,
+    /// Seconds since the last position (None = none yet).
+    pub age_s: Option<u32>,
+    /// Signal-to-noise of the satellites in view (dB-Hz, 0 = not tracked), strongest first, at most 16.
+    pub signals: Vec<u8>,
+}
+
 /// Bluetooth controller state (owner request 2026-11-10).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -382,6 +423,9 @@ pub struct Status {
     pub hotspot: HotspotStatus,
     #[serde(default)]
     pub mobile: MobileStatus,
+    /// GPS switch and position (owner request 2026-11-11).
+    #[serde(default)]
+    pub gps: GpsStatus,
     #[serde(default)]
     pub phone: PhoneStatus,
     #[serde(default)]
