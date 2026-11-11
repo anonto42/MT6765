@@ -53,3 +53,7 @@
   fail with "Unknown field period_time", so PulseAudio's sink never loaded (log: "Failed to parse module
   arguments", `mixer_reset` is no alsa-sink argument either) and Firefox had no output. dmix fails too (no
   SysV IPC). Fix: sink on `device=hw:0,0` with rate/format/fragments in system.pa; plain plug in asound.conf.
+- Panel colours (2026-11-11): /dev/fb0 reads a pixel's bytes as R,G,B (not B,G,R): solid red written as BGRA
+  showed blue, blue showed red, YouTube's red logo looked purple. fbmirror swaps the R/B bytes (PX macro).
+  Anything else drawing straight to fb0 (padui, splash) needs the same order. Test: write solid colours to
+  /dev/fb0 with fbmirror stopped and pan "0,0".
