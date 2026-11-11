@@ -11,6 +11,7 @@
 pub mod at;
 pub mod parse;
 
+use crate::phone::{Gate, Phone, PhoneKind};
 use at::{AtCmd, AtError, Done, Final, Job, Outcome, Recv, Worker};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -71,6 +72,8 @@ pub enum JobKind {
     },
     Radio(bool),
     Pin,
+    /// Calls and messages (owner request 2026-11-11): the phone module builds and digests these.
+    Phone(PhoneKind),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +133,8 @@ pub struct Modem {
     iccid: Option<String>,
     notices: Vec<Value>,
     t: Timing,
+    /// Voice calls and text messages share this module's AT worker (one opener per channel).
+    phone: Phone,
 }
 
 /// One `key=value` line of the script's output.
@@ -179,6 +184,7 @@ impl Modem {
             iccid: None,
             notices: Vec::new(),
             t: Timing::default(),
+            phone: Phone::new(root),
         };
         m.radio_pref = std::fs::read_to_string(&m.radio_file)
             .map(|s| s.trim() != "0")
@@ -198,7 +204,41 @@ impl Modem {
 
     /// Events for the `notice` topic (results of radio / PIN / data requests).
     pub fn take_notices(&mut self) -> Vec<Value> {
-        std::mem::take(&mut self.notices)
+        let mut v = std::mem::take(&mut self.notices);
+        v.extend(self.phone.take_notices());
+        v
+    }
+
+    /// The phone (calls, messages, contacts) living on this modem's AT worker.
+    pub fn phone(&self) -> &Phone {
+        &self.phone
+    }
+
+    pub fn phone_mut(&mut self) -> &mut Phone {
+        &mut self.phone
+    }
+
+    /// What the phone needs to know about the line.
+    fn gate(&self) -> Gate {
+        Gate {
+            ready: self.st.modem == ModemState::Ready,
+            radio_on: self.st.radio_on == Some(true),
+            sim_ready: self.st.sim == SimState::Ready,
+            registered: matches!(self.st.registration, MobileReg::Home | MobileReg::Roaming),
+        }
+    }
+
+    /// Run a phone command against the current line state, then let the worker start on it.
+    pub fn phone_op<R>(&mut self, now: Instant, f: impl FnOnce(&mut Phone, Instant) -> R) -> R {
+        self.phone.set_gate(self.gate(), now);
+        let r = f(&mut self.phone, now);
+        self.dispatch(now);
+        r
+    }
+
+    /// The phone block of the status.
+    pub fn phone_status(&self, now: Instant) -> walpad_proto::PhoneStatus {
+        self.phone.status(now)
     }
 
     fn notice(&mut self, v: Value) {
@@ -481,12 +521,17 @@ impl Modem {
         }
         let job = match self.queue.pop_front() {
             Some(j) => j,
-            None if now >= self.next_poll => {
-                // pushed back again when the result arrives; this guards against a stuck worker
-                self.next_poll = now + self.t.poll_on.max(self.t.at_cmd * 10);
-                self.poll_job()
-            }
-            None => return,
+            None => match self.phone.next_job(now) {
+                Some(j) => j,
+                // the slow network poll waits while a call is on
+                None if self.phone.in_call() => return,
+                None if now >= self.next_poll => {
+                    // pushed back again when the result arrives; this guards against a stuck worker
+                    self.next_poll = now + self.t.poll_on.max(self.t.at_cmd * 10);
+                    self.poll_job()
+                }
+                None => return,
+            },
         };
         match &self.worker {
             Some(w) if w.send(job) => self.inflight = true,
@@ -518,6 +563,7 @@ impl Modem {
                 }
             }
             JobKind::Poll { ccid, full } => self.handle_poll(&d.results, ccid, full, now),
+            JobKind::Phone(k) => self.phone.handle(k, &d.results, now),
             JobKind::Radio(on) => {
                 let ok = ok_final(d.results.first());
                 if ok {
@@ -656,8 +702,11 @@ impl Modem {
                 self.become_ready(now);
             }
         }
+        self.phone.set_gate(self.gate(), now);
+        self.phone.tick(now);
         self.dispatch(now);
-        self.st != before
+        let phone_changed = self.phone.take_dirty();
+        self.st != before || phone_changed
     }
 
     // ------------------------------------------------------------------ commands

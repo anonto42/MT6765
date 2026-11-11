@@ -274,6 +274,48 @@ pub struct MobileStatus {
     pub firmware: Option<String>,
 }
 
+/// The state of the one voice call (owner request 2026-11-11, `phone-dialer`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CallState {
+    #[default]
+    Idle,
+    /// Outgoing: dialling or ringing at the other end.
+    Dialing,
+    /// Incoming and not answered yet.
+    Ringing,
+    Active,
+    Held,
+    /// Over; `PhoneStatus::end_reason` says why. Shown for a few seconds, then `Idle`.
+    Ended,
+}
+
+/// Calls and messages. The number and name of the party are private to the shell: never logged.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PhoneStatus {
+    /// Calls and messages can be used now (modem ready, SIM ready, radio on).
+    pub available: bool,
+    /// Why not (a short sentence), when `available` is false.
+    pub reason: Option<String>,
+    pub call: CallState,
+    /// The current call came in (false = outgoing).
+    pub incoming: bool,
+    pub number: Option<String>,
+    /// The contact's name, when the number is in the contacts.
+    pub name: Option<String>,
+    /// Seconds since the call was answered (0 before).
+    pub elapsed_s: u64,
+    pub muted: bool,
+    pub speaker: bool,
+    /// Why the call ended: `hangup`, `remote`, `busy`, `no_answer`, `failed`, `rejected`, `missed`.
+    pub end_reason: Option<String>,
+    /// Unread text messages.
+    pub unread: u32,
+    /// Call audio is experimental until verified on the device (see walpad-callaudio).
+    pub audio: String,
+}
+
 /// Output volume (owner request 2026-11-10). `available` = something can change the volume (the
 /// sound server or the codec mixer); until the first probe answers it is false.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -340,6 +382,8 @@ pub struct Status {
     pub hotspot: HotspotStatus,
     #[serde(default)]
     pub mobile: MobileStatus,
+    #[serde(default)]
+    pub phone: PhoneStatus,
     #[serde(default)]
     pub bluetooth: BluetoothStatus,
     #[serde(default)]

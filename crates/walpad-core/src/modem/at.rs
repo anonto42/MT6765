@@ -17,6 +17,10 @@ pub enum Final {
     /// `+CMS ERROR: <code>`.
     Cms(String),
     NoCarrier,
+    /// Voice call results (`ATD`): the line was busy, nobody answered, no dial tone.
+    Busy,
+    NoAnswer,
+    NoDialtone,
 }
 
 /// The information lines of one command (echo, blank lines and the final result removed; URCs are
@@ -42,6 +46,10 @@ pub enum AtError {
 pub struct AtCmd {
     text: String,
     secret: bool,
+    /// Sent after the `> ` prompt (an SMS PDU for `AT+CMGS`), ended by Ctrl-Z. Always private.
+    payload: Option<String>,
+    /// Overrides the per-command deadline (an SMS submit takes longer than a status query).
+    timeout: Option<Duration>,
 }
 
 impl AtCmd {
@@ -49,16 +57,40 @@ impl AtCmd {
         AtCmd {
             text: text.into(),
             secret: false,
+            payload: None,
+            timeout: None,
         }
     }
     pub fn secret(text: String) -> AtCmd {
-        AtCmd { text, secret: true }
+        AtCmd {
+            text,
+            secret: true,
+            payload: None,
+            timeout: None,
+        }
+    }
+    /// The same command with its own deadline (a long listing).
+    pub fn timeout(mut self, d: Duration) -> AtCmd {
+        self.timeout = Some(d);
+        self
+    }
+    /// A command with a prompted payload (`AT+CMGS=<len>` + PDU): prints as `AT+CMGS=***`.
+    pub fn with_payload(text: String, payload: String, timeout: Duration) -> AtCmd {
+        AtCmd {
+            text,
+            secret: true,
+            payload: Some(payload),
+            timeout: Some(timeout),
+        }
     }
     /// What may be logged.
     pub fn display(&self) -> String {
         if self.secret {
-            let head: String = self.text.split('=').next().unwrap_or("AT").into();
-            format!("{head}=***")
+            match self.text.split_once('=') {
+                Some((head, _)) => format!("{head}=***"),
+                // `ATD<number>;`: the verb only
+                None => format!("{}***", self.text.chars().take(3).collect::<String>()),
+            }
         } else {
             self.text.clone()
         }
@@ -76,6 +108,9 @@ fn final_of(line: &str) -> Option<Final> {
         "OK" => Final::Ok,
         "ERROR" => Final::Error,
         "NO CARRIER" => Final::NoCarrier,
+        "BUSY" => Final::Busy,
+        "NO ANSWER" => Final::NoAnswer,
+        "NO DIALTONE" => Final::NoDialtone,
         l => {
             if let Some(e) = l.strip_prefix("+CME ERROR:") {
                 Final::Cme(e.trim().to_string())
@@ -173,13 +208,42 @@ impl Port {
 
     /// Send one command and collect its reply within `timeout`.
     pub fn command(&mut self, cmd: &AtCmd, timeout: Duration) -> Result<Reply, AtError> {
-        let deadline = Instant::now() + timeout;
+        let deadline = Instant::now() + cmd.timeout.unwrap_or(timeout);
         self.drain();
         let mut line = cmd.text.clone().into_bytes();
         line.push(b'\r');
         self.write_all(&line, deadline)?;
         let mut got: Vec<u8> = Vec::new();
         let mut buf = [0u8; 1024];
+        if let Some(payload) = &cmd.payload {
+            // wait for the `> ` prompt (or an early error), then send the PDU and Ctrl-Z
+            loop {
+                if let Some(r) = split_reply(&cmd.text, &String::from_utf8_lossy(&got)) {
+                    return Ok(r); // refused before the prompt
+                }
+                if got.contains(&b'>') {
+                    break;
+                }
+                match rustix::io::read(&self.fd, &mut buf) {
+                    Ok(0) => return Err(AtError::Io("channel closed".into())),
+                    Ok(n) => {
+                        got.extend_from_slice(&buf[..n]);
+                        continue;
+                    }
+                    Err(rustix::io::Errno::AGAIN) | Err(rustix::io::Errno::INTR) => {}
+                    Err(e) => return Err(AtError::Io(e.to_string())),
+                }
+                if Instant::now() >= deadline {
+                    let _ = self.write_all(&[0x1B], Instant::now() + Duration::from_millis(500));
+                    return Err(AtError::Timeout);
+                }
+                self.wait(rustix::event::PollFlags::IN, deadline)?;
+            }
+            got.clear();
+            let mut body = payload.clone().into_bytes();
+            body.push(0x1A);
+            self.write_all(&body, deadline)?;
+        }
         loop {
             match rustix::io::read(&self.fd, &mut buf) {
                 Ok(0) => return Err(AtError::Io("channel closed".into())),

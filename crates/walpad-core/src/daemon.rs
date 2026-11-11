@@ -1034,6 +1034,7 @@ impl Daemon {
             hotspot: self.hotspot.status().clone(),
             vpn: self.vpn.status().clone(),
             mobile: self.modem.status().clone(),
+            phone: self.modem.phone_status(Instant::now()),
             bluetooth: bt.clone(),
             audio: self.volume.status(),
             lock: self.lock.status(wall_ms()),
@@ -1295,6 +1296,38 @@ impl Daemon {
             Command::BluetoothConfirm { address, accept } => {
                 self.bluetooth.confirm(&address, accept).map_err(bluetooth_err)
             }
+            // phone (owner request 2026-11-11): numbers and texts never reach a log
+            Command::PhoneDial { number } => self
+                .modem
+                .phone_op(Instant::now(), |p, n| p.dial(number.expose(), n))
+                .map_err(mobile_err),
+            Command::PhoneAnswer => self.modem.phone_op(Instant::now(), |p, n| p.answer(n)).map_err(mobile_err),
+            Command::PhoneHangup => self.modem.phone_op(Instant::now(), |p, n| p.hangup(n)).map_err(mobile_err),
+            Command::PhoneDtmf { digit } => {
+                let c = digit.chars().next().unwrap_or(' ');
+                self.modem.phone_op(Instant::now(), |p, n| p.dtmf(c, n)).map_err(mobile_err)
+            }
+            Command::PhoneMute { on } => self.modem.phone_op(Instant::now(), |p, n| p.mute(on, n)).map_err(mobile_err),
+            Command::PhoneSpeaker { on } => self.modem.phone_op(Instant::now(), |p, n| p.speaker(on, n)).map_err(mobile_err),
+            Command::SmsSend { number, text } => self
+                .modem
+                .phone_op(Instant::now(), |p, _| p.sms_send(number.expose(), text.expose()))
+                .map_err(mobile_err),
+            Command::SmsList => Ok(self.modem.phone().sms_list()),
+            Command::SmsDelete { id } => self.modem.phone_mut().sms_delete(id).map_err(mobile_err),
+            Command::SmsRead { number } => self.modem.phone_mut().sms_read(number.expose()).map_err(mobile_err),
+            Command::ContactList => Ok(self.modem.phone().contact_list()),
+            Command::ContactSave { id, name, numbers } => {
+                let nums = numbers.iter().map(|n| n.expose().to_string()).collect();
+                self.modem.phone_mut().contact_save(id.as_deref(), &name, nums).map_err(mobile_err)
+            }
+            Command::ContactDelete { id } => self.modem.phone_mut().contact_delete(&id).map_err(mobile_err),
+            Command::ContactImport { path } => {
+                let p = self.root.p(&path);
+                self.modem.phone_mut().contact_import(&p).map_err(mobile_err)
+            }
+            Command::CallLog => Ok(self.modem.phone().call_log()),
+            Command::CallLogClear => self.modem.phone_mut().call_log_clear().map_err(mobile_err),
             Command::PkgCatalogue => Ok(self.pkg.catalogue_json()),
             Command::PkgInstall { id } => {
                 self.pkg.start(Op::Install, &id, Instant::now()).map_err(pkg_err)?;

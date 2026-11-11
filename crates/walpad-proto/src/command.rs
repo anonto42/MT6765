@@ -58,6 +58,22 @@ pub const COMMAND_NAMES: &[&str] = &[
     "pkg_install",
     "pkg_remove",
     "default_app",
+    "phone_dial",
+    "phone_answer",
+    "phone_hangup",
+    "phone_dtmf",
+    "phone_mute",
+    "phone_speaker",
+    "sms_send",
+    "sms_list",
+    "sms_delete",
+    "sms_read",
+    "contact_list",
+    "contact_save",
+    "contact_delete",
+    "contact_import",
+    "call_log",
+    "call_log_clear",
 ];
 
 /// Commands without arguments.
@@ -76,6 +92,12 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "pkg_catalogue",
     "vpn_confirm",
     "vpn_files",
+    "phone_answer",
+    "phone_hangup",
+    "sms_list",
+    "contact_list",
+    "call_log",
+    "call_log_clear",
 ];
 
 /// Roles of the default apps (`default_app`; /etc/walpad/defaults.json).
@@ -381,6 +403,62 @@ pub enum Command {
         role: String,
         app: String,
     },
+    /// Place a voice call (owner request 2026-11-11, `phone-dialer`): `ATD<number>;` over the modem's
+    /// AT channel. `number` is 1-32 characters of `0-9 + * # ,` (emergency numbers included).
+    /// Private: never logged.
+    PhoneDial {
+        number: Secret,
+    },
+    /// Answer the ringing call (`ATA`).
+    PhoneAnswer,
+    /// End the call, or reject the ringing one (`AT+CHUP`).
+    PhoneHangup,
+    /// Send one DTMF tone during a call (`AT+VTS`): `0-9 * #`.
+    PhoneDtmf {
+        digit: String,
+    },
+    /// Mute the microphone during a call (`AT+CMUT`).
+    PhoneMute {
+        on: bool,
+    },
+    /// Speaker (true) or earpiece route of the call audio (experimental: `walpad-callaudio`).
+    PhoneSpeaker {
+        on: bool,
+    },
+    /// Send a text message (SMS, PDU mode, GSM 7-bit or UCS2 for Bangla). Private: never logged.
+    SmsSend {
+        number: Secret,
+        text: Secret,
+    },
+    /// All stored messages (oldest first), answers `{messages: [...], unread}`.
+    SmsList,
+    /// Delete one stored message by id.
+    SmsDelete {
+        id: u64,
+    },
+    /// Mark every message of the conversation with `number` as read.
+    SmsRead {
+        number: Secret,
+    },
+    /// All contacts, sorted by name.
+    ContactList,
+    /// Create (no `id`) or change a contact: a name and 1-5 numbers. Answers `{id}`.
+    ContactSave {
+        #[serde(default)]
+        id: Option<String>,
+        name: String,
+        numbers: Vec<Secret>,
+    },
+    ContactDelete {
+        id: String,
+    },
+    /// Import a vCard (.vcf) file from a user folder or removable media.
+    ContactImport {
+        path: String,
+    },
+    /// The call log (oldest first).
+    CallLog,
+    CallLogClear,
 }
 
 /// Hardware-key events published on the `input` topic for the shell (never touch).
@@ -571,6 +649,42 @@ impl Command {
                     Ok(())
                 }
             }
+            Command::PhoneDial { number } if !valid_dial_number(number.expose()) => {
+                Err("number must be 1-32 characters of 0-9 + * # ,".into())
+            }
+            Command::PhoneDtmf { digit } if !valid_dtmf(digit) => {
+                Err("digit must be one of 0-9 * #".into())
+            }
+            Command::SmsSend { number, text } => {
+                if !valid_sms_number(number.expose()) {
+                    Err("number must be 3-20 digits, optionally starting with +".into())
+                } else if !valid_sms_text(text.expose()) {
+                    Err("text must be 1-1000 characters without control characters".into())
+                } else {
+                    Ok(())
+                }
+            }
+            Command::SmsRead { number } if !valid_sms_number(number.expose()) => {
+                Err("number must be 3-20 digits, optionally starting with +".into())
+            }
+            Command::ContactSave { id, name, numbers } => {
+                if id.as_deref().is_some_and(|i| !valid_store_id(i)) {
+                    Err("id is not valid".into())
+                } else if !valid_contact_name(name) {
+                    Err("name must be 1-64 characters without control characters".into())
+                } else if numbers.is_empty()
+                    || numbers.len() > 5
+                    || numbers.iter().any(|n| !valid_sms_number(n.expose()))
+                {
+                    Err("give 1-5 numbers of 3-20 digits, optionally starting with +".into())
+                } else {
+                    Ok(())
+                }
+            }
+            Command::ContactDelete { id } if !valid_store_id(id) => Err("id is not valid".into()),
+            Command::ContactImport { path } if !valid_vcard_path(path) => {
+                Err("path must be a .vcf file in a user folder".into())
+            }
             Command::SetSetting { key, value } => validate_setting(key, value),
             Command::LockSet {
                 kind,
@@ -702,6 +816,53 @@ pub fn valid_apn(s: &str) -> bool {
     (1..=62).contains(&s.len())
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+/// A number to dial: 1-32 of `0-9 + * # ,` (a `,` is a pause). Nothing else reaches the modem.
+pub fn valid_dial_number(s: &str) -> bool {
+    (1..=32).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b'+' | b'*' | b'#' | b','))
+}
+
+/// One DTMF digit: 0-9, `*` or `#`.
+pub fn valid_dtmf(s: &str) -> bool {
+    s.len() == 1
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || b == b'*' || b == b'#')
+}
+
+/// An SMS destination or a contact number: 3-20 digits, an optional leading `+`.
+pub fn valid_sms_number(s: &str) -> bool {
+    let d = s.strip_prefix('+').unwrap_or(s);
+    (3..=20).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Message text: 1-1000 characters, no control characters except line breaks.
+pub fn valid_sms_text(s: &str) -> bool {
+    let n = s.chars().count();
+    (1..=1000).contains(&n) && !s.chars().any(|c| c.is_control() && c != '\n')
+}
+
+pub fn valid_contact_name(s: &str) -> bool {
+    (1..=64).contains(&s.chars().count()) && !s.chars().any(char::is_control)
+}
+
+/// Ids of stored contacts: 1-24 of `a-z 0-9 -`.
+pub fn valid_store_id(s: &str) -> bool {
+    (1..=24).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Where `contact_import` may read from: user folders and removable media, a `.vcf` file.
+pub fn valid_vcard_path(s: &str) -> bool {
+    const ROOTS: &[&str] = &["/root/", "/home/", "/media/", "/mnt/", "/tmp/"];
+    s.len() <= 255
+        && ROOTS.iter().any(|r| s.starts_with(r))
+        && s.to_ascii_lowercase().ends_with(".vcf")
+        && !s.split('/').any(|c| c == "..")
+        && !s.chars().any(char::is_control)
 }
 
 /// SIM PIN: 4-8 ASCII digits.

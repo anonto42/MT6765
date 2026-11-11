@@ -377,6 +377,7 @@ fn sample_status() -> Status {
         },
         hotspot: Default::default(),
         mobile: Default::default(),
+        phone: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),
@@ -729,6 +730,100 @@ fn vpn_commands_are_validated() {
         assert!(req(bad).is_err(), "{bad}");
     }
     assert!(req(r#"{"v":1,"id":1,"cmd":"vpn_import","args":{"path":"/root/Downloads/wg0.conf","name":"home"}}"#).is_ok());
+}
+
+#[test]
+fn phone_commands_are_validated_and_private() {
+    for ok in [
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"01711234567"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"+8801711234567"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"999"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"*21#,12"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_answer"}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_hangup"}"#,
+        r##"{"v":1,"id":1,"cmd":"phone_dtmf","args":{"digit":"#"}}"##,
+        r#"{"v":1,"id":1,"cmd":"phone_mute","args":{"on":true}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_speaker","args":{"on":false}}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_send","args":{"number":"01711234567","text":"hi\nthere"}}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_list"}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_delete","args":{"id":7}}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_read","args":{"number":"+8801711234567"}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_list"}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_save","args":{"name":"Zara","numbers":["01711234567"]}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_save","args":{"id":"c3","name":"Zara","numbers":["01711234567"]}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_delete","args":{"id":"c3"}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_import","args":{"path":"/home/u/c.vcf"}}"#,
+        r#"{"v":1,"id":1,"cmd":"call_log"}"#,
+        r#"{"v":1,"id":1,"cmd":"call_log_clear"}"#,
+    ] {
+        assert!(req(ok).is_ok(), "{ok}");
+    }
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":""}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"017 11"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"017;ATH"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"123456789012345678901234567890123"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dial","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dtmf","args":{"digit":"A"}}"#,
+        r#"{"v":1,"id":1,"cmd":"phone_dtmf","args":{"digit":"12"}}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_send","args":{"number":"01x","text":"hi"}}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_send","args":{"number":"01711234567","text":""}}"#,
+        r#"{"v":1,"id":1,"cmd":"sms_send","args":{"number":"01711234567","text":"a\u0007"}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_save","args":{"name":"","numbers":["01711234567"]}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_save","args":{"name":"A","numbers":[]}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_save","args":{"id":"C 3","name":"A","numbers":["01711234567"]}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_import","args":{"path":"/etc/passwd"}}"#,
+        r#"{"v":1,"id":1,"cmd":"contact_import","args":{"path":"/home/../etc/a.vcf"}}"#,
+    ] {
+        assert!(req(bad).is_err(), "{bad}");
+    }
+    // numbers and texts print as *** in any Debug output (a log line can never leak them)
+    let (_, c) = req(
+        r#"{"v":1,"id":1,"cmd":"sms_send","args":{"number":"01711234567","text":"secret words"}}"#,
+    )
+    .unwrap();
+    let dbg = format!("{c:?}");
+    assert!(!dbg.contains("0171") && !dbg.contains("secret"), "{dbg}");
+    let (_, c) =
+        req(r#"{"v":1,"id":1,"cmd":"phone_dial","args":{"number":"01711234567"}}"#).unwrap();
+    assert!(!format!("{c:?}").contains("0171"));
+    // a long text is fine up to 1000 characters
+    let long = "a".repeat(1000);
+    let l = format!(
+        r#"{{"v":1,"id":1,"cmd":"sms_send","args":{{"number":"01711234567","text":"{long}"}}}}"#
+    );
+    assert!(req(&l).is_ok());
+    assert!(req(&l.replace(&long, &format!("{long}a"))).is_err());
+    // a Bangla text counts characters, not bytes
+    let bn = "আ".repeat(1000);
+    let l = format!(
+        r#"{{"v":1,"id":1,"cmd":"sms_send","args":{{"number":"01711234567","text":"{bn}"}}}}"#
+    );
+    assert!(req(&l).is_ok());
+}
+
+#[test]
+fn phone_status_defaults_idle_and_round_trips() {
+    let s: PhoneStatus = serde_json::from_str("{}").unwrap();
+    assert_eq!(s.call, CallState::Idle);
+    assert!(!s.available && s.number.is_none() && s.unread == 0);
+    let v = serde_json::to_value(PhoneStatus {
+        call: CallState::Ringing,
+        incoming: true,
+        number: Some("01711234567".into()),
+        audio: "experimental".into(),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(v["call"], "ringing");
+    assert_eq!(v["audio"], "experimental");
+    let back: PhoneStatus = serde_json::from_value(v).unwrap();
+    assert_eq!(back.call, CallState::Ringing);
+    // an old core without the block still parses as a Status
+    let mut sv = serde_json::to_value(sample_status()).unwrap();
+    sv.as_object_mut().unwrap().remove("phone");
+    let st: Status = serde_json::from_value(sv).unwrap();
+    assert_eq!(st.phone.call, CallState::Idle);
 }
 
 #[test]

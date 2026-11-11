@@ -11,19 +11,21 @@ mod status;
 
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{
-    lock_secret_rule, valid_apn, valid_app_id, valid_attempt, valid_bt_address, valid_dns_server,
-    valid_hotspot_secret, valid_hotspot_ssid, valid_lock_secret, valid_open_path, valid_proxy,
-    valid_sim_pin, valid_vpn_import_path, valid_vpn_name, BrightnessArgs, Command, KeyboardMode,
-    LaunchArgs, PowerAction, RawRequest, RotateMode, ScreenMode, ShellInput, Topic,
-    ALLOWED_SETTINGS, COMMAND_NAMES, DEFAULT_ROLES, OPEN_ROOTS,
+    lock_secret_rule, valid_apn, valid_app_id, valid_attempt, valid_bt_address, valid_contact_name,
+    valid_dial_number, valid_dns_server, valid_dtmf, valid_hotspot_secret, valid_hotspot_ssid,
+    valid_lock_secret, valid_open_path, valid_proxy, valid_sim_pin, valid_sms_number,
+    valid_sms_text, valid_store_id, valid_vcard_path, valid_vpn_import_path, valid_vpn_name,
+    BrightnessArgs, Command, KeyboardMode, LaunchArgs, PowerAction, RawRequest, RotateMode,
+    ScreenMode, ShellInput, Topic, ALLOWED_SETTINGS, COMMAND_NAMES, DEFAULT_ROLES, OPEN_ROOTS,
 };
 pub use devd::parse_devd_line;
 pub use secret::{redact_hex_ssid, Secret};
 pub use status::{
     AppState, AudioStatus, Battery, BatterySource, BluetoothController, BluetoothDevice,
-    BluetoothStatus, Hardware, HotspotInternet, HotspotState, HotspotStatus, LegacyStatus,
-    LockKind, LockStatus, MobileData, MobileReg, MobileStatus, ModemState, ScreenState, SimState,
-    Status, VpnKind, VpnProfile, VpnState, VpnStatus, WifiRadio, WifiStatus,
+    BluetoothStatus, CallState, Hardware, HotspotInternet, HotspotState, HotspotStatus,
+    LegacyStatus, LockKind, LockStatus, MobileData, MobileReg, MobileStatus, ModemState,
+    PhoneStatus, ScreenState, SimState, Status, VpnKind, VpnProfile, VpnState, VpnStatus,
+    WifiRadio, WifiStatus,
 };
 
 use serde::{Deserialize, Serialize};

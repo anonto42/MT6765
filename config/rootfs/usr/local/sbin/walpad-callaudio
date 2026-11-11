@@ -1,0 +1,105 @@
+#!/bin/sh
+# walpad-callaudio: EXPERIMENTAL voice-call audio routing (owner request 2026-11-11, `phone-dialer`).
+#
+#   walpad-callaudio start [speaker|earpiece]   route the call audio (idempotent; also switches route)
+#   walpad-callaudio stop                       back to the normal playback state
+#   walpad-callaudio status                     print the controls this script knows and their values
+#   walpad-callaudio controls                   list the codec mixer controls that may matter for calls
+#
+# SCOPE.  This script ONLY flips codec mixer controls through `amixer -c 0 cset` (every call bounded
+# by `timeout 3`; a control that does not exist is skipped, never guessed).  It never opens a PCM,
+# never runs aplay/arecord/speaker-test, never touches the modem.  The legacy mt-soc driver HANGS the
+# tablet at wrong PCM parameters, so voice PCMs (Voice_MD1_Playback, hw:0,2) are NOT used here.
+#
+# STATUS.  UNVERIFIED on the device: no call has been placed yet, and on a MediaTek phone the speech
+# path is a hardware loop between the modem (MD1) and the codec, which normally the vendor audio HAL
+# sets up with more than mixer switches (speech mode, PCM bridge, gains).  Whether flipping these
+# switches is enough is the open experiment, see docs/rust/CONTRACTS.md (phone) and
+# docs/40-tablet-feature-plan.md 4.10.  The UI marks call audio as experimental for that reason.
+#
+# Test hook: WALPAD_CALLAUDIO_ROOT prefixes /dev/snd and /run (tests/shell/callaudio.sh).
+R=${WALPAD_CALLAUDIO_ROOT:-}
+STATE=$R/run/walpad/callaudio
+CARD=0
+
+have_card() { [ -e "$R/dev/snd/controlC$CARD" ]; }
+
+# does a control exist?  (listing is cached per run)
+LIST=
+list() { [ -n "$LIST" ] || LIST=$(timeout 3 amixer -c "$CARD" controls 2>/dev/null); printf '%s\n' "$LIST"; }
+exists() { list | grep -q "name='$1'"; }
+
+# set a control when it exists; say so when it does not
+set_ctl() {
+  if exists "$1"; then
+    timeout 3 amixer -c "$CARD" -q cset name="$1" "$2" 2>/dev/null \
+      && echo "walpad-callaudio: $1 = $2" \
+      || echo "walpad-callaudio: could not set $1"
+  else
+    echo "walpad-callaudio: no control $1 (skipped)"
+  fi
+}
+
+speaker_path() {
+  # the same switches walpad-audio uses for normal playback
+  set_ctl Speaker_Amp_Switch "$1"
+  set_ctl Ext_Speaker_Amp_Switch "$1"
+  set_ctl Audio_Amp_L_Switch "$1"
+  set_ctl Audio_Amp_R_Switch "$1"
+}
+
+earpiece_path() {
+  # handset / receiver amplifier of the MT6357 codec (names as in the legacy mt-soc driver)
+  set_ctl Voice_Amp_Switch "$1"
+  set_ctl Handset_Amp_Switch "$1"
+}
+
+cmd=${1:-}
+case "$cmd" in
+  start)
+    route=${2:-earpiece}
+    case "$route" in speaker | earpiece) ;; *) echo "walpad-callaudio: route must be speaker or earpiece"; exit 2 ;; esac
+    have_card || { echo "walpad-callaudio: no sound card"; exit 0; }
+    if [ "$route" = speaker ]; then
+      earpiece_path Off
+      speaker_path On
+      set_ctl Lineout_PGAL_GAIN 8
+      set_ctl Lineout_PGAR_GAIN 8
+    else
+      speaker_path Off
+      earpiece_path On
+    fi
+    mkdir -p "$(dirname "$STATE")" 2>/dev/null
+    echo "$route" > "$STATE" 2>/dev/null
+    echo "walpad-callaudio: call audio routed to $route (experimental)"
+    ;;
+  stop)
+    have_card || { echo "walpad-callaudio: no sound card"; exit 0; }
+    earpiece_path Off
+    speaker_path On
+    rm -f "$STATE" 2>/dev/null
+    echo "walpad-callaudio: back to normal playback"
+    ;;
+  status)
+    have_card || { echo "walpad-callaudio: no sound card"; exit 0; }
+    echo "route: $(cat "$STATE" 2>/dev/null || echo none)"
+    for c in Speaker_Amp_Switch Ext_Speaker_Amp_Switch Audio_Amp_L_Switch Audio_Amp_R_Switch \
+             Voice_Amp_Switch Handset_Amp_Switch Lineout_PGAL_GAIN Lineout_PGAR_GAIN; do
+      if exists "$c"; then
+        v=$(timeout 3 amixer -c "$CARD" cget name="$c" 2>/dev/null | sed -n 's/^ *: values=//p' | head -n 1)
+        echo "$c = ${v:-?}"
+      else
+        echo "$c = (no such control)"
+      fi
+    done
+    ;;
+  controls)
+    have_card || { echo "walpad-callaudio: no sound card"; exit 0; }
+    list | grep -i -E "voice|speech|md|modem|amp|mic|handset|headset|lineout|pga" || echo "(none matched)"
+    ;;
+  *)
+    echo "usage: walpad-callaudio start [speaker|earpiece] | stop | status | controls" >&2
+    exit 2
+    ;;
+esac
+exit 0

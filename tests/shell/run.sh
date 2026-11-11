@@ -848,6 +848,10 @@ case $VPNOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 MEDIAOUT=$(sh tests/shell/media_test.sh); echo "$MEDIAOUT"
 case $MEDIAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 
+# ===== walpad-callaudio (owner request 2026-11-11, change phone-dialer): its own file =====
+CAOUT=$(sh tests/shell/callaudio.sh); echo "$CAOUT"
+case $CAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
+
 # --- property files: the Wi-Fi stack's /tmp/wpd-props (8 KB reader) must never receive build props
 for f in walpad-modem walpad-gps walpad-camera; do
   if sed 's/#.*$//' "$S/$f" | grep -q -E 'wpd-props([^0-9A-Za-z]|$)'; then

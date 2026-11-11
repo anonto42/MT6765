@@ -11,6 +11,7 @@ pub mod inputs;
 pub mod lock;
 pub mod logic;
 pub mod modem;
+pub mod phone;
 pub mod pkg;
 pub mod shadow;
 pub mod shadow_live;
