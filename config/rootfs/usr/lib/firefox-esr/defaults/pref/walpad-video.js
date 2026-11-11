@@ -8,3 +8,6 @@ pref("media.ffvpx.enabled", true);
 pref("media.hardware-video-decoding.enabled", false);
 pref("general.smoothScroll", false);
 pref("dom.min_background_timeout_value", 4000);
+// the software compositor (WebRender, SwComposite thread) was ~120 % of a core while a video played;
+// YouTube is 30 fps, so drawing the page at 60 fps only burns CPU
+pref("layout.frame_rate", 30);
