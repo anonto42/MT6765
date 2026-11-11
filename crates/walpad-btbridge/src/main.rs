@@ -1,6 +1,11 @@
 //! walpad-btbridge [--stpbt /dev/stpbt] [--vhci /dev/vhci] [--bdaddr AA:BB:CC:DD:EE:FF]
 //!                 [--ready /run/walpad/btbridge.hci] [--stats /run/walpad/btbridge.stats]
-//!                 [--open-timeout SECS]
+//!                 [--open-timeout SECS] [--init | --no-init] [--nvram FILE] [--addr-store FILE]
+//!
+//! Start-up: after /dev/stpbt is open and before hciN exists, the MediaTek vendor init sequence
+//! (BD address, radio, TX power offset, sleep timeout, reset; see `init.rs`) is sent unless
+//! `--no-init`.  The BD address is `--bdaddr`, else the nvdata record `--nvram`, else a random
+//! address kept in `--addr-store`.
 //!
 //! Opening /dev/stpbt powers the Bluetooth function on (the driver allows a single opener);
 //! closing it powers it off.  Opening /dev/vhci and asking for a primary controller creates hciN,
@@ -11,7 +16,8 @@ use std::os::fd::OwnedFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use walpad_btbridge::{controller_command, create_hci, h4, Bridge, Step};
+use walpad_btbridge::init::{self, InitConfig};
+use walpad_btbridge::{create_hci, h4, Bridge, Step};
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -27,6 +33,8 @@ struct Args {
     stpbt: String,
     vhci: String,
     bdaddr: Option<[u8; 6]>,
+    init: InitConfig,
+    do_init: bool,
     ready: String,
     stats: String,
     open_timeout: Duration,
@@ -37,6 +45,8 @@ fn parse_args() -> Result<Args, String> {
         stpbt: "/dev/stpbt".into(),
         vhci: "/dev/vhci".into(),
         bdaddr: None,
+        init: InitConfig::default(),
+        do_init: true,
         ready: "/run/walpad/btbridge.hci".into(),
         stats: "/run/walpad/btbridge.stats".into(),
         open_timeout: Duration::from_secs(15),
@@ -47,14 +57,29 @@ fn parse_args() -> Result<Args, String> {
             println!("walpad-btbridge {}", env!("CARGO_PKG_VERSION"));
             std::process::exit(0);
         }
+        match k.as_str() {
+            "--init" => {
+                a.do_init = true;
+                continue;
+            }
+            "--no-init" => {
+                a.do_init = false;
+                continue;
+            }
+            _ => {}
+        }
         let v = it.next().ok_or(format!("{k} needs a value"))?;
         match k.as_str() {
             "--stpbt" => a.stpbt = v,
             "--vhci" => a.vhci = v,
             "--bdaddr" => {
-                a.bdaddr =
-                    Some(h4::parse_bdaddr(&v).ok_or("bad --bdaddr (want AA:BB:CC:DD:EE:FF)")?)
+                // parse_bdaddr gives the wire order; the init module wants it as printed
+                let mut b = h4::parse_bdaddr(&v).ok_or("bad --bdaddr (want AA:BB:CC:DD:EE:FF)")?;
+                b.reverse();
+                a.bdaddr = Some(b);
             }
+            "--nvram" => a.init.nvram_path = if v.is_empty() { None } else { Some(v.into()) },
+            "--addr-store" => a.init.addr_store = v.into(),
             "--ready" => a.ready = v,
             "--stats" => a.stats = v,
             "--open-timeout" => {
@@ -125,15 +150,16 @@ fn main() {
         t0.elapsed().as_millis()
     ));
 
-    if let Some(addr) = args.bdaddr {
-        // MediaTek vendor command; the address itself is not logged
-        match controller_command(&ctrl, &h4::set_bdaddr_cmd(addr), Duration::from_secs(3)) {
-            Ok((0, _)) => log("BD address set (vendor command 0xfc1a)"),
-            Ok((st, _)) => log(&format!(
-                "set BD address: controller status {st:#04x}; keeping the default"
-            )),
-            Err(e) => log(&format!("set BD address failed: {e}; keeping the default")),
+    let mut init_report = None;
+    if args.do_init {
+        let mut cfg = args.init.clone();
+        cfg.override_addr = args.bdaddr;
+        match init::initialise(&ctrl, &cfg, &mut |l| log(l)) {
+            Ok(r) => init_report = Some(r),
+            Err(e) => log(&format!("vendor init skipped: {e}")),
         }
+    } else {
+        log("vendor init disabled (--no-init)");
     }
 
     let vhci = match open_timeout(&args.vhci, Duration::from_secs(5)) {
@@ -154,6 +180,11 @@ fn main() {
     write_file(&args.ready, &format!("hci{index}\n"));
 
     let mut bridge = Bridge::new(ctrl, vhci);
+    if let Some(r) = init_report {
+        bridge.stats.init_ok = r.ok.into();
+        bridge.stats.init_skipped = r.skipped.into();
+        bridge.stats.init_failed = (r.failed + r.timed_out).into();
+    }
     let mut last_stats = Instant::now();
     let code = loop {
         if STOP.load(Ordering::SeqCst) {

@@ -543,10 +543,14 @@ eq "bt:   state failed" "$(cat "$BR/run/walpad/bt-state")" failed
 
 echo "wmt_drv 1564184 2 - Live 0x0" >> "$BR/proc/modules"
 echo "BDADDR=00:11:22:33:44:55" > "$BR/etc/walpad/bluetooth.conf"
+mkdir -p "$BR/mnt/vendor/nvdata/APCFG/APRDEB"; head -c 440 /dev/zero | tr '\0' 'a' > "$BR/mnt/vendor/nvdata/APCFG/APRDEB/BT_Addr"
 OUT=$(bt start); eq "bt: start -> exit 0" "$?" 0
 eq "bt:   load order" "$(grep -E '^(insmod|mknod)' "$BT/calls" | sed "s|$BR||g" | tr '\n' ';')" \
   "insmod /vendor/lib/modules/bt_drv.ko;mknod /dev/stpbt c 192 0;insmod /usr/local/lib/modules/hci_vhci.ko;mknod /dev/vhci c 10 137;"
 grep -q -- "--bdaddr 00:11:22:33:44:55" "$BT/calls" && ok "bt:   BDADDR passed to the bridge" || bad "bt:   BDADDR passed" "$(grep bridge "$BT/calls")" "--bdaddr"
+grep -q -- "--init --addr-store $BR/var/lib/walpad/bt-addr --nvram $BR/var/lib/walpad/bt-nvram.bin" "$BT/calls" && ok "bt:   vendor init enabled with nvram copy + address store" || bad "bt:   init flags" "$(grep bridge "$BT/calls")" "--init --addr-store ... --nvram ..."
+eq "bt:   nvdata record copied (440 bytes)" "$(wc -c < "$BR/var/lib/walpad/bt-nvram.bin")" 440
+eq "bt:   copy is private" "$(stat -c %a "$BR/var/lib/walpad/bt-nvram.bin")" 600
 grep -q "^hciconfig hci0 up" "$BT/calls" && ok "bt:   hciconfig hci0 up" || bad "bt:   hciconfig hci0 up" missing present
 grep -q "^dbus-daemon --system" "$BT/calls" && ok "bt:   system bus started" || bad "bt:   system bus started" missing present
 eq "bt:   state" "$(cat "$BR/run/walpad/bt-state")" "up hci0"
@@ -569,6 +573,17 @@ rm -f "$BT/bridge-fail"; bt stop > /dev/null
 OUT=$(bt start); eq "bt: insmod hci_vhci refused -> exit 1" "$?" 1
 case $OUT in *"FAILED: insmod hci_vhci"*) ok "bt:   says why";; *) bad "bt:   insmod failure reason" "$OUT" "insmod hci_vhci";; esac
 rm -f "$BT/fail-hci_vhci"
+# no nvdata record and no copy: still starts, without --nvram (bridge falls back to a random address)
+rm -rf "$BR/mnt" "$BR/var/lib/walpad/bt-nvram.bin"; : > "$BT/calls"
+OUT=$(bt start); eq "bt: no nvdata -> start still works" "$?" 0
+case $OUT in *"no nvdata BT_Addr record"*) ok "bt:   warns about the missing record";; *) bad "bt:   missing-record warning" "$OUT" "warning";; esac
+grep -q -- "--nvram" "$BT/calls" && bad "bt:   no --nvram without a copy" present absent || ok "bt:   no --nvram without a copy"
+bt stop > /dev/null
+# INIT=0 in the conf skips the vendor sequence
+echo "INIT=0" > "$BR/etc/walpad/bluetooth.conf"; : > "$BT/calls"
+OUT=$(bt start); eq "bt: INIT=0 -> start" "$?" 0
+grep -q -- "--no-init" "$BT/calls" && ! grep -q -- "--init " "$BT/calls" && ok "bt:   INIT=0 passes --no-init" || bad "bt:   INIT=0" "$(grep bridge "$BT/calls")" "--no-init"
+bt stop > /dev/null; rm -f "$BR/etc/walpad/bluetooth.conf"
 grep -q '^rmmod wmt_drv\|^rmmod bt_drv' "$BT/calls" && bad "bt: never rmmod wmt_drv/bt_drv" present absent || ok "bt: never rmmod wmt_drv/bt_drv"
 bt stop > /dev/null
 OUT=$(bt bogus); eq "bt: unknown verb" "$?" 2

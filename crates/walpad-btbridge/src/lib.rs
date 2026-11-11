@@ -5,6 +5,7 @@
 //! Logging never contains packet payloads: only types, lengths and counters.
 
 pub mod h4;
+pub mod init;
 
 use h4::{Deframer, Next};
 use rustix::event::{poll, PollFd, PollFlags, Timespec};
@@ -26,13 +27,17 @@ pub struct Stats {
     pub rejected_host_packets: u64,
     pub hw_error_events: u64,
     pub patched_replies: u64,
+    pub init_ok: u64,
+    pub init_skipped: u64,
+    pub init_failed: u64,
 }
 
 impl Stats {
     pub fn render(&self) -> String {
         format!(
             "to_host_packets={}\nto_host_bytes={}\nto_controller_packets={}\nto_controller_bytes={}\n\
-             dropped_bytes={}\nrejected_host_packets={}\nhw_error_events={}\npatched_replies={}\n",
+             dropped_bytes={}\nrejected_host_packets={}\nhw_error_events={}\npatched_replies={}\n\
+             init_ok={}\ninit_skipped={}\ninit_failed={}\n",
             self.to_host_packets,
             self.to_host_bytes,
             self.to_controller_packets,
@@ -40,7 +45,10 @@ impl Stats {
             self.dropped_bytes,
             self.rejected_host_packets,
             self.hw_error_events,
-            self.patched_replies
+            self.patched_replies,
+            self.init_ok,
+            self.init_skipped,
+            self.init_failed
         )
     }
 }

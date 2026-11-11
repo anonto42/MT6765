@@ -8,8 +8,10 @@
 #   -> walpad-btbridge (copies packets /dev/stpbt <-> /dev/vhci, creates hciN)
 #   -> dbus-daemon (system bus, if not running) -> hciconfig hciN up -> bluetoothd
 # Every step has a timeout and logs one line ("[bt] ..."), also to /dev/kmsg as WALPAD-BT.
-# Optional /etc/walpad/bluetooth.conf: BDADDR=AA:BB:CC:DD:EE:FF (sent with the MediaTek vendor
-# command 0xfc1a before hciN is created; without it the controller keeps its own address).
+# walpad-btbridge sends the MediaTek vendor init sequence (docs/30-bluetooth.md) before hciN is
+# created.  BD address: BDADDR= in /etc/walpad/bluetooth.conf (AA:BB:CC:DD:EE:FF), else the
+# BT_Addr record of the nvdata partition (copied once, read-only, to /var/lib/walpad/bt-nvram.bin),
+# else a random address kept in /var/lib/walpad/bt-addr.  INIT=0 in the conf skips the sequence.
 #
 # WALPAD_ROOT prefixes every path (host tests run against a fake root with fake commands in PATH).
 R=${WALPAD_ROOT:-}
@@ -20,6 +22,11 @@ VHCI_KO=$R/usr/local/lib/modules/hci_vhci.ko
 STPBT=$R/dev/stpbt
 VHCI=$R/dev/vhci
 CONF=$R/etc/walpad/bluetooth.conf
+STATE=$R/var/lib/walpad
+NVRAM_COPY=$STATE/bt-nvram.bin
+ADDR_STORE=$STATE/bt-addr
+NVDATA=$R/mnt/vendor/nvdata
+BT_ADDR_FILE=$NVDATA/APCFG/APRDEB/BT_Addr
 BRIDGE_PID=$RUN/btbridge.pid
 BRIDGE_READY=$RUN/btbridge.hci
 BRIDGE_STATS=$RUN/btbridge.stats
@@ -43,6 +50,32 @@ make_node() {
   elif [ -n "$fallback" ]; then set -- $fallback; maj=$1; min=$2; say "no $sysdev, using $maj:$min"
   else return 1; fi
   rm -f "$node"; timeout 5 mknod "$node" c "$maj" "$min" && chmod 600 "$node" && say "created $node ($maj:$min)"
+}
+
+# Copy the nvdata BT_Addr record (438-byte radio/address struct) once to $NVRAM_COPY.  nvdata is
+# mounted read-only (no journal replay) when nobody else has it, and unmounted again.  Never fatal:
+# without the copy the bridge uses built-in radio defaults and a random stored address.
+stage_nvram() {
+  [ -s "$NVRAM_COPY" ] && return 0
+  mounted=0
+  if [ ! -f "$BT_ADDR_FILE" ] && [ -z "$R" ]; then
+    part=""
+    for f in /sys/class/block/mmcblk0p*/uevent; do
+      [ "$(sed -n 's/^PARTNAME=//p' "$f" 2>/dev/null)" = nvdata ] && part=/dev/$(sed -n 's/^DEVNAME=//p' "$f")
+    done
+    if [ -n "$part" ] && [ -b "$part" ]; then
+      mkdir -p "$NVDATA"
+      timeout 10 mount -t ext4 -o ro,noload,nosuid,nodev "$part" "$NVDATA" 2>/dev/null && mounted=1
+    fi
+  fi
+  if [ -f "$BT_ADDR_FILE" ]; then
+    mkdir -p "$STATE"
+    if cp "$BT_ADDR_FILE" "$NVRAM_COPY.tmp" 2>/dev/null && [ "$(wc -c < "$NVRAM_COPY.tmp")" -ge 438 ]; then
+      chmod 600 "$NVRAM_COPY.tmp"; mv "$NVRAM_COPY.tmp" "$NVRAM_COPY"; say "nvdata BT_Addr record copied"
+    else rm -f "$NVRAM_COPY.tmp"; say "warning: cannot copy BT_Addr from nvdata"; fi
+  else say "warning: no nvdata BT_Addr record (random stored address, default radio settings)"; fi
+  [ $mounted = 1 ] && timeout 10 umount "$NVDATA" 2>/dev/null
+  return 0
 }
 
 # processes holding $1 open (the stpbt driver allows a single opener)
@@ -97,9 +130,18 @@ bring_up_bridge() {
   make_node "$VHCI" "$R/sys/class/misc/vhci/dev" "10 137" || fail "cannot create $VHCI"
 
   # 4. bridge: opening /dev/stpbt powers the BT function on (mtk_wcn_wmt_func_on in BT_open)
-  BDADDR=""; [ -f "$CONF" ] && BDADDR=$(sed -n 's/^BDADDR=\([0-9A-Fa-f:]\{17\}\)$/\1/p' "$CONF")
+  BDADDR=""; INIT=1
+  if [ -f "$CONF" ]; then
+    BDADDR=$(sed -n 's/^BDADDR=\([0-9A-Fa-f:]\{17\}\)$/\1/p' "$CONF")
+    [ "$(sed -n 's/^INIT=//p' "$CONF" | tail -n 1)" = 0 ] && INIT=0
+  fi
   rm -f "$BRIDGE_READY"
   set -- --stpbt "$STPBT" --vhci "$VHCI" --ready "$BRIDGE_READY" --stats "$BRIDGE_STATS" --open-timeout 15
+  if [ $INIT = 1 ]; then
+    stage_nvram
+    set -- "$@" --init --addr-store "$ADDR_STORE"
+    [ -s "$NVRAM_COPY" ] && set -- "$@" --nvram "$NVRAM_COPY"
+  else set -- "$@" --no-init; fi
   [ -n "$BDADDR" ] && set -- "$@" --bdaddr "$BDADDR"
   setsid walpad-btbridge "$@" >> "$LOG/walpad-btbridge.log" 2>&1 < /dev/null &
   echo $! > "$BRIDGE_PID"
