@@ -1,7 +1,7 @@
 #!/bin/sh
 # walpad-sound start|stop|status: the system-wide PulseAudio daemon (owner request 2026-11-10).
 # Firefox and other apps play through it (client.conf: unix:/run/pulse/native); it opens the codec
-# only through /etc/asound.conf's walpad_out (44.1 kHz S16 stereo plug) and keeps the volume in
+# on hw:0,0 with fixed 44.1 kHz S16 stereo and its own fragments and keeps the volume in
 # software (walpad-volume).  Started from walpad-init after walpad-audio; safe to run again.
 # Configuration: /etc/pulse/{daemon.conf,system.pa,client.conf}; log /run/pulse/pulseaudio.log.
 PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

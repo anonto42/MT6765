@@ -8,7 +8,7 @@
 - `speaker-test`/raw `hw:0,0` at 48 kHz or default buffers hangs the tablet (hardware watchdog
   reboots it after minutes, sometimes not at all: then hold power 15 s).
 - Sound (owner request 2026-11-10): Firefox/apps play through a system-wide PulseAudio (`walpad-sound`,
-  `/etc/pulse/*`, socket /run/pulse/native) whose only sink is `walpad_out` (asound.conf, the 44.1 kHz plug).
+  `/etc/pulse/*`, socket /run/pulse/native) whose only sink is `hw:0,0` at 44.1 kHz (system.pa).
   Never add `pulseaudio-alsa`/`alsa-plugins-pulse` (they redirect ALSA `default` into pulse: a loop). Volume is
   software (`walpad-volume`, owned by walpad-core); the codec PGA gain is only the no-pulse fallback. Idle pulse
   suspends the card after 10 s, so `aplay`/`walpad-volume test` still work then.
@@ -49,3 +49,7 @@
   boot (seen after a restart via the flash tool); no software can start it, reboot normally.
 - zsh does not word-split unquoted variables: use arrays or sh -c.
 - Mobile data link (static RE 2026-11-11, `docs/42-mobile-data-link.md`): the interface for `+EIF: <id>, ifup` is `ccmni<id%100>` (302 = ccmni2, not ccmni0) and the RIL confirms it with `AT+EIF=<id>, "ifst", "up", <type>` (quotes and spaces exactly) on `/dev/radio/pttynwcmd`. Device-verified result pending: if downlink still fails see the experiment list there.
+- No sound (YouTube silent, 2026-11-11): `period_time`/`buffer_time` inside a plug `slave {}` make alsa-lib
+  fail with "Unknown field period_time", so PulseAudio's sink never loaded (log: "Failed to parse module
+  arguments", `mixer_reset` is no alsa-sink argument either) and Firefox had no output. dmix fails too (no
+  SysV IPC). Fix: sink on `device=hw:0,0` with rate/format/fragments in system.pa; plain plug in asound.conf.
