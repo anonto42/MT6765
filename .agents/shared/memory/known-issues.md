@@ -69,3 +69,21 @@
 - ZT9101 driver in monitor mode (2026-11-12): receive needs the RCR filter command (`UMSG_OPS_MP_SET_PRX`), not just
   `iw set type monitor`; radiotap must not claim an FCS the chip does not append; `iw dev info` shows no channel
   (no get_channel op, cosmetic). Details and patch: `memory/usb-dongle-identify.md`.
+- Wi-Fi monitor mode (2026-11-12): wlan_drv_gen4m has it in source (CFG_SUPPORT_SNIFFER_RADIOTAP,
+  gated off in the stock build); scripts/build_wifi_module.sh builds a working replacement (confirmed:
+  matching vermagic/CRCs, monitor-mode functions present, loads cleanly). Two ways to actually run it
+  were tried and both are dead ends:
+  - Boot-time preload (insmod before wmt_drv/wmt_chrdev_wifi exist): safe, but wlan_drv_gen4m needs
+    those two loaded first; walpad-wifi's own insmod_once calls for them run back-to-back with no
+    usable gap to win the race from a separate script without touching CONNSYS (forbidden).
+  - Live hot-swap on an already-running chip (even with the correct `echo 0`/`echo 1` to /dev/wmtWifi
+    power-off/on, mtk_wcn_wmt_func_off/on): watchdog-reset the tablet (self-recovered, no lasting
+    damage both times, but not safe to repeat).
+  - The only way left is replacing /vendor/lib/modules/wlan_drv_gen4m.ko itself, so the stock boot
+    sequence (already correct) loads it unmodified. /vendor is dm-verity protected: a plain
+    `mount -o remount,rw` is refused ("Permission denied") even as root. Doing this for real needs
+    disabling Android verified boot (vbmeta), which is actual partition flashing (mtk.py/fastboot) and
+    carries real brick risk (not self-recovering like the above) - owner decided not to pursue this.
+  Conclusion: monitor mode is not usable on this tablet's current boot chain. Don't re-attempt the
+  boot-race or live-swap approaches; they're confirmed dead ends. Revisit only if the owner explicitly
+  wants to disable verified boot.
