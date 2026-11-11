@@ -40,3 +40,5 @@ pub mod topbar;
 pub mod volume_ui;
 pub mod vpn_screen;
 pub mod window;
+pub mod windows_ui;
+pub mod wmbar;

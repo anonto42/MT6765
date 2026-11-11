@@ -19,6 +19,7 @@ use crate::nav::Nav;
 use crate::seltools::{BarState, EditBar, EditOut};
 use crate::settings_screen::gather;
 use crate::window::{WinEvent, Window};
+use crate::wmbar::WmBar;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -41,6 +42,8 @@ pub struct Shell {
     win: Window,
     /// The system dock (None when its X connection could not be opened or died).
     dock: Option<Dock>,
+    /// The window bar: terminal tabs, free-mode title bar and grip (None when it could not open).
+    wmbar: Option<WmBar>,
     /// The system keyboard (None when its X connection could not be opened or died).
     kbd: Option<SysKeyboard>,
     /// The mouse pad (None when its X connection could not be opened or died).
@@ -127,6 +130,18 @@ impl Shell {
             Ok(d) => Some(d),
             Err(e) => {
                 eprintln!("walpad-shell: system dock disabled: {}", e.0);
+                None
+            }
+        };
+        let wmbar = match WmBar::open(
+            &sock,
+            crate::wmbar::load_apps(&opts.root),
+            opts.root.clone(),
+            (w, h),
+        ) {
+            Ok(b) => Some(b),
+            Err(e) => {
+                eprintln!("walpad-shell: window bar disabled: {}", e.0);
                 None
             }
         };
@@ -218,6 +233,7 @@ impl Shell {
         let mut shell = Shell {
             win,
             dock,
+            wmbar,
             kbd,
             pad,
             nav,
@@ -703,6 +719,9 @@ impl Shell {
             self.next_minute = Instant::now() + Duration::from_millis(to_minute);
             self.dirty |= self.app.set_wall(wall);
         }
+        self.dirty |= self
+            .app
+            .set_windows(crate::windows_ui::read_prefs(&self.root));
         self.dirty |= self.app.set_sysinfo(gather(&self.root));
         // apps installed or removed in the app store
         self.dirty |= self.app.set_catalog(load_catalog(&self.root));
@@ -748,6 +767,11 @@ impl Shell {
             if let Some(d) = &mut self.dock {
                 if let Err(e) = d.set_shell_size(w, h) {
                     eprintln!("walpad-shell: system dock: {}", e.0);
+                }
+            }
+            if let Some(b) = &mut self.wmbar {
+                if let Err(e) = b.set_shell_size(w, h, &mut self.fonts) {
+                    eprintln!("walpad-shell: window bar: {}", e.0);
                 }
             }
             if let Some(n) = &mut self.nav {
@@ -838,6 +862,15 @@ impl Shell {
                     self.send(cmds);
                 }
                 Err(e) => eprintln!("walpad-shell: system dock disabled: {}", e.0),
+            }
+        }
+        if let Some(mut b) = self.wmbar.take() {
+            match b.poll(&mut self.fonts) {
+                Ok(cmds) => {
+                    self.wmbar = Some(b);
+                    self.send(cmds);
+                }
+                Err(e) => eprintln!("walpad-shell: window bar disabled: {}", e.0),
             }
         }
         // the edge zone only exists while the bottom edge is free of keyboard, pad and dock strip
@@ -1027,6 +1060,9 @@ impl Shell {
         if let Some(d) = self.dock.as_ref().and_then(|d| d.next_deadline()) {
             wait = wait.min(d.as_millis() as u64);
         }
+        if let Some(d) = self.wmbar.as_ref().and_then(|b| b.next_deadline()) {
+            wait = wait.min(d.as_millis() as u64);
+        }
         if let Some(d) = self.nav.as_ref().and_then(|n| n.next_deadline()) {
             wait = wait.min(d.as_millis() as u64);
         }
@@ -1057,6 +1093,7 @@ impl Shell {
         let mut fds = vec![&self.win.xc.wait_fd];
         fds.extend(self.core.fd());
         fds.extend(self.dock.as_ref().map(|d| d.wait_fd()));
+        fds.extend(self.wmbar.as_ref().map(|b| b.wait_fd()));
         fds.extend(self.kbd.as_ref().map(|k| k.wait_fd()));
         fds.extend(self.pad.as_ref().map(|p| p.wait_fd()));
         fds.extend(self.nav.as_ref().map(|n| n.wait_fd()));

@@ -18,6 +18,9 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   keyboard [show|hide|toggle]
   home | back | screenshot | restart-shell
   launch <app-id>
+  new-instance <app-id>           one more window of an app that allows several (terminal)
+  windows                         list the app windows (id, app, title, geometry)
+  layout [single|split|free|33|50|67|swap]   show or set the window layout
   wifi-scan                       scan and print the networks (waits for the result)
   wifi-connect <ssid> [--open]    join a network; the passphrase is read from stdin (never argv)
   wifi-saved | wifi-disconnect | wifi-forget <id>
@@ -90,6 +93,17 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
         Some("lock-now" | "lock_now") => ("lock_now".into(), Value::Null),
         Some("restart-shell") => ("restart_shell".into(), Value::Null),
         Some("launch") => ("launch".into(), json!({"app": need(1)?})),
+        Some("new-instance") => ("new_instance".into(), json!({"app": need(1)?})),
+        Some("windows") => ("windows".into(), Value::Null),
+        Some("layout") => match a.get(1).copied() {
+            None => ("layout".into(), Value::Null),
+            Some("swap") => ("layout".into(), json!({"swap": true})),
+            Some(m @ ("single" | "split" | "free")) => ("layout".into(), json!({"mode": m})),
+            Some(r) => {
+                let n: u8 = r.parse().map_err(|_| USAGE.to_string())?;
+                ("layout".into(), json!({"ratio": n}))
+            }
+        },
         Some("wifi-saved") => ("wifi_list_saved".into(), Value::Null),
         Some("wifi-disconnect") => ("wifi_disconnect".into(), Value::Null),
         Some("wifi-forget") => {

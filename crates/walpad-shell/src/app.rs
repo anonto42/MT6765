@@ -225,6 +225,10 @@ pub enum Target {
     ClockToggle,
     /// Settings > Top bar items: one live figure on or off.
     Stat(StatItem),
+    /// Settings > Input > Windows (change multitasking-windows).
+    WindowsMode,
+    WindowsRatio,
+    WindowsSwap,
     RestartShell,
     Reboot,
     Shutdown,
@@ -286,6 +290,27 @@ pub enum Cmd {
     MediaInfo(Vec<String>),
     MediaRemember(String),
     CloseApp(String),
+    /// Window bar and Settings > Input (change multitasking-windows): one more window of an
+    /// app, focus / close / place one window by id, the layout mode.
+    NewInstance(String),
+    FocusWindow(u32),
+    CloseWindow(u32),
+    WindowRect {
+        window: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    },
+    Snap {
+        window: u32,
+        zone: &'static str,
+    },
+    Layout {
+        mode: Option<&'static str>,
+        ratio: Option<u8>,
+        swap: bool,
+    },
     SetPinned(Vec<String>),
     WifiScan,
     WifiListSaved,
@@ -448,6 +473,27 @@ impl Cmd {
                 ("media", Value::Null)
             }
             Cmd::CloseApp(id) => ("close_app", json!({"app": id})),
+            Cmd::NewInstance(id) => ("new_instance", json!({"app": id})),
+            Cmd::FocusWindow(w) => ("focus_window", json!({"window": w})),
+            Cmd::CloseWindow(w) => ("close_window", json!({"window": w})),
+            Cmd::WindowRect { window, x, y, w, h } => (
+                "window_rect",
+                json!({"window": window, "x": x, "y": y, "w": w, "h": h}),
+            ),
+            Cmd::Snap { window, zone } => ("snap", json!({"window": window, "zone": zone})),
+            Cmd::Layout { mode, ratio, swap } => {
+                let mut a = serde_json::Map::new();
+                if let Some(m) = mode {
+                    a.insert("mode".into(), json!(m));
+                }
+                if let Some(r) = ratio {
+                    a.insert("ratio".into(), json!(r));
+                }
+                if *swap {
+                    a.insert("swap".into(), json!(true));
+                }
+                ("layout", Value::Object(a))
+            }
             Cmd::SetPinned(ids) => ("set_setting", json!({"key": "pinned_apps", "value": ids})),
             Cmd::WifiScan => ("wifi_scan", Value::Null),
             Cmd::WifiListSaved => ("wifi_list_saved", Value::Null),
@@ -675,6 +721,8 @@ pub struct Model {
     pub spinner_deg: u16,
     pub devd: DevdSettings,
     pub clock_24h: bool,
+    /// Saved window layout (Settings > Input > Windows).
+    pub windows: crate::windows_ui::WindowsPrefs,
     pub sys: SysInfo,
     /// Open Settings subpage (None = the category list).
     pub settings_page: Option<Page>,
@@ -715,6 +763,7 @@ impl Model {
             spinner_deg: 0,
             devd: DevdSettings::default(),
             clock_24h: true,
+            windows: Default::default(),
             sys: SysInfo::default(),
             settings_page: None,
             mobile_info: None,
@@ -915,6 +964,13 @@ impl App {
         let changed = self.model.devd != devd || self.model.clock_24h != clock_24h;
         self.model.devd = devd;
         self.model.clock_24h = clock_24h;
+        changed
+    }
+
+    /// The saved window layout changed (the core saved it, or a tap changed it).
+    pub fn set_windows(&mut self, w: crate::windows_ui::WindowsPrefs) -> bool {
+        let changed = self.model.windows != w;
+        self.model.windows = w;
         changed
     }
 
@@ -2245,6 +2301,12 @@ impl App {
                     .map_or_else(StatsItems::default, |s| s.stats.items);
                 out.cmd(Cmd::Stats(i, !i.on(&on)))
             }
+            Target::WindowsMode | Target::WindowsRatio | Target::WindowsSwap if interactive => {
+                if let Some((p, c)) = crate::windows_ui::tap(&self.model.windows, t) {
+                    self.model.windows = p;
+                    out.cmd(c);
+                }
+            }
             Target::ClockToggle if interactive => {
                 out.cmd(Cmd::Setting("clock_24h", json!(!self.model.clock_24h)))
             }
@@ -2392,15 +2454,21 @@ impl App {
         match self.model.settings_page {
             None => Vec::new(),
             Some(Page::Sound) => volume_ui::sound_rows(&self.model),
-            Some(pg) => settings_screen::page_rows(
-                pg,
-                &settings_screen::Ctx {
-                    sys: &self.model.sys,
-                    status: &self.model.status,
-                    devd: &self.model.devd,
-                    clock_24h: self.model.clock_24h,
-                },
-            ),
+            Some(pg) => {
+                let mut rows = settings_screen::page_rows(
+                    pg,
+                    &settings_screen::Ctx {
+                        sys: &self.model.sys,
+                        status: &self.model.status,
+                        devd: &self.model.devd,
+                        clock_24h: self.model.clock_24h,
+                    },
+                );
+                if pg == Page::Input {
+                    rows.extend(crate::windows_ui::rows(&self.model.windows));
+                }
+                rows
+            }
         }
     }
 
