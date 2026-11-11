@@ -36,7 +36,7 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
       iptables-legacy wireguard-go wireguard-tools-wg openvpn"
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
-      openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji \
+      openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji font-noto font-noto-bengali font-noto-devanagari font-noto-arabic font-noto-naskh-arabic font-noto-nastaliq-urdu font-noto-tamil font-noto-telugu font-noto-gujarati font-noto-gurmukhi font-noto-kannada font-noto-malayalam font-noto-oriya font-noto-sinhala font-noto-thai font-noto-hebrew font-noto-khmer font-noto-myanmar font-noto-lao font-noto-georgian font-noto-armenian font-noto-ethiopic font-noto-cjk font-noto-symbols font-noto-math \
       python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme"
 # No-Python image: python3 (+tkinter/tk/xlib) only served the .py runtime.  xdotool was used only by
 # walpad-keys.py/walpad-devd.py (the Rust core injects keys itself over XTEST).  Kept on purpose:
