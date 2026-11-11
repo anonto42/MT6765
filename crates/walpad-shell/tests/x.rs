@@ -155,6 +155,9 @@ impl Probe {
         c.flush().unwrap();
     }
 }
+fn near(v: (u8, u8, u8), c: Color) -> bool {
+    v.0.abs_diff(c.r) <= 2 && v.1.abs_diff(c.g) <= 2 && v.2.abs_diff(c.b) <= 2
+}
 fn px(img: &[u8], w: usize, x: usize, y: usize) -> (u8, u8, u8) {
     let i = (y * w + x) * 4;
     (img[i + 2], img[i + 1], img[i]) // BGRX -> RGB
@@ -444,9 +447,11 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     let l = layout(&frame, &st, &empty);
     // wait until the tab is showing: the dropdown is gone and the Scan button's outline is drawn
     let scan = l.scan_btn.center();
+    let pg = PAGE_SURFACE.over(BG);
     wait_for("network tab", || {
         let img = probe.image(win, 800, 1280);
-        px(&img, 800, (q.panel.right() - 1) as usize, 300) == (BG.r, BG.g, BG.b)
+        // the dropdown is gone: the page surface (over the plain BG) shows there
+        near(px(&img, 800, (q.panel.right() - 1) as usize, 300), pg)
             && px(&img, 800, 700, (view_y + l.scan_btn.y) as usize) != (BG.r, BG.g, BG.b)
     });
     click(scan.0, view_y + scan.1);

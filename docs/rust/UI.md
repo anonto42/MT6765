@@ -17,6 +17,7 @@ No gradients or shadows.
 | SURFACE | black 55 % | cards, row groups (Settings, Device), buttons, fields, segmented controls, header pill, dock buttons, pad surface/buttons, keyboard keys |
 | SURFACE_STRONG | black 65 % | popovers (Apps panel, Quick Settings), sheets, dialogs, power menu, toasts, banners (+ tone 14 %), the sidebar's round Apps toggle; flattened over BG (opaque) for the dock / keyboard / mouse-pad strips |
 | SURFACE_ICON | black 30 % | icon boxes (Home grid, sidebar, Apps panel), password-sheet keys |
+| PAGE_SURFACE | black 45 % | page surface behind every full-screen page (Settings and subpages, Network, Device, Mobile, Bluetooth, VPN, Apps store, Sound ...): `Painter::page_surface`, rect `page_rect(frame.content)` (8 px side/bottom margin, flush under the header), radius 16, outline `PAGE_BORDER` (white 22 %). Drawn once into the cached background layer (`ChromeKey.page`, set for every scrolling screen), never per row; rows/cards keep their own SURFACE on top, the wallpaper art shows at the bottom and between cards |
 | PRESSED_TINT | white 12 % | pressed state, drawn over the surface fill (outline turns white) |
 | close badge | black 70 % | the Apps panel's close badge (it overlaps the icon box outline) |
 

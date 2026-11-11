@@ -2420,6 +2420,7 @@ impl App {
             h: frame.h,
             sidebar: sidebar.clone(),
             active: chrome::active_target(self.active, panel_open),
+            page: self.scrolls(),
         };
         self.chrome.paint(p, &frame, key);
         self.chrome.render_pressed(p, &sidebar, self.model.pressed);

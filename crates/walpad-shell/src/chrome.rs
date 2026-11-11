@@ -120,6 +120,8 @@ pub struct ChromeKey {
     pub h: i32,
     pub sidebar: SidebarLayout,
     pub active: Option<Target>,
+    /// Full-screen page: the page surface is part of the cached layer.
+    pub page: bool,
 }
 
 /// The wallpaper (bottom-aligned: the shell shrinks above the dock strip), the sidebar edge and its
@@ -135,6 +137,9 @@ fn render_base(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Ca
     match wall {
         Some(w) => p.cv.blit(w, 0, frame.h - w.height()),
         None => draw_coffee(p.cv, coffee_rect(frame.content), 3.0, WATERMARK),
+    }
+    if key.page {
+        p.page_surface(frame.content);
     }
     let sb = frame.sidebar;
     p.cv.rect(Rect::new(sb.right() - 1, sb.y, 1, sb.h), DIVIDER);

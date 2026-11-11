@@ -319,6 +319,13 @@ impl Painter<'_> {
         }
         self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, CARD_BORDER);
     }
+    /// The page surface of a full-screen page: `PAGE_SURFACE` over the wallpaper with a thin
+    /// outline. Drawn once, into the cached background layer (never per row).
+    pub fn page_surface(&mut self, content: Rect) {
+        let r = page_rect(content);
+        self.cv.rrect(r, RADIUS_CARD, PAGE_SURFACE);
+        self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, PAGE_BORDER);
+    }
     /// The backing of a run of list rows (Settings, Device): a card around them, so rows over the
     /// wallpaper art stay readable. The rows themselves add no fill (only the pressed tint).
     pub fn row_group(&mut self, r: Rect) {
@@ -1607,6 +1614,17 @@ impl Painter<'_> {
         }
         keys
     }
+}
+
+/// The page surface rect for a content area (frame.content): inset by `PAGE_MARGIN` at the sides
+/// and the bottom, flush with the header at the top.
+pub fn page_rect(content: Rect) -> Rect {
+    Rect::new(
+        content.x + PAGE_MARGIN,
+        content.y,
+        content.w - 2 * PAGE_MARGIN,
+        content.h - PAGE_MARGIN,
+    )
 }
 
 #[cfg(test)]

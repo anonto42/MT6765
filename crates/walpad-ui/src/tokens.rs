@@ -113,6 +113,14 @@ pub const SURFACE: Tint = Tint::new(BLACK, 55);
 /// strips, the sidebar's round Apps toggle (65 %: the white wallpaper art behind a panel must stay
 /// well below the text);
 pub const SURFACE_STRONG: Tint = Tint::new(BLACK, 65);
+/// The page surface behind every full-screen page's content (black 45 %, one blended rect drawn
+/// into the cached background layer): the wallpaper art stays visible at the edges and through
+/// the gaps between cards; rows and cards add their own `SURFACE` on top.
+pub const PAGE_SURFACE: Tint = Tint::new(BLACK, 45);
+/// Thin outline of the page surface (white 22 %, over the background).
+pub const PAGE_BORDER: Color = white(22);
+/// Margin between the page surface and the content area edge / screen bottom (px).
+pub const PAGE_MARGIN: i32 = 8;
 /// small icon boxes (Home grid, sidebar, panel icons, keys) (30 %).
 pub const SURFACE_ICON: Tint = Tint::new(BLACK, 30);
 /// Pressed state: drawn over the surface fill (white 12 %); the outline turns full white too.
@@ -213,6 +221,7 @@ mod tests {
             (140, 166, 77)
         );
         assert_eq!(PRESSED_TINT.a, 31);
+        assert_eq!(PAGE_SURFACE.a, 115);
         assert!(!SURFACE.opaque() && Tint::from(BG).opaque());
         assert_eq!(Tint::new(TEXT, 100).over(BG), TEXT);
         assert_eq!(Tint::new(TEXT, 0).over(BG), BG);
