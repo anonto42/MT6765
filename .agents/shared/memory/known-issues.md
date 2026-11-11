@@ -66,3 +66,6 @@
   `shift-less`, `*` is `shift-8`). Never `pkill -f <pattern>` from a shell whose own command line contains it.
 - `rtl8xxxu` has no `new_id` (no runtime ID adding): a clone ID needs a rebuilt module. One constant value for all
   register reads means the chip is not Realtek.
+- ZT9101 driver in monitor mode (2026-11-12): receive needs the RCR filter command (`UMSG_OPS_MP_SET_PRX`), not just
+  `iw set type monitor`; radiotap must not claim an FCS the chip does not append; `iw dev info` shows no channel
+  (no get_channel op, cosmetic). Details and patch: `memory/usb-dongle-identify.md`.

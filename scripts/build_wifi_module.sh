@@ -141,6 +141,18 @@ for line in ('\twifi_fwlog_get_fw_ver_register(wlanReadRamCodeReleaseManifest);\
     assert s.count(line) == 1, f'expected exactly one occurrence of: {line!r}'
     s = s.replace(line, '')
 open(p, 'w').write(s)
+
+# Device-test finding (owner request 2026-11-12): CFG_MODIFY_TX_POWER_BY_BAT_VOLT=1 (this tree's
+# default) calls lbat_user_register(), a symbol no vendor module on the tablet imports or exports --
+# so the earlier build's genksyms-computed CRC for it had no live module to cross-check against, and
+# turned out wrong: insmod rejected the real module with "disagrees about version of symbol
+# lbat_user_register" (err -22). No loaded vendor module needs it, so the real shipped build compiles
+# this out too, same as CFG_SUPPORT_ICS above. Force it off; this is also unrelated to monitor mode.
+p = f'{g}/include/config.h'
+s = open(p).read()
+old = '#define CFG_MODIFY_TX_POWER_BY_BAT_VOLT         1\n'
+assert old in s, 'CFG_MODIFY_TX_POWER_BY_BAT_VOLT=1 not found verbatim'
+open(p, 'w').write(s.replace(old, '#define CFG_MODIFY_TX_POWER_BY_BAT_VOLT         0\n'))
 print('gen4m source-drift patch applied (config.h, gl_init.c)')
 PY
 
