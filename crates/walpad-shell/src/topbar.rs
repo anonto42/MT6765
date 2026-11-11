@@ -51,8 +51,8 @@ impl StatItem {
 
 /// Height of the chip pill (the same as the quick-settings pill).
 const PILL_H: i32 = 40;
-const PAD: i32 = 10;
-const GAP: i32 = SP_3;
+const PAD: i32 = 18;
+const GAP: i32 = SP_4;
 const BAR_H: i32 = 3;
 const TEXT_PX: f32 = SIZE_LABEL;
 /// The clock keeps its date only with this much room (see `Painter::clock`).
