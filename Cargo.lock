@@ -685,6 +685,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "walpad-gnss"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rustix",
+ "serde_json",
+]
+
+[[package]]
 name = "walpad-hw"
 version = "0.1.0"
 dependencies = [

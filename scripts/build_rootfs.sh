@@ -94,6 +94,10 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
       install -m 755 /rust/walpad-btbridge $REL/
       ln -sfn ../lib/walpad/current/walpad-btbridge /out/root/usr/local/bin/walpad-btbridge
     fi
+    if [ -f /rust/walpad-gnss ]; then
+      install -m 755 /rust/walpad-gnss $REL/
+      ln -sfn ../lib/walpad/current/walpad-gnss /out/root/usr/local/bin/walpad-gnss
+    fi
   fi
   # camera: the ACDK helper, run through the Android linker by walpad-camera
   [ -f /camera/camacdk ] && install -m 755 /camera/camacdk /out/root/usr/local/bin/camacdk
@@ -124,7 +128,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   # sha256 + mode + path of everything the repo owns, as it ended up in the image (before the per-host ssh key)
   { (cd /cfg && find . -type f); [ "$NO_PY" = 1 ] && (cd /cfg-np/files && find . -type f)
     echo ./usr/local/bin/dmlinear; echo ./usr/local/bin/padui; echo ./usr/local/bin/fbmirror
-    [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl walpad-btbridge; do echo ./usr/local/lib/walpad/image/$b; done
+    [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl walpad-btbridge walpad-gnss; do echo ./usr/local/lib/walpad/image/$b; done
     echo ./usr/local/lib/modules/hci_vhci.ko; echo ./usr/local/bin/camacdk
     true; } | LC_ALL=C sort -u | while read -r f; do
       [ -f "/out/root/$f" ] || continue

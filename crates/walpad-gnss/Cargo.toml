@@ -1,0 +1,15 @@
+[package]
+name = "walpad-gnss"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = "1"
+# AF_UNIX abstract datagram sockets with MediaTek's fixed address length (110)
+libc = "0.2"
+# pseudo-terminal for the NMEA output (/run/walpad/nmea)
+rustix = { version = "1", features = ["fs", "std", "pty", "termios", "event"] }
