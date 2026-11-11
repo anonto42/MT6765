@@ -259,10 +259,8 @@ mod tests {
         std::fs::write(&png, b"PNGDATA").unwrap();
         fake_helper(
             &r,
-            &format!(
-                "case $1 in thumb) case $2 in *b.png) exit 5;; esac; echo /thumb.png;; \
-                 info) echo duration=61; echo title=Hi;; esac"
-            ),
+            "case $1 in thumb) case $2 in *b.png) exit 5;; esac; echo /thumb.png;; \
+             info) echo duration=61; echo title=Hi;; esac",
         );
         let w = Worker::start(Root::new(r.base()));
         w.send(Job::Scan);

@@ -1715,6 +1715,7 @@ mod tests {
                 "Mobile network",
                 "Bluetooth",
                 "VPN and DNS",
+                "Media",
             ]
         );
     }
