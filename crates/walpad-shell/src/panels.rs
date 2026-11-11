@@ -94,21 +94,23 @@ pub fn wifi_mark(m: &Model) -> WifiMark {
     }
 }
 
-/// Battery percent as shown in the pill: "~62%" for a voltage estimate, "--" when unavailable.
+/// Battery percent as shown in the pill: "62%" (voltage estimate and gauge look the same to the
+/// owner, who asked for a plain number with no "~"; the estimate is still named in the Quick
+/// Settings subtitle), "--" when unavailable.
 pub fn battery_label(m: &Model) -> String {
     match m
         .status
         .as_ref()
         .map(|s| (s.battery.percent, s.battery.source))
     {
-        Some((Some(p), BatterySource::VoltageEstimate)) => format!("~{p}%"),
-        Some((Some(p), BatterySource::Gauge)) => format!("{p}%"),
+        Some((Some(p), _)) => format!("{p}%"),
         _ => "--".into(),
     }
 }
 
-/// "~5 h 20 min left" / "~1 h 10 min to full" (rounded to 5 min), "calculating..." while the current
-/// data is too short, None when unknown (owner request 2026-11-11).
+/// "5 h 20 min left" / "1 h 10 min to full" (rounded to 5 min), "calculating..." while the current
+/// data is too short, None when unknown (owner request 2026-11-11; no "~" - owner request
+/// 2026-11-11b).
 pub fn battery_time_text(b: &walpad_proto::Battery) -> Option<String> {
     let (min, tail) = match (b.time_left_min, b.time_to_full_min) {
         (Some(m), _) => (m, "left"),
@@ -120,14 +122,14 @@ pub fn battery_time_text(b: &walpad_proto::Battery) -> Option<String> {
     let m = m.max(5);
     let (h, r) = (m / 60, m % 60);
     Some(match (h, r) {
-        (0, r) => format!("~{r} min {tail}"),
-        (h, 0) => format!("~{h} h {tail}"),
-        (h, r) => format!("~{h} h {r} min {tail}"),
+        (0, r) => format!("{r} min {tail}"),
+        (h, 0) => format!("{h} h {tail}"),
+        (h, r) => format!("{h} h {r} min {tail}"),
     })
 }
 
-/// Quick Settings battery row: "Battery (~62%)" + its caveat. Unavailable stays labelled, an
-/// estimate stays tagged as one.
+/// Quick Settings battery row: "Battery (62%)" + its caveat. Unavailable stays labelled, an
+/// estimate stays tagged as one (in the subtitle only, not in the percent itself).
 pub fn battery_row(m: &Model) -> (String, Option<(String, Color)>) {
     let Some(st) = &m.status else {
         return ("Battery (unavailable)".into(), None);
@@ -136,7 +138,7 @@ pub fn battery_row(m: &Model) -> (String, Option<(String, Color)>) {
     let time = battery_time_text(b).map(|t| (t, TEXT_SECONDARY));
     match (b.percent, b.source) {
         (Some(p), BatterySource::VoltageEstimate) => (
-            format!("Battery (~{p}%)"),
+            format!("Battery ({p}%)"),
             time.or(Some(("Estimated from voltage".into(), WARNING))),
         ),
         (Some(p), BatterySource::Gauge) => (
@@ -685,14 +687,14 @@ mod tests {
             time_to_full_min: None,
             time_calculating: false,
         };
-        assert_eq!(battery_time_text(&b).unwrap(), "~5 h 20 min left");
+        assert_eq!(battery_time_text(&b).unwrap(), "5 h 20 min left");
         b.time_left_min = Some(120);
-        assert_eq!(battery_time_text(&b).unwrap(), "~2 h left");
+        assert_eq!(battery_time_text(&b).unwrap(), "2 h left");
         b.time_left_min = Some(40);
-        assert_eq!(battery_time_text(&b).unwrap(), "~40 min left");
+        assert_eq!(battery_time_text(&b).unwrap(), "40 min left");
         b.time_left_min = None;
         b.time_to_full_min = Some(70);
-        assert_eq!(battery_time_text(&b).unwrap(), "~1 h 10 min to full");
+        assert_eq!(battery_time_text(&b).unwrap(), "1 h 10 min to full");
         b.time_to_full_min = None;
         assert_eq!(battery_time_text(&b), None);
         b.time_calculating = true;

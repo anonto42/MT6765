@@ -57,3 +57,12 @@
   showed blue, blue showed red, YouTube's red logo looked purple. fbmirror swaps the R/B bytes (PX macro).
   Anything else drawing straight to fb0 (padui, splash) needs the same order. Test: write solid colours to
   /dev/fb0 with fbmirror stopped and pan "0,0".
+- USB driver-CD dongles (2026-11-11): once `usb-storage` binds the fake CD, SCSI scan, `eject`, `dd` and
+  `usb_modeswitch` all hang; only a udev-at-plug-in switch works reliably. A passthrough of it at VM boot hangs
+  Windows Setup. Details: `memory/usb-dongle-identify.md`.
+- QEMU user-net DNS (slirp) uses only the FIRST `/etc/resolv.conf` nameserver. Here that is the host's own LAN IP with
+  nothing listening, so the guest has a link but no DNS: set the guest DNS to 8.8.8.8 (and `ipv6=off`).
+- QEMU monitor over `nc -U`: `nc` never exits (wrap in `timeout`); `sendkey` uses the GUEST layout (UK: `|` is
+  `shift-less`, `*` is `shift-8`). Never `pkill -f <pattern>` from a shell whose own command line contains it.
+- `rtl8xxxu` has no `new_id` (no runtime ID adding): a clone ID needs a rebuilt module. One constant value for all
+  register reads means the chip is not Realtek.

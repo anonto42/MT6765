@@ -41,4 +41,5 @@ IchiBazar is no longer hosted here; do not restore Caddy/Cloudflare/Redis/Next/G
 - Known issues and traps: `memory/known-issues.md`
 - Settled decisions: `memory/decisions.md`
 - Legacy SD-card/server flows (inactive): `memory/legacy.md`
+- Identify a USB Wi-Fi dongle's chip and Linux driver (host PC, ZT9101 example): `memory/usb-dongle-identify.md`
 - Daily history: `history/YYYY-MM-DD/`
