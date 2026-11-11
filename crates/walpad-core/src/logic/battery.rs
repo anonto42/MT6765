@@ -48,12 +48,48 @@ pub fn percent(capacity: Option<i32>, mv: Option<u32>) -> (Option<u8>, BatterySo
     }
 }
 
+/// The state to show: a charger that reports `online` means Charging even when the battery status lags or
+/// says "Discharging"/"Not charging" (chargers the kernel does not classify as standard); "Full" stays.
+pub fn effective_status(raw: &RawBattery) -> Option<String> {
+    let s = raw.status.as_deref().unwrap_or("");
+    let full = s.to_ascii_lowercase().starts_with("full");
+    if raw.charger_online && !full {
+        return Some("Charging".into());
+    }
+    raw.status.clone()
+}
+
+/// Estimated percent while charging: the terminal voltage sits above the resting voltage by the charge
+/// current times the internal resistance (about 0.12 ohm for this pack), so subtract that, and never claim
+/// 100 % until the battery itself says Full.
+pub fn charging_percent(mv: u32, current_ua: Option<i64>, full: bool) -> u8 {
+    let drop_mv = current_ua.map_or(0, |c| (c.max(0) * 12 / 100_000) as u32); // 0.12 ohm: mA * 0.12
+    let p = ((mv.saturating_sub(drop_mv) as i64 - 3300) * 100 / 1000).clamp(0, 100) as u8;
+    if full {
+        100
+    } else {
+        p.min(99)
+    }
+}
+
 pub fn model(raw: &RawBattery, low: bool) -> Battery {
-    let (p, source) = percent(raw.capacity, raw.mv);
+    let (mut p, source) = percent(raw.capacity, raw.mv);
+    let state = effective_status(raw);
+    let charging = state
+        .as_deref()
+        .is_some_and(|s| s.to_ascii_lowercase().starts_with("charg"));
+    let full = state
+        .as_deref()
+        .is_some_and(|s| s.to_ascii_lowercase().starts_with("full"));
+    if source == BatterySource::VoltageEstimate && (charging || full) {
+        if let Some(mv) = raw.mv {
+            p = Some(charging_percent(mv, raw.current_ua, full));
+        }
+    }
     Battery {
         percent: p,
         source,
-        state: raw.status.clone(),
+        state,
         mv: raw.mv,
         temp_c: raw.temp_dc.map(|t| t as f32 / 10.0),
         low,
@@ -73,7 +109,7 @@ impl Guard {
     /// Called every 10 s (rule 1).
     pub fn step(&mut self, raw: &RawBattery, cfg: &Cfg) -> Vec<Act> {
         let mut out = Vec::new();
-        let discharging = is_discharging(raw.status.as_deref());
+        let discharging = is_discharging(effective_status(raw).as_deref());
         let mv = raw.mv.unwrap_or(0);
         // Rule 2: critical.
         if discharging && mv > 0 && mv < cfg.critical_batt_mv {
@@ -104,7 +140,30 @@ mod tests {
             status: Some(status.into()),
             mv,
             temp_dc: Some(340),
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn charger_online_means_charging_and_the_estimate_drops_the_charge_voltage() {
+        let mut r = raw(Some(-1), "Discharging", Some(4336));
+        r.charger_online = true;
+        r.current_ua = Some(685_500);
+        let b = model(&r, false);
+        assert_eq!(b.state.as_deref(), Some("Charging"));
+        // 4336 mV - 0.12 ohm * 685 mA = about 4254 mV -> 95 %
+        assert_eq!(b.percent, Some(95));
+        r.status = Some("Full".into());
+        assert_eq!(model(&r, false).percent, Some(100));
+        r.charger_online = false;
+        r.status = Some("Charging".into());
+        r.mv = Some(4400);
+        r.current_ua = None;
+        assert_eq!(
+            model(&r, false).percent,
+            Some(99),
+            "never 100 % before Full"
+        );
     }
 
     #[test]

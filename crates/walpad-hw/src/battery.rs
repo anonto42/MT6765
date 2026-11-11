@@ -11,7 +11,15 @@ pub struct RawBattery {
     pub mv: Option<u32>,
     /// Tenths of a degree C as reported.
     pub temp_dc: Option<i32>,
+    /// Battery current in microamps as reported (positive = charging on this kernel); None = unreadable.
+    pub current_ua: Option<i64>,
+    /// Some charger/USB/mains supply reports `online = 1` (the battery status alone lags or says
+    /// "Discharging"/"Not charging" with chargers the kernel does not classify as standard).
+    pub charger_online: bool,
 }
+
+/// Every supply that can only be a power source (not the battery or the fuel gauge).
+const SOURCES: [&str; 4] = ["ac", "usb", "mtk_charger_type", "wireless"];
 
 pub fn read_battery(root: &Root) -> RawBattery {
     let g = |n: &str| read_trim(root, &format!("{PS}/{n}"));
@@ -20,6 +28,10 @@ pub fn read_battery(root: &Root) -> RawBattery {
         status: g("status"),
         mv: g("voltage_now").and_then(|s| parse_voltage_mv(&s)),
         temp_dc: g("temp").and_then(|s| s.parse().ok()),
+        current_ua: g("current_now").and_then(|s| s.parse().ok()),
+        charger_online: SOURCES.iter().any(|n| {
+            read_trim(root, &format!("/sys/class/power_supply/{n}/online")).as_deref() == Some("1")
+        }),
     }
 }
 
@@ -52,7 +64,12 @@ mod tests {
         put(&r, &format!("{PS}/status"), "Discharging\n");
         put(&r, &format!("{PS}/voltage_now"), "3880000\n");
         put(&r, &format!("{PS}/temp"), "340\n");
+        put(&r, &format!("{PS}/current_now"), "685500\n");
+        put(&r, "/sys/class/power_supply/usb/online", "0\n");
+        put(&r, "/sys/class/power_supply/mtk_charger_type/online", "1\n");
         let b = read_battery(&r);
+        assert_eq!(b.current_ua, Some(685500));
+        assert!(b.charger_online);
         assert_eq!(b.capacity, Some(-1));
         assert_eq!(b.mv, Some(3880));
         assert_eq!(b.temp_dc, Some(340));

@@ -53,6 +53,7 @@ pub fn replay(
         status: Some("Charging".into()),
         mv: Some(4000),
         temp_dc: None,
+        ..Default::default()
     };
     let Some(first) = events.first() else {
         return out;
