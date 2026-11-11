@@ -56,10 +56,12 @@ pub enum Icon {
     Keypad,
     /// Map pin (GPS, owner request 2026-11-11).
     Location,
+    /// Lightning bolt: shown next to the battery percent while charging (owner request 2026-11-11).
+    Bolt,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 43] = [
+    pub const ALL: [Icon; 44] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -103,6 +105,7 @@ impl Icon {
         Icon::MicOff,
         Icon::Keypad,
         Icon::Location,
+        Icon::Bolt,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -123,6 +126,7 @@ impl Icon {
             "volume" => Icon::Volume,
             "clipboard" => Icon::Clipboard,
             "location" | "gps" => Icon::Location,
+            "bolt" | "charging" => Icon::Bolt,
             "media" | "video" => Icon::Media,
             "image" | "photos" => Icon::Image,
             "music" => Icon::Music,
@@ -471,6 +475,19 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.poly(&[(16.6, 14.1), (12.0, 21.5), (7.4, 14.1)], false);
             p.circle(12.0, 9.5, 2.3);
         }
+        Icon::Bolt => {
+            p.poly(
+                &[
+                    (13.5, 2.0),
+                    (6.0, 13.0),
+                    (11.5, 13.0),
+                    (10.5, 22.0),
+                    (18.0, 10.5),
+                    (12.5, 10.5),
+                ],
+                true,
+            );
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -580,7 +597,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 43);
+        assert_eq!(Icon::ALL.len(), 44);
         assert_eq!(Icon::from_name("phone"), Some(Icon::Phone));
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }

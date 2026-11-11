@@ -253,6 +253,17 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         format!("{:02}:{:02}", w.hour, w.minute)
     };
     let battery = battery_label(m);
+    // a bolt before the percent while charging (owner request 2026-11-11)
+    let battery = if m.status.as_ref().is_some_and(|s| {
+        s.battery
+            .state
+            .as_deref()
+            .is_some_and(|st| st.to_ascii_lowercase().starts_with("charg"))
+    }) {
+        format!("{}{battery}", walpad_ui::components::CHARGING_MARK)
+    } else {
+        battery
+    };
     // mobile signal bars while a SIM is present (owner request 2026-11-10)
     let cell = crate::mobile::pill_cell(&m.status);
     // Bluetooth mark while the controller is powered (owner request 2026-11-10)

@@ -1138,10 +1138,13 @@ impl Painter<'_> {
 
     /// Width with the mobile bars and the Bluetooth mark (shown while Bluetooth is powered).
     pub fn quick_pill_w_ex(&mut self, battery: &str, cell: bool, bt: bool) -> i32 {
-        let bw = self
-            .fonts
-            .measure(battery, Face::Regular, SIZE_SECONDARY)
-            .ceil() as i32;
+        let (charging, battery) = split_charging(battery);
+        let bolt_w = if charging { BOLT_W + SP_1 } else { 0 };
+        let bw = bolt_w
+            + self
+                .fonts
+                .measure(battery, Face::Regular, SIZE_SECONDARY)
+                .ceil() as i32;
         let cell_w = if cell { CELL_BARS_W + SP_2 } else { 0 };
         let cell_w = cell_w + if bt { BT_MARK_W + SP_2 } else { 0 };
         14 + cell_w + 20 + SP_3 + bw + SP_1 + 22 + SP_2 + 16 + 14
@@ -1231,6 +1234,7 @@ impl Painter<'_> {
         gps: Option<Color>,
     ) -> Rect {
         let w = self.quick_pill_w_marks(battery, cell.is_some(), bt, gps.is_some());
+        let (charging, battery) = split_charging(battery);
         let r = Rect::new(right - w, cy - 20, w, 40);
         self.outline_box(r, 20, pressed, open, false);
         let mut x = r.x + 14;
@@ -1254,6 +1258,10 @@ impl Painter<'_> {
         self.cv.icon(Icon::Wifi, x, cy - 10, 20, wifi_c);
         x += 20 + SP_3;
         let bc = if low { WARNING } else { TEXT };
+        if charging {
+            self.cv.icon(Icon::Bolt, x, cy - 8, BOLT_W + 2, SUCCESS);
+            x += BOLT_W + SP_1;
+        }
         let bw = self
             .fonts
             .measure(battery, Face::Regular, SIZE_SECONDARY)
@@ -1270,6 +1278,18 @@ impl Painter<'_> {
         self.cv
             .icon(Icon::ChevronDown, x, cy - 8, 16, TEXT_SECONDARY);
         r
+    }
+}
+
+/// A leading `CHARGING_MARK` in the battery label draws a bolt before the percent (and widens the pill);
+/// the mark itself is never drawn as text.
+pub const CHARGING_MARK: char = '\u{1}';
+/// Width of the charging bolt in the header pill.
+pub const BOLT_W: i32 = 14;
+fn split_charging(label: &str) -> (bool, &str) {
+    match label.strip_prefix(CHARGING_MARK) {
+        Some(rest) => (true, rest),
+        None => (false, label),
     }
 }
 
