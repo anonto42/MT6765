@@ -1,0 +1,149 @@
+#!/bin/sh
+# walpad-thumb: bounded thumbnails and media facts for the Media screen (change media-apps-capture).
+#
+#   walpad-thumb thumb FILE   print the path of FILE's 192x192 PNG thumbnail (make it when missing)
+#   walpad-thumb info  FILE   print key=value lines: duration=<seconds> title=<text> artist=<text>
+#
+# Exit status: 0 ok, 2 refused (bad or disallowed path), 3 file too large (default over 100 MB),
+# 4 another job holds the lock for too long, 5 no thumbnail possible (type, tool or file).
+# Bounds: one job at a time (flock), every tool under `timeout -s KILL`, the PNG must be small,
+# the cache keeps at most 1500 files; failures are remembered (.none) so they are not retried.
+#
+# Packages: imagemagick ffmpeg ffmpegthumbnailer (catalogue entry "media-tools"); every tool is
+# optional, a missing one gives exit 5 and the UI shows its placeholder.
+# Environment (tests): WALPAD_THUMB_DIR, WALPAD_THUMB_ROOTS, WALPAD_THUMB_MAXMB, WALPAD_THUMB_TIMEOUT.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+DIR=${WALPAD_THUMB_DIR:-/var/cache/walpad/thumbs}
+ROOTS=${WALPAD_THUMB_ROOTS:-"/root /mnt /home /tmp/Downloads"}
+MAXMB=${WALPAD_THUMB_MAXMB:-100}
+TMO=${WALPAD_THUMB_TIMEOUT:-20}
+SIZE=192
+MAXPNG=262144
+KEEP=1500
+
+die() { echo "walpad-thumb: $2" >&2; exit "$1"; }
+
+[ $# -eq 2 ] || die 2 "usage: walpad-thumb thumb|info FILE"
+cmd=$1
+f=$2
+case $cmd in thumb | info) ;; *) die 2 "unknown command" ;; esac
+
+# --- the path: absolute, no option look, no control characters, under an allowed root after
+# symlinks are resolved, a regular file
+case $f in /*) ;; *) die 2 "path must be absolute" ;; esac
+case $f in -* | *'
+'*) die 2 "bad path" ;; esac
+case $f/ in */../* | */./* | *//*) die 2 "path must be clean" ;; esac
+real=$(readlink -f -- "$f" 2>/dev/null) || die 2 "no such file"
+[ -f "$real" ] || die 2 "not a regular file"
+ok=0
+for r in $ROOTS; do
+  case $real in "$r"/*) ok=1 ;; esac
+done
+[ "$ok" = 1 ] || die 2 "path is outside the media folders"
+
+st=$(stat -c '%s %Y' -- "$real" 2>/dev/null) || die 2 "cannot stat"
+set -- $st
+bytes=$1
+mtime=$2
+lower=$(printf '%s' "$real" | tr 'A-Z' 'a-z')
+ext=${lower##*.}
+kind=
+case $ext in
+  jpg | jpeg | png | gif | bmp | webp | tif | tiff) kind=image ;;
+  mp4 | mkv | webm | avi | mov | m4v | mpg | mpeg | 3gp | flv | wmv | ogv | ts) kind=video ;;
+  mp3 | flac | ogg | oga | opus | wav | m4a | aac | wma) kind=audio ;;
+esac
+
+mkdir -p "$DIR" 2>/dev/null || die 5 "cannot create the cache"
+
+# one job at a time (a second caller waits up to 30 s)
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$DIR/.lock"
+  flock -w 30 9 || die 4 "busy"
+fi
+
+tmo() { timeout -s KILL "$TMO" "$@"; }
+
+if [ "$cmd" = info ]; then
+  [ -n "$kind" ] && [ "$kind" != image ] || die 5 "no media facts for this type"
+  command -v ffprobe >/dev/null 2>&1 || die 5 "ffprobe is not installed"
+  out=$(tmo ffprobe -v error -show_entries format=duration:format_tags=title,artist \
+    -of default=noprint_wrappers=1 -- "$real" 2>/dev/null) || die 5 "ffprobe failed"
+  printf '%s\n' "$out" | while IFS= read -r l; do
+    case $l in
+      duration=*) v=${l#duration=}; v=${v%%.*}; case $v in '' | *[!0-9]*) ;; *) echo "duration=$v" ;; esac ;;
+      TAG:title=*) echo "title=$(printf '%s' "${l#TAG:title=}" | tr -d '\000-\037' | cut -c1-80)" ;;
+      TAG:artist=*) echo "artist=$(printf '%s' "${l#TAG:artist=}" | tr -d '\000-\037' | cut -c1-80)" ;;
+    esac
+  done
+  exit 0
+fi
+
+# --- thumb
+[ -n "$kind" ] || die 5 "unsupported type"
+has() { command -v "$1" >/dev/null 2>&1; }
+# a missing tool is not remembered as a failure (it may be installed later)
+case $kind in
+  image) has magick || has convert || die 5 "no image tool installed" ;;
+  video) has ffmpegthumbnailer || has ffmpeg || die 5 "no video tool installed" ;;
+  audio) has ffmpeg || die 5 "ffmpeg is not installed" ;;
+esac
+key=$(printf '%s|%s|%s' "$real" "$mtime" "$bytes" | sha1sum | cut -c1-40)
+png=$DIR/$key.png
+if [ -s "$png" ]; then
+  touch "$png" 2>/dev/null
+  echo "$png"
+  exit 0
+fi
+[ ! -e "$DIR/$key.none" ] || die 5 "no thumbnail (cached failure)"
+if [ "$bytes" -gt $((MAXMB * 1024 * 1024)) ]; then
+  : >"$DIR/$key.none"
+  die 3 "file is larger than $MAXMB MB"
+fi
+
+tmp=$DIR/.tmp.$$.png
+trap 'rm -f "$tmp"' EXIT INT TERM
+rm -f "$tmp"
+make_image() {
+  if command -v magick >/dev/null 2>&1; then IM=magick; elif command -v convert >/dev/null 2>&1; then IM=convert; else return 1; fi
+  tmo $IM -limit memory 128MiB -limit map 256MiB -limit disk 0 -limit time 15 \
+    -define jpeg:size=$((SIZE * 2))x$((SIZE * 2)) "$real[0]" -auto-orient \
+    -thumbnail "${SIZE}x${SIZE}^" -gravity center -extent "${SIZE}x${SIZE}" "png:$tmp" 2>/dev/null
+}
+ff_frame() { # $1 = seek seconds
+  command -v ffmpeg >/dev/null 2>&1 || return 1
+  tmo ffmpeg -nostdin -v error -y -ss "$1" -i "$real" -an -sn -frames:v 1 \
+    -vf "scale=${SIZE}:${SIZE}:force_original_aspect_ratio=increase,crop=${SIZE}:${SIZE}" \
+    -f image2 -c:v png "$tmp" 2>/dev/null
+}
+make_video() {
+  if command -v ffmpegthumbnailer >/dev/null 2>&1; then
+    tmo ffmpegthumbnailer -i "$real" -o "$tmp" -s "$SIZE" -c png -q 5 -m 2>/dev/null && [ -s "$tmp" ] && return 0
+    rm -f "$tmp"
+  fi
+  ff_frame 3 && [ -s "$tmp" ] && return 0
+  rm -f "$tmp"
+  ff_frame 0
+}
+case $kind in
+  image) make_image || rm -f "$tmp" ;;
+  video) make_video || rm -f "$tmp" ;;
+  audio) ff_frame 0 || rm -f "$tmp" ;; # embedded cover art, when there is one
+esac
+
+if [ -s "$tmp" ] && [ "$(stat -c %s -- "$tmp")" -le "$MAXPNG" ]; then
+  mv -f "$tmp" "$png"
+  # keep the cache small: drop the least recently used beyond $KEEP files
+  n=$(ls -1 "$DIR" 2>/dev/null | grep -c '\.\(png\|none\)$')
+  if [ "$n" -gt "$KEEP" ]; then
+    ls -1t "$DIR" | grep '\.\(png\|none\)$' | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
+      rm -f -- "$DIR/$old"
+    done
+  fi
+  echo "$png"
+  exit 0
+fi
+: >"$DIR/$key.none"
+die 5 "could not make a thumbnail"

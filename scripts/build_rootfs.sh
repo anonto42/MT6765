@@ -37,7 +37,7 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji \
-      python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm adwaita-icon-theme"
+      python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme"
 # No-Python image: python3 (+tkinter/tk/xlib) only served the .py runtime.  xdotool was used only by
 # walpad-keys.py/walpad-devd.py (the Rust core injects keys itself over XTEST).  Kept on purpose:
 # matchbox-keyboard and alsa-utils (amixer), which walpad-core spawns; xset/xsetroot (session);

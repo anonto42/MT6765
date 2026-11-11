@@ -844,6 +844,9 @@ grep -q 'SENSOR_DEV_MAIN 1' tools/camacdk/camacdk.c && grep -q 'SENSOR_DEV_SUB 2
 # ===== walpad-vpn (owner request 2026-11-10, change vpn-and-dns): its own file =====
 VPNOUT=$(sh tests/shell/vpn.sh); echo "$VPNOUT"
 case $VPNOUT in *FAIL*) FAIL=$((FAIL+1));; esac
+# ===== walpad-thumb, mpv config, media packages (change media-apps-capture) =====
+MEDIAOUT=$(sh tests/shell/media_test.sh); echo "$MEDIAOUT"
+case $MEDIAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 
 # --- property files: the Wi-Fi stack's /tmp/wpd-props (8 KB reader) must never receive build props
 for f in walpad-modem walpad-gps walpad-camera; do
