@@ -22,6 +22,8 @@ pub struct QsGeom {
     /// Mobile data (owner request 2026-11-10).
     pub mobile: Rect,
     pub bluetooth: Rect,
+    /// GPS (owner request 2026-11-11).
+    pub gps: Rect,
     pub battery: Rect,
     pub divider1: i32,
     pub brightness_label: Rect,
@@ -45,7 +47,8 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         y += QS_ROW;
         r
     };
-    let (wifi, hotspot, mobile, bluetooth, battery) = (row(), row(), row(), row(), row());
+    let (wifi, hotspot, mobile, bluetooth, gps, battery) =
+        (row(), row(), row(), row(), row(), row());
     let divider1 = battery.bottom() + 4;
     let brightness_label = Rect::new(ix + SP_3, divider1 + 9, iw - 2 * SP_3, 24);
     let slider = Rect::new(ix, brightness_label.bottom(), iw, 56);
@@ -67,6 +70,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         hotspot,
         mobile,
         bluetooth,
+        gps,
         battery,
         divider1,
         brightness_label,
@@ -326,6 +330,20 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
         Target::BtSwitch,
         sw_off || !crate::bluetooth::switchable(&m.status),
     );
+    let (gsub, gcol) = crate::gps_screen::qs_line(&m.status);
+    qs_switch_row(
+        p,
+        &mut hits,
+        m,
+        g.gps,
+        Icon::Location,
+        "GPS",
+        (&gsub, gcol),
+        crate::gps_screen::switch_on(&m.status),
+        Target::GpsCard,
+        Target::GpsSwitch,
+        sw_off || !crate::gps_screen::switchable(&m.status),
+    );
     let (btitle, bsub) = battery_row(m);
     qs_row(
         p,
@@ -434,7 +452,7 @@ pub struct Tool {
 }
 
 /// The TOOLS section, in grid order. Add a tool here (and its action in `App::on_tap`).
-pub const TOOLS: [Tool; 4] = [
+pub const TOOLS: [Tool; 5] = [
     Tool {
         icon: Icon::Mouse,
         label: "Mouse pad",
@@ -454,6 +472,8 @@ pub const TOOLS: [Tool; 4] = [
         icon: Icon::Media,
         label: "Media",
         action: ToolAction::Media,
+    },
+    Tool {
         icon: Icon::Phone,
         label: "Phone",
         action: ToolAction::Phone,

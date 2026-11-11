@@ -61,6 +61,7 @@ fn status() -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         phone: Default::default(),
+        gps: Default::default(),
         bluetooth: Default::default(),
         lock: Default::default(),
         vpn: Default::default(),
@@ -820,6 +821,57 @@ fn quick_settings_bluetooth_row_and_header_mark() {
     let mut l = app(1280, 800, Tab::Home, true);
     with_bt(&mut l, bt_on);
     shot("home_landscape_bluetooth_mark", 1280, 800, &mut l);
+}
+
+// ------------------------------------------------- GPS (owner request 2026-11-11)
+fn with_gps(a: &mut App, f: impl FnOnce(&mut walpad_proto::GpsStatus)) {
+    let mut s = status();
+    f(&mut s.gps);
+    a.on_core(&CoreEvent::Status(Box::new(s)), 0);
+}
+
+#[test]
+fn gps_screen_states() {
+    use walpad_proto::GpsState;
+    let mut a = app(800, 1280, Tab::Gps, true);
+    shot("gps_off", 800, 1280, &mut a);
+    let mut a = app(800, 1280, Tab::Gps, true);
+    with_gps(&mut a, |g| {
+        g.enabled = true;
+        g.state = GpsState::Searching;
+        g.satellites_view = Some(6);
+        g.satellites_used = Some(0);
+        g.signals = vec![31, 24, 18, 12, 9, 0];
+    });
+    shot("gps_searching", 800, 1280, &mut a);
+    let mut a = app(800, 1280, Tab::Gps, true);
+    with_gps(&mut a, |g| {
+        g.enabled = true;
+        g.state = GpsState::Fix;
+        g.lat = Some(23.75123);
+        g.lon = Some(90.40988);
+        g.alt_m = Some(12);
+        g.accuracy_m = Some(7);
+        g.satellites_used = Some(5);
+        g.satellites_view = Some(8);
+        g.age_s = Some(1);
+        g.signals = vec![41, 38, 33, 29, 22, 20, 14, 0];
+    });
+    shot("gps_fix", 800, 1280, &mut a);
+    let mut l = app(1280, 800, Tab::Home, true);
+    with_gps(&mut l, |g| {
+        g.enabled = true;
+        g.state = GpsState::Fix;
+    });
+    shot("home_landscape_gps_mark", 1280, 800, &mut l);
+    let mut q = app(800, 1280, Tab::Home, true);
+    with_gps(&mut q, |g| {
+        g.enabled = true;
+        g.state = GpsState::Searching;
+        g.satellites_view = Some(4);
+    });
+    q.model.overlay = Some(Overlay::QuickSettings);
+    shot("quick_settings_gps_searching", 800, 1280, &mut q);
 }
 
 // ---- app store (change app-catalogue-manager)

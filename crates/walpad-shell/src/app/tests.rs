@@ -8,6 +8,7 @@ use walpad_ui::components::keyboard_layout;
 use walpad_ui::{Canvas, Fonts};
 
 mod bluetooth;
+mod gps;
 mod hotspot;
 mod lock;
 mod media;
@@ -42,6 +43,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         phone: Default::default(),
+        gps: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),
@@ -271,7 +273,7 @@ fn home_tiles_are_the_pinned_installed_apps() {
     let all: Vec<&str> = app.model.apps.iter().map(|t| t.id.as_str()).collect();
     assert_eq!(
         all,
-        ["browser", "terminal", "media", "phone", "settings"],
+        ["browser", "terminal", "phone", "media", "settings"],
         "the Wi-Fi app entry is the Network tab, not an app tile"
     );
     let off = App::new(800, 1280, catalog(), wall());
@@ -328,6 +330,8 @@ fn home_taps_launch_apps_or_navigate() {
             Target::MobileDataSwitch,
             Target::BtCard,
             Target::BtSwitch,
+            Target::GpsCard,
+            Target::GpsSwitch,
             Target::BatteryCard,
             Target::Slider,
             Target::VolumeSlider,
@@ -341,7 +345,7 @@ fn home_taps_launch_apps_or_navigate() {
     assert!(tap_at(&mut app, x, y, 1000).cmds.is_empty());
     assert!(app.model.overlay.is_none());
     // the Settings shortcut (Home grid; the sidebar has its own Settings button)
-    assert!(tap(&mut app, Target::AppTile(3)).cmds.is_empty());
+    assert!(tap(&mut app, Target::AppTile(4)).cmds.is_empty());
     assert_eq!(
         app.active,
         Tab::Settings,
@@ -403,7 +407,8 @@ fn sidebar_shows_pinned_apps_and_toggles_the_apps_panel() {
             Target::PanelTool(0),
             Target::PanelTool(1),
             Target::PanelTool(2),
-            Target::PanelTool(3)
+            Target::PanelTool(3),
+            Target::PanelTool(4)
         ]
     );
     // tapping the running app focuses it (launch = focus when it runs) and closes the panel

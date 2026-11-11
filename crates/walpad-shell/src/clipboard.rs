@@ -245,6 +245,18 @@ impl Keeper {
         Ok(true)
     }
 
+    /// Put `text` on the clipboard and on top of the history (the GPS screen's Copy buttons).
+    /// Longer than an entry may be: ignored.
+    pub fn set_text(&mut self, text: &str) -> Result<(), XError> {
+        if text.is_empty() || text.len() > ENTRY_MAX {
+            return Ok(());
+        }
+        self.history.push(text.to_string());
+        self.own(text.to_string())?;
+        self.events.push(ClipEvent::HistoryChanged);
+        Ok(())
+    }
+
     /// Copy what is selected (PRIMARY) into the clipboard and the history. Answers nothing: the
     /// result arrives as a `HistoryChanged` event.
     pub fn copy_primary(&mut self) -> Result<(), XError> {

@@ -44,6 +44,8 @@ fn status(apps: &[&str]) -> Status {
         lock: Default::default(),
         audio: Default::default(),
         vpn: Default::default(),
+        phone: Default::default(),
+        gps: Default::default(),
         apps: apps
             .iter()
             .map(|a| AppState {

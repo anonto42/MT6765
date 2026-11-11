@@ -463,6 +463,14 @@ impl Shell {
                     self.media.send(Job::Remember(p));
                     continue;
                 }
+                Cmd::CopyText(t) => {
+                    if let Some(k) = &mut self.keeper {
+                        if let Err(err) = k.set_text(&t) {
+                            eprintln!("walpad-shell: clipboard: {}", err.0);
+                        }
+                    }
+                    continue;
+                }
                 _ => {}
             }
             let (name, args) = c.request();

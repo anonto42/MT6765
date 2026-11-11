@@ -24,6 +24,8 @@ pub enum Page {
     Vpn,
     /// Opens the Bluetooth screen (owner request 2026-11-10).
     Bluetooth,
+    /// Opens the GPS screen (owner request 2026-11-11).
+    Gps,
     /// Opens the app store's installed apps (change app-catalogue-manager).
     Apps,
     Security,
@@ -34,7 +36,7 @@ pub enum Page {
     Logs,
 }
 
-pub const CATEGORIES: [(Page, &str, Icon); 14] = [
+pub const CATEGORIES: [(Page, &str, Icon); 15] = [
     (Page::Display, "Display", Icon::Sun),
     (Page::Sound, "Sound", Icon::Volume),
     (Page::Input, "Input", Icon::Keyboard),
@@ -43,6 +45,7 @@ pub const CATEGORIES: [(Page, &str, Icon); 14] = [
     (Page::Mobile, "Mobile network", Icon::Sim),
     (Page::Vpn, "VPN and DNS", Icon::Lock),
     (Page::Bluetooth, "Bluetooth", Icon::Bluetooth),
+    (Page::Gps, "GPS", Icon::Location),
     (Page::Apps, "Apps", Icon::Apps),
     (Page::Security, "Security", Icon::Lock),
     (Page::System, "System", Icon::Device),
@@ -186,9 +189,13 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
     let info = |l: &str, (v, t): (String, Tone)| Row::Info(l.into(), v, t);
     match page {
         // Sound is built by the app (it needs the live slider state)
-        Page::Display | Page::Mobile | Page::Bluetooth | Page::Sound | Page::Apps | Page::Vpn => {
-            Vec::new()
-        }
+        Page::Display
+        | Page::Mobile
+        | Page::Bluetooth
+        | Page::Gps
+        | Page::Sound
+        | Page::Apps
+        | Page::Vpn => Vec::new(),
         Page::Input => {
             let mut r: Vec<Row> = c
                 .sys

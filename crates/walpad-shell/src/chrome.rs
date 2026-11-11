@@ -101,7 +101,14 @@ pub fn active_target(active: Tab, panel_open: bool) -> Option<Target> {
     match active {
         Tab::Home | Tab::Apps => Some(Target::Nav(NAV_HOME)),
         Tab::Settings => Some(Target::Nav(NAV_SETTINGS)),
-        Tab::Network | Tab::Device | Tab::Mobile | Tab::Bluetooth | Tab::Vpn | Tab::Media | Tab::Phone => None,
+        Tab::Network
+        | Tab::Device
+        | Tab::Mobile
+        | Tab::Bluetooth
+        | Tab::Vpn
+        | Tab::Media
+        | Tab::Phone
+        | Tab::Gps => None,
     }
 }
 
@@ -249,9 +256,11 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
     let cell = crate::mobile::pill_cell(&m.status);
     // Bluetooth mark while the controller is powered (owner request 2026-11-10)
     let bt = crate::bluetooth::powered(&m.status);
-    let pill_w = p.quick_pill_w_ex(&battery, cell.is_some(), bt);
+    // GPS mark while the GPS is on (owner request 2026-11-11)
+    let gps = crate::gps_screen::pill_mark(&m.status);
+    let pill_w = p.quick_pill_w_marks(&battery, cell.is_some(), bt, gps.is_some());
     let low = m.status.as_ref().is_some_and(|s| s.battery.low);
-    let pill = p.quick_pill_ex(
+    let pill = p.quick_pill_marks(
         h.right() - SP_4,
         h.y + h.h / 2,
         wifi_mark(m),
@@ -261,6 +270,7 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         qs_open,
         cell,
         bt,
+        gps,
     );
     p.clock(
         Rect::new(h.x + SP_5, h.y, h.w - pill_w - SP_4 - 2 * SP_5, h.h),

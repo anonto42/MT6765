@@ -46,10 +46,6 @@ pub enum Icon {
     Media,
     Image,
     Music,
-}
-
-impl Icon {
-    pub const ALL: [Icon; 36] = [
     /// Phone handset, speech bubble, person, microphone (muted), dial pad (owner request
     /// 2026-11-11, `phone-dialer`).
     Phone,
@@ -58,10 +54,12 @@ impl Icon {
     Mic,
     MicOff,
     Keypad,
+    /// Map pin (GPS, owner request 2026-11-11).
+    Location,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 39] = [
+    pub const ALL: [Icon; 43] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -104,6 +102,7 @@ impl Icon {
         Icon::Mic,
         Icon::MicOff,
         Icon::Keypad,
+        Icon::Location,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -123,6 +122,7 @@ impl Icon {
             "sim" => Icon::Sim,
             "volume" => Icon::Volume,
             "clipboard" => Icon::Clipboard,
+            "location" | "gps" => Icon::Location,
             "media" | "video" => Icon::Media,
             "image" | "photos" => Icon::Image,
             "music" => Icon::Music,
@@ -422,6 +422,7 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((9.0, 9.0), (19.0, 7.0));
             p.circle(6.5, 18.0, 2.5);
             p.circle(16.5, 16.0, 2.5);
+        }
         Icon::Phone => {
             // a handset: earpiece top-left, mouthpiece bottom-right, the curved grip between
             p.stroke.move_to(6.0, 3.5);
@@ -463,6 +464,12 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
                 }
             }
             p.dot(12.0, 22.0, 1.7);
+        }
+        Icon::Location => {
+            // map pin: round head, point at the bottom, ring in the middle
+            p.arc(12.0, 9.5, 6.5, 135.0, 405.0);
+            p.poly(&[(16.6, 14.1), (12.0, 21.5), (7.4, 14.1)], false);
+            p.circle(12.0, 9.5, 2.3);
         }
     }
     (p.stroke.finish(), p.dots.finish())
@@ -573,8 +580,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 36);
-        assert_eq!(Icon::ALL.len(), 39);
+        assert_eq!(Icon::ALL.len(), 43);
         assert_eq!(Icon::from_name("phone"), Some(Icon::Phone));
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }

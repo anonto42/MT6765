@@ -154,8 +154,14 @@ pub fn parse_reading(text: &str, now_ms: i64) -> Option<Reading> {
         }
     }
     if let Some(s) = v.get("satellites") {
-        r.view = s.get("view").and_then(|x| x.as_u64()).map(|n| n.min(999) as u32);
-        r.used = s.get("used").and_then(|x| x.as_u64()).map(|n| n.min(999) as u32);
+        r.view = s
+            .get("view")
+            .and_then(|x| x.as_u64())
+            .map(|n| n.min(999) as u32);
+        r.used = s
+            .get("used")
+            .and_then(|x| x.as_u64())
+            .map(|n| n.min(999) as u32);
         if let Some(list) = s.get("list").and_then(|x| x.as_array()) {
             let mut sig: Vec<u8> = list
                 .iter()
@@ -428,7 +434,9 @@ impl Gnss {
                 self.st.state = GpsState::Starting;
             }
         }
-        if self.running_state() && self.run.as_ref().is_none_or(|r| r.verb == Verb::Status) && now >= self.next_read
+        if self.running_state()
+            && self.run.as_ref().is_none_or(|r| r.verb == Verb::Status)
+            && now >= self.next_read
         {
             self.read_state(now);
         }

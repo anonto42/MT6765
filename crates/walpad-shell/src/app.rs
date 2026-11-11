@@ -6,6 +6,7 @@ use crate::config::DevdSettings;
 use crate::core_client::{CoreEvent, ReplyError};
 use crate::device_screen;
 use crate::gesture::Gesture;
+use crate::gps_screen;
 use crate::home;
 use crate::media::{self, MediaTarget};
 use crate::mobile::{self, MobileInfo};
@@ -185,6 +186,11 @@ pub enum Target {
     VpnProxy,
     /// Import candidate (index into `Model::vpn_files`).
     VpnImport(usize),
+    // GPS (owner request 2026-11-11): the Quick Settings row, the screen's switch and Copy buttons
+    GpsCard,
+    GpsSwitch,
+    GpsCopyCoords,
+    GpsCopyLink,
     MobileCard,
     MobileRadio,
     MobileDataSwitch,
@@ -307,6 +313,10 @@ pub enum Cmd {
     },
     VpnImport(String),
     VpnFiles,
+    /// The GPS switch (`gps`).
+    Gps(bool),
+    /// Put text on the clipboard (shell-local; the text is a position: never logged).
+    CopyText(String),
     MobileRadio(bool),
     MobileData(bool),
     MobileApn(String),
@@ -399,6 +409,8 @@ pub enum Purpose {
     PhoneAction,
     /// A VPN command whose failure is shown as a toast.
     Vpn,
+    /// The GPS switch: a failure is shown as a toast.
+    Gps,
     VpnSheet,
     VpnImport,
     VpnFiles,
@@ -498,6 +510,9 @@ impl Cmd {
             }
             Cmd::VpnImport(path) => ("vpn_import", json!({"path": path})),
             Cmd::VpnFiles => ("vpn_files", Value::Null),
+            Cmd::Gps(on) => ("gps", json!({"on": on})),
+            // shell-local: `Shell::send` copies and never puts this on the socket
+            Cmd::CopyText(_) => ("clipboard", json!({"mode": "copy"})),
             Cmd::MobileRadio(on) => ("mobile_radio", json!({"on": on})),
             Cmd::MobileData(on) => ("mobile_data", json!({"on": on})),
             Cmd::MobileApn(a) => ("mobile_apn", json!({"apn": a})),
@@ -592,6 +607,7 @@ impl Cmd {
             Cmd::SimPin(_) => Purpose::SimPin,
             Cmd::MobileInfo => Purpose::MobileInfo,
             Cmd::Vpn(_) | Cmd::VpnKeep => Purpose::Vpn,
+            Cmd::Gps(_) => Purpose::Gps,
             Cmd::VpnConfig { dns, proxy, .. } if dns.is_some() || proxy.is_some() => {
                 Purpose::VpnSheet
             }
@@ -947,6 +963,7 @@ impl App {
         if tab == Tab::Media {
             self.model.media.scanning = true;
             out.cmd(Cmd::MediaScan);
+        }
         if tab == Tab::Phone {
             self.open_phone(out);
         }
@@ -988,10 +1005,20 @@ impl App {
                 out.dirty = true;
             }
             CoreEvent::Status(s) => {
+                // The GPS fields (age, signal levels) change every couple of seconds while it
+                // runs: redraw only where they are visible (GPS screen, Quick Settings) or when
+                // its state changed.
+                let quiet = self.active != Tab::Gps
+                    && self.model.overlay != Some(Overlay::QuickSettings)
+                    && self.model.status.as_ref().is_some_and(|o| {
+                        let mut a = o.clone();
+                        a.gps = s.gps.clone();
+                        o.gps.state == s.gps.state && a == **s
+                    });
                 self.model.status = Some((**s).clone());
                 self.model.connected = true;
                 self.rebuild_tiles();
-                out.dirty = true;
+                out.dirty = !quiet;
             }
             CoreEvent::Wifi(v) => self.on_wifi_event(v, &mut out),
             CoreEvent::Notice(v)
@@ -1473,6 +1500,12 @@ impl App {
                     self.toast(msg, Tone::Danger);
                 }
             }
+            (Purpose::Gps, false) => {
+                let msg = error
+                    .map(friendly)
+                    .unwrap_or_else(|| "GPS request failed".into());
+                self.toast(msg, Tone::Danger);
+            }
             (Purpose::Vpn, false) => {
                 let msg = error
                     .map(friendly)
@@ -1620,6 +1653,7 @@ impl App {
                 | Tab::Vpn
                 | Tab::Media
                 | Tab::Phone
+                | Tab::Gps
         )
     }
 
@@ -1940,6 +1974,32 @@ impl App {
             Target::WifiCard | Target::HotspotCard => self.go(Tab::Network, out),
             Target::MobileCard | Target::Page(Page::Mobile) => self.go(Tab::Mobile, out),
             Target::BtCard | Target::Page(Page::Bluetooth) => self.go(Tab::Bluetooth, out),
+            Target::GpsCard | Target::Page(Page::Gps) => self.go(Tab::Gps, out),
+            Target::GpsSwitch if interactive && gps_screen::switchable(&self.model.status) => {
+                out.cmd(Cmd::Gps(!gps_screen::switch_on(&self.model.status)))
+            }
+            Target::GpsCopyCoords if interactive => {
+                let text = self
+                    .model
+                    .status
+                    .as_ref()
+                    .and_then(|s| gps_screen::coords_text(&s.gps));
+                if let Some(t) = text {
+                    out.cmd(Cmd::CopyText(t));
+                    self.toast("Position copied", Tone::Info);
+                }
+            }
+            Target::GpsCopyLink if interactive => {
+                let text = self
+                    .model
+                    .status
+                    .as_ref()
+                    .and_then(|s| gps_screen::map_link(&s.gps));
+                if let Some(t) = text {
+                    out.cmd(Cmd::CopyText(t));
+                    self.toast("Map link copied: paste it in the browser", Tone::Info);
+                }
+            }
             Target::BtSwitch if interactive && bluetooth::switchable(&self.model.status) => {
                 out.cmd(Cmd::BtEnable(!bluetooth::switch_on(&self.model.status)))
             }
@@ -2734,6 +2794,7 @@ impl App {
             Tab::Mobile => mobile::layout(&frame, &self.model.status).total,
             Tab::Bluetooth => bluetooth::layout(&frame, &self.model.status).total,
             Tab::Phone => phone_ui::layout_total(&frame, &self.model.phone, &self.model.status),
+            Tab::Gps => gps_screen::layout(&frame, &self.model.status).total,
             _ => 0,
         }
         .max(self.view.h);
@@ -2809,12 +2870,23 @@ impl App {
                     st: &m.status,
                     pressed: m.pressed,
                     spinner_deg: m.spinner_deg,
+                },
+            ),
             Tab::Phone => phone_ui::render(
                 p,
                 &frame,
                 &phone_ui::View {
                     st: &m.status,
                     m: &m.phone,
+                    online: m.connected,
+                    pressed: m.pressed,
+                },
+            ),
+            Tab::Gps => gps_screen::render(
+                p,
+                &frame,
+                &gps_screen::View {
+                    st: &m.status,
                     online: m.connected,
                     pressed: m.pressed,
                 },

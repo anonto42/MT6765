@@ -15,6 +15,7 @@ pub mod device_screen;
 pub mod dock;
 pub mod edge;
 pub mod gesture;
+pub mod gps_screen;
 pub mod home;
 pub mod ime;
 pub mod keyboard;

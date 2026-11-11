@@ -43,6 +43,7 @@ fn status(vpn: VpnStatus) -> Status {
         hotspot: Default::default(),
         mobile: Default::default(),
         phone: Default::default(),
+        gps: Default::default(),
         bluetooth: Default::default(),
         lock: Default::default(),
         audio: Default::default(),

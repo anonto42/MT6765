@@ -28,7 +28,7 @@ fn open_media(app: &mut App) -> Outcome {
 #[test]
 fn home_tile_and_apps_panel_tool_open_the_screen_and_start_a_scan() {
     let mut app = online();
-    assert_eq!(app.model.apps[2].id, "media");
+    assert!(app.model.apps.iter().any(|t| t.id == "media"));
     let out = open_media(&mut app);
     assert!(out.cmds.contains(&Cmd::MediaScan), "{:?}", out.cmds);
     assert!(app.model.media.scanning);

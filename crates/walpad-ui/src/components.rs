@@ -85,9 +85,11 @@ pub enum Tab {
     Media,
     /// Phone: dialer, recent calls, contacts, messages (owner request 2026-11-11).
     Phone,
+    /// GPS switch, position and satellites (owner request 2026-11-11; Quick Settings, Settings).
+    Gps,
 }
 impl Tab {
-    pub const ALL: [Tab; 9] = [
+    pub const ALL: [Tab; 11] = [
         Tab::Home,
         Tab::Apps,
         Tab::Network,
@@ -98,6 +100,7 @@ impl Tab {
         Tab::Vpn,
         Tab::Media,
         Tab::Phone,
+        Tab::Gps,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -111,6 +114,7 @@ impl Tab {
             Tab::Vpn => "VPN and DNS",
             Tab::Media => "Media",
             Tab::Phone => "Phone",
+            Tab::Gps => "GPS",
         }
     }
     pub fn icon(self) -> Icon {
@@ -125,6 +129,7 @@ impl Tab {
             Tab::Vpn => Icon::Lock,
             Tab::Media => Icon::Media,
             Tab::Phone => Icon::Phone,
+            Tab::Gps => Icon::Location,
         }
     }
 }
@@ -1132,6 +1137,11 @@ impl Painter<'_> {
         14 + cell_w + 20 + SP_3 + bw + SP_1 + 22 + SP_2 + 16 + 14
     }
 
+    /// Width with the mobile bars, the Bluetooth mark and the GPS mark (while the GPS is on).
+    pub fn quick_pill_w_marks(&mut self, battery: &str, cell: bool, bt: bool, gps: bool) -> i32 {
+        self.quick_pill_w_ex(battery, cell, bt) + if gps { GPS_MARK_W + SP_2 } else { 0 }
+    }
+
     /// Small mobile signal bars for the header pill: four bars 3 px wide, 16 px high.
     pub fn cell_bars(&mut self, x: i32, y: i32, bars: u8, color: Color) {
         for i in 0..4 {
@@ -1191,7 +1201,26 @@ impl Painter<'_> {
         cell: Option<(u8, Color)>,
         bt: bool,
     ) -> Rect {
-        let w = self.quick_pill_w_ex(battery, cell.is_some(), bt);
+        self.quick_pill_marks(right, cy, wifi, battery, low, pressed, open, cell, bt, None)
+    }
+
+    /// The pill with the GPS mark after the Bluetooth mark (`gps` = Some(colour) while the GPS is
+    /// on: white with a fix, dim while searching).
+    #[allow(clippy::too_many_arguments)]
+    pub fn quick_pill_marks(
+        &mut self,
+        right: i32,
+        cy: i32,
+        wifi: WifiMark,
+        battery: &str,
+        low: bool,
+        pressed: bool,
+        open: bool,
+        cell: Option<(u8, Color)>,
+        bt: bool,
+        gps: Option<Color>,
+    ) -> Rect {
+        let w = self.quick_pill_w_marks(battery, cell.is_some(), bt, gps.is_some());
         let r = Rect::new(right - w, cy - 20, w, 40);
         self.outline_box(r, 20, pressed, open, false);
         let mut x = r.x + 14;
@@ -1202,6 +1231,10 @@ impl Painter<'_> {
         if bt {
             self.cv.icon(Icon::Bluetooth, x, cy - 9, BT_MARK_W, TEXT);
             x += BT_MARK_W + SP_2;
+        }
+        if let Some(c) = gps {
+            self.cv.icon(Icon::Location, x, cy - 9, GPS_MARK_W, c);
+            x += GPS_MARK_W + SP_2;
         }
         let wifi_c = match wifi {
             WifiMark::Connected => TEXT,
@@ -1232,6 +1265,9 @@ impl Painter<'_> {
 
 /// Width of the Bluetooth mark in the header pill.
 pub const BT_MARK_W: i32 = 18;
+
+/// Width of the GPS mark in the header pill.
+pub const GPS_MARK_W: i32 = 18;
 
 /// Width of `Painter::cell_bars`.
 pub const CELL_BARS_W: i32 = 18;
@@ -1722,6 +1758,7 @@ mod tests {
                 "VPN and DNS",
                 "Media",
                 "Phone",
+                "GPS",
             ]
         );
     }

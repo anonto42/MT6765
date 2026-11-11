@@ -21,7 +21,11 @@ struct Rig {
 
 impl Rig {
     fn new(listen_only: bool) -> Rig {
-        let id = format!("{}_{}", std::process::id(), N.fetch_add(1, Ordering::SeqCst));
+        let id = format!(
+            "{}_{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        );
         let dir = std::env::temp_dir().join(format!("walpad-gnss-test-{id}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -56,8 +60,10 @@ impl Rig {
     }
 
     fn state(&self) -> Value {
-        serde_json::from_str(&std::fs::read_to_string(self.dir.join("gnss.json")).unwrap_or_default())
-            .unwrap_or(Value::Null)
+        serde_json::from_str(
+            &std::fs::read_to_string(self.dir.join("gnss.json")).unwrap_or_default(),
+        )
+        .unwrap_or(Value::Null)
     }
 
     /// Commands the daemon sent to the fake mnld, until `n` arrived.
@@ -232,7 +238,10 @@ fn first_sv_blob_is_saved_for_analysis() {
     w.binary(&[7u8; 100]);
     rig.feed(&w.0);
     wait(|| rig.dir.join("sv.bin").exists());
-    assert_eq!(std::fs::read(rig.dir.join("sv.bin")).unwrap(), vec![7u8; 100]);
+    assert_eq!(
+        std::fs::read(rig.dir.join("sv.bin")).unwrap(),
+        vec![7u8; 100]
+    );
 }
 
 trait NonBlock {

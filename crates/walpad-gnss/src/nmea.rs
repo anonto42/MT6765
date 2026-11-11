@@ -142,7 +142,11 @@ fn utc_ms(time: &str, date: &str) -> Option<i64> {
     let yy: i64 = date[4..6].parse().ok()?;
     // two-digit year: GPS time starts in 1980
     let y = if yy >= 80 { 1900 + yy } else { 2000 + yy };
-    if !(1..=31).contains(&d) || !(1..=12).contains(&mo) || h > 23 || mi > 59 || !(0.0..61.0).contains(&s)
+    if !(1..=31).contains(&d)
+        || !(1..=12).contains(&mo)
+        || h > 23
+        || mi > 59
+        || !(0.0..61.0).contains(&s)
     {
         return None;
     }
@@ -235,7 +239,7 @@ pub fn sys_of_id(id: u16) -> Sys {
         33..=64 => Sys::Sbas,
         65..=96 => Sys::Glonass,
         193..=202 => Sys::Qzss,
-        201..=237 => Sys::Beidou,
+        203..=237 => Sys::Beidou,
         301..=336 => Sys::Galileo,
         _ => Sys::Gps,
     }
@@ -310,7 +314,14 @@ mod tests {
             o => panic!("{o:?}"),
         }
         let v = with_checksum("GPRMC,123519,V,,,,,,,230394,,");
-        assert!(matches!(parse(&v), Some(Sentence::Rmc { valid: false, lat: None, .. })));
+        assert!(matches!(
+            parse(&v),
+            Some(Sentence::Rmc {
+                valid: false,
+                lat: None,
+                ..
+            })
+        ));
     }
 
     #[test]

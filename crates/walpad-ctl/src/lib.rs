@@ -23,6 +23,7 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   wifi-saved | wifi-disconnect | wifi-forget <id>
   wifi on|off                     the Wi-Fi switch (network level; the chip stays powered)
   hotspot on|off                  start/stop the hotspot (needs a password: hotspot-config)
+  gps on|off                      the GPS switch (starts mnld + walpad-gnss; needs the Wi-Fi stack)
   hotspot-config [--name N] [--password]   set name and/or password (password read from stdin)
   lock-now                        lock the screen at once (needs a lock to be set)
   lock-set pin|password|pattern  set or change the screen lock; the new secret is read from stdin
@@ -96,16 +97,16 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
                 .map_err(|_| "saved id must be a number".to_string())?;
             ("wifi_forget".into(), json!({"saved_id": id}))
         }
-        Some(w @ ("wifi" | "hotspot")) => {
+        Some(w @ ("wifi" | "hotspot" | "gps")) => {
             let on = match need(1)? {
                 "on" => true,
                 "off" => false,
                 _ => return Err(USAGE.to_string()),
             };
-            let cmd = if w == "wifi" {
-                "wifi_enable"
-            } else {
-                "hotspot"
+            let cmd = match w {
+                "wifi" => "wifi_enable",
+                "gps" => "gps",
+                _ => "hotspot",
             };
             (cmd.into(), json!({"on": on}))
         }
@@ -550,6 +551,11 @@ mod tests {
             ("hotspot".into(), json!({"on": true}))
         );
         assert!(build_request(&s(&["hotspot", "maybe"])).is_err());
+        assert_eq!(
+            build_request(&s(&["gps", "on"])).unwrap(),
+            ("gps".into(), json!({"on": true}))
+        );
+        assert!(build_request(&s(&["gps"])).is_err());
         assert_eq!(
             build_request(&s(&["vpn", "on"])).unwrap(),
             ("vpn".into(), json!({"on": true}))

@@ -152,8 +152,8 @@ impl NmeaOut {
         std::os::unix::fs::symlink(name.to_str().unwrap_or(""), &tmp)?;
         std::fs::rename(&tmp, link)?;
         Ok(NmeaOut {
-            master: OwnedFd::from(master),
-            _slave: OwnedFd::from(slave),
+            master,
+            _slave: slave,
             link: link.to_path_buf(),
         })
     }

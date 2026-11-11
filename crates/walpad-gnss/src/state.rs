@@ -62,6 +62,9 @@ pub struct Snapshot {
     pub reason: Option<String>,
 }
 
+/// Satellite ids a GSA sentence reported as used, with the time it arrived.
+type UsedSet = (BTreeSet<(Sys, u16)>, u64);
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Counters {
     pub location: u32,
@@ -86,7 +89,7 @@ pub struct Tracker {
     fix: Option<(Fix, u64)>,
     loc_at: Option<u64>,
     sats: BTreeMap<(Sys, u16), (SatInfo, u64)>,
-    used: BTreeMap<Option<Sys>, (BTreeSet<(Sys, u16)>, u64)>,
+    used: BTreeMap<Option<Sys>, UsedSet>,
     gga_used: Option<(u8, u64)>,
     /// A previous RMC (position, course, speed, time) waits here for its GGA (altitude).
     rmc: Option<(Fix, u64)>,
@@ -239,17 +242,11 @@ impl Tracker {
                     self.fix = Some((f, now));
                 }
             }
-            Sentence::Gsv {
-                sys,
-                num,
-                sats,
-                ..
-            } => {
+            Sentence::Gsv { sys, num, sats, .. } => {
                 if num == 1 {
                     // a new cycle of this constellation starts: forget what it listed before
-                    match sys {
-                        Some(sy) => self.sats.retain(|(s, _), _| *s != sy),
-                        None => {}
+                    if let Some(sy) = sys {
+                        self.sats.retain(|(s, _), _| *s != sy)
                     }
                 }
                 for si in sats {
@@ -437,7 +434,11 @@ mod tests {
     fn satellites_from_gsv_and_gsa() {
         let mut t = Tracker::new();
         t.set_started(true);
-        nm(&mut t, "GPGSV,2,1,05,03,40,100,31,04,15,270,22,06,01,010,,13,60,292,40", 1000);
+        nm(
+            &mut t,
+            "GPGSV,2,1,05,03,40,100,31,04,15,270,22,06,01,010,,13,60,292,40",
+            1000,
+        );
         nm(&mut t, "GPGSV,2,2,05,20,30,030,18", 1000);
         nm(&mut t, "GLGSV,1,1,01,70,50,200,25", 1000);
         nm(&mut t, "GNGSA,A,3,03,13,20,,,,,,,,,1.5,1.0,1.1,1", 1000);
@@ -474,8 +475,16 @@ mod tests {
     fn nmea_fallback_fix_only_when_binary_location_is_missing() {
         let mut t = Tracker::new();
         t.set_started(true);
-        nm(&mut t, "GPRMC,123519,A,2330.000,N,09030.000,E,010.0,090.0,230394,,", 1000);
-        nm(&mut t, "GPGGA,123519,2330.000,N,09030.000,E,1,07,0.9,12.5,M,0,M,,", 1000);
+        nm(
+            &mut t,
+            "GPRMC,123519,A,2330.000,N,09030.000,E,010.0,090.0,230394,,",
+            1000,
+        );
+        nm(
+            &mut t,
+            "GPGGA,123519,2330.000,N,09030.000,E,1,07,0.9,12.5,M,0,M,,",
+            1000,
+        );
         let s = t.snapshot(1500);
         assert_eq!(s.state, State::Fix);
         let f = s.fix.unwrap();
@@ -483,9 +492,13 @@ mod tests {
         assert_eq!(f.alt, Some(12.5));
         assert!(f.speed.unwrap() > 5.0);
         assert_eq!(s.used, 7); // GGA count when no GSA arrived
-        // a binary location now wins over NMEA for the next 3 s
+                               // a binary location now wins over NMEA for the next 3 s
         t.on_msg(&loc(24.0, 91.0), 2000);
-        nm(&mut t, "GPRMC,123520,A,2330.000,N,09030.000,E,010.0,090.0,230394,,", 2500);
+        nm(
+            &mut t,
+            "GPRMC,123520,A,2330.000,N,09030.000,E,010.0,090.0,230394,,",
+            2500,
+        );
         assert_eq!(t.snapshot(2600).fix.unwrap().lat, 24.0);
         // a void RMC never makes a fix
         let mut t = Tracker::new();
@@ -526,7 +539,8 @@ mod tests {
         assert_eq!(v["updated"], 1_700_000_000_000u64);
         // off: no fix key content
         let mut t = Tracker::new();
-        let v: Value = serde_json::from_str(&to_json(&t.snapshot(0), 5, &t.counters.clone())).unwrap();
+        let v: Value =
+            serde_json::from_str(&to_json(&t.snapshot(0), 5, &t.counters.clone())).unwrap();
         assert_eq!(v["state"], "off");
         assert!(v["fix"].is_null());
     }

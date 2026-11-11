@@ -223,10 +223,7 @@ fn pkg_err(e: PkgError) -> (ErrorCode, String) {
 
 fn gnss_err(e: GnssError) -> (ErrorCode, String) {
     match e {
-        GnssError::Busy => (
-            ErrorCode::Busy,
-            "the GPS is starting or stopping".into(),
-        ),
+        GnssError::Busy => (ErrorCode::Busy, "the GPS is starting or stopping".into()),
         GnssError::Failed(m) => (ErrorCode::Internal, m),
     }
 }

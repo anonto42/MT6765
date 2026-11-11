@@ -176,7 +176,8 @@ fn switch_start_position_and_stop() {
     assert_eq!(s["gps"]["state"], "fix");
     assert_eq!(s["gps"]["enabled"], true);
     // the position stays out of the legacy status file everyone can read
-    let legacy = std::fs::read_to_string(rig.root.join("run/walpad/status.json")).unwrap_or_default();
+    let legacy =
+        std::fs::read_to_string(rig.root.join("run/walpad/status.json")).unwrap_or_default();
     assert!(!legacy.contains("23.75"), "{legacy}");
 
     // a second "on" while running changes nothing and does not run the script again
@@ -197,10 +198,7 @@ fn switch_start_position_and_stop() {
             .trim(),
         "0"
     );
-    assert_eq!(
-        c.call(8, "gps", json!({}))["error"]["code"],
-        "invalid_args"
-    );
+    assert_eq!(c.call(8, "gps", json!({}))["error"]["code"], "invalid_args");
 }
 
 #[test]
@@ -282,7 +280,10 @@ fn a_stale_state_file_does_not_claim_a_fix() {
         if s["gps"]["age_s"].as_u64().is_some_and(|a| a >= 59) {
             break;
         }
-        assert!(t.elapsed() < Duration::from_secs(10), "stale file never read");
+        assert!(
+            t.elapsed() < Duration::from_secs(10),
+            "stale file never read"
+        );
         std::thread::sleep(Duration::from_millis(300));
     }
 }
