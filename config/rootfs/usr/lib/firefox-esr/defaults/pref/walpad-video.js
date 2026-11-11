@@ -1,0 +1,10 @@
+// WalPad 8G: no GPU video decoding and a software-rendered X screen, so YouTube must get the cheapest
+// codec.  VP9/AV1 in software starve the CPU (RDD ~90 %, Firefox ~110 %, fbmirror ~90 % of 8 weak
+// cores: choppy video); with both off YouTube serves H.264 (libavcodec is in the image), much lighter.
+// (Re-enabled 2026-11-11: the "playback does not begin" error was the silent sound sink, not the codec.)
+pref("media.mediasource.vp9.enabled", false);
+pref("media.av1.enabled", false);
+pref("media.ffvpx.enabled", true);
+pref("media.hardware-video-decoding.enabled", false);
+pref("general.smoothScroll", false);
+pref("dom.min_background_timeout_value", 4000);

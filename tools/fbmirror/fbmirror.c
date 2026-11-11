@@ -134,9 +134,17 @@ int cmain(long *sp) {
         } else if (ori == 180) {
             for (int y = 0; y < H; y++) { const u32 *r = src + (long)(H - 1 - y) * stride; for (int x = 0; x < W; x++) { u32 v = r[W - 1 - x] | 0xFF000000u; if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
         } else if (ori == 90) {   /* logical 1280x800, lx = py, ly = 799 - px */
-            for (int y = 0; y < H; y++) { const u32 *c = src + y; for (int x = 0; x < W; x++) { u32 v = c[(long)(W - 1 - x) * stride] | 0xFF000000u; if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
+            /* 16 output rows per pass: each source row (one per x) is read as one full cache line instead of
+             * one pixel per cache miss (the plain column walk cost ~90 % of a core while a video played) */
+            for (int yb = 0; yb < H; yb += 16) for (int x = 0; x < W; x++) {
+                const u32 *c = src + (long)(W - 1 - x) * stride + yb; u32 *o = shadow + (long)yb * W + x;
+                for (int k = 0; k < 16; k++) { u32 v = c[k] | 0xFF000000u; if (o[(long)k * W] != v) { o[(long)k * W] = v; changed = 1; } }
+            }
         } else {                  /* 270: lx = 1279 - py, ly = px */
-            for (int y = 0; y < H; y++) { const u32 *c = src + (H - 1 - y); for (int x = 0; x < W; x++) { u32 v = c[(long)x * stride] | 0xFF000000u; if (sh[x] != v) { sh[x] = v; changed = 1; } } sh += W; }
+            for (int yb = 0; yb < H; yb += 16) for (int x = 0; x < W; x++) {
+                const u32 *c = src + (long)x * stride + (H - 16 - yb); u32 *o = shadow + (long)yb * W + x;
+                for (int k = 0; k < 16; k++) { u32 v = c[15 - k] | 0xFF000000u; if (o[(long)k * W] != v) { o[(long)k * W] = v; changed = 1; } }
+            }
         }
         if (changed || !inited) {
             int nxt = cur ^ 1;   /* real double buffering: draw into the hidden page, flip once */
