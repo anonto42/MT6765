@@ -10,6 +10,7 @@ use crate::lock::{Lock, LockError, Unlock};
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, touch_map as tm};
 use crate::modem::{MobileError, Modem};
 use crate::pkg::{Op, Pkg, PkgError};
+use crate::stats::Stats;
 use crate::volume::Volume;
 use crate::vpn::{Vpn, VpnError};
 use crate::wpa::manager::{Wifi, WifiError, WifiEvent};
@@ -111,6 +112,7 @@ pub struct Daemon {
     wifi: Wifi,
     hotspot: Hotspot,
     gnss: Gnss,
+    stats: Stats,
     bluetooth: Bluetooth,
     pkg: Pkg,
     vpn: Vpn,
@@ -306,6 +308,7 @@ impl Daemon {
             wifi: Wifi::new(&root),
             hotspot: Hotspot::new(&root),
             gnss: Gnss::new(&root),
+            stats: Stats::new(&root),
             bluetooth: Bluetooth::new(&root),
             pkg: Pkg::new(&root),
             vpn: Vpn::new(&root),
@@ -602,6 +605,10 @@ impl Daemon {
         self.publish(Topic::Wifi, "wifi", data);
     }
 
+    /// Test hook: a shorter stats sampling interval.
+    pub fn stats_mut(&mut self) -> &mut Stats {
+        &mut self.stats
+    }
     /// Test hook: shorter GPS script timeouts.
     pub fn gnss_mut(&mut self) -> &mut Gnss {
         &mut self.gnss
@@ -1052,6 +1059,7 @@ impl Daemon {
             mobile: self.modem.status().clone(),
             phone: self.modem.phone_status(Instant::now()),
             gps: self.gnss.status().clone(),
+            stats: self.stats.status().clone(),
             bluetooth: bt.clone(),
             audio: self.volume.status(),
             lock: self.lock.status(wall_ms()),
@@ -1268,6 +1276,13 @@ impl Daemon {
                     self.publish_hotspot();
                 }
                 Ok(reply)
+            }
+            Command::StatsConfig { cpu, ram, rom, net } => {
+                let it = self
+                    .stats
+                    .configure(cpu, ram, rom, net, Instant::now())
+                    .map_err(|m| (ErrorCode::Internal, m))?;
+                Ok(json!({"items": it}))
             }
             Command::Gps { on } => {
                 let st = self.gnss.set_on(on, Instant::now()).map_err(gnss_err)?;
@@ -1687,6 +1702,8 @@ impl Daemon {
             self.publish_hotspot();
             did = true;
         }
+        // header stats (owner request 2026-11-11): sampled only while an item is on
+        did |= self.stats.tick(Instant::now());
         if self.gnss.tick(Instant::now()) {
             self.publish_gps();
             did = true;

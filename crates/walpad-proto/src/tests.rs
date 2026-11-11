@@ -219,6 +219,40 @@ fn gps_status_defaults_and_roundtrip() {
 }
 
 #[test]
+fn stats_config_command_and_status() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"stats_config","args":{"net":true,"cpu":false}}"#)
+            .unwrap()
+            .1,
+        Command::StatsConfig {
+            cpu: Some(false),
+            ram: None,
+            rom: None,
+            net: Some(true)
+        }
+    );
+    for bad in [
+        r#"{"v":1,"id":1,"cmd":"stats_config"}"#,
+        r#"{"v":1,"id":1,"cmd":"stats_config","args":{}}"#,
+        r#"{"v":1,"id":1,"cmd":"stats_config","args":{"cpu":1}}"#,
+    ] {
+        assert_eq!(code(req(bad)), ErrorCode::InvalidArgs, "{bad}");
+    }
+    // defaults: CPU and RAM on, nothing measured; an old status without the field decodes
+    let d: StatsStatus = serde_json::from_str("{}").unwrap();
+    assert_eq!(d, StatsStatus::default());
+    assert!(d.items.cpu && d.items.ram && !d.items.rom && !d.items.net);
+    assert!(d.cpu_pct.is_none() && d.net_down_bps.is_none());
+    assert!(!StatsItems {
+        cpu: false,
+        ram: false,
+        rom: false,
+        net: false
+    }
+    .any());
+}
+
+#[test]
 fn hotspot_config_is_validated_and_redacted() {
     let (_, c) = req(
         r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"WalPad Café","secret":"hunter2hunter2"}}"#,
@@ -407,6 +441,7 @@ fn sample_status() -> Status {
         mobile: Default::default(),
         phone: Default::default(),
         gps: Default::default(),
+        stats: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
         lock: Default::default(),

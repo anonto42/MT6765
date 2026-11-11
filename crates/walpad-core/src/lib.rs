@@ -16,6 +16,7 @@ pub mod phone;
 pub mod pkg;
 pub mod shadow;
 pub mod shadow_live;
+pub mod stats;
 pub mod volume;
 pub mod vpn;
 pub mod wpa;

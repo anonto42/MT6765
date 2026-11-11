@@ -24,6 +24,7 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   wifi on|off                     the Wi-Fi switch (network level; the chip stays powered)
   hotspot on|off                  start/stop the hotspot (needs a password: hotspot-config)
   gps on|off                      the GPS switch (starts mnld + walpad-gnss; needs the Wi-Fi stack)
+  stats cpu|ram|rom|net on|off    show or hide a live figure in the header bar
   hotspot-config [--name N] [--password]   set name and/or password (password read from stdin)
   lock-now                        lock the screen at once (needs a lock to be set)
   lock-set pin|password|pattern  set or change the screen lock; the new secret is read from stdin
@@ -109,6 +110,18 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
                 _ => "hotspot",
             };
             (cmd.into(), json!({"on": on}))
+        }
+        Some("stats") => {
+            let key = match need(1)? {
+                k @ ("cpu" | "ram" | "rom" | "net") => k,
+                _ => return Err(USAGE.to_string()),
+            };
+            let on = match need(2)? {
+                "on" => true,
+                "off" => false,
+                _ => return Err(USAGE.to_string()),
+            };
+            ("stats_config".into(), json!({ key: on }))
         }
         Some("vpn") => match need(1)? {
             w @ ("on" | "off") => ("vpn".into(), json!({"on": w == "on"})),
@@ -556,6 +569,12 @@ mod tests {
             ("gps".into(), json!({"on": true}))
         );
         assert!(build_request(&s(&["gps"])).is_err());
+        assert_eq!(
+            build_request(&s(&["stats", "net", "off"])).unwrap(),
+            ("stats_config".into(), json!({"net": false}))
+        );
+        assert!(build_request(&s(&["stats", "gpu", "on"])).is_err());
+        assert!(build_request(&s(&["stats", "cpu"])).is_err());
         assert_eq!(
             build_request(&s(&["vpn", "on"])).unwrap(),
             ("vpn".into(), json!({"on": true}))

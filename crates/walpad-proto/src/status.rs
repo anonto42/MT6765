@@ -129,6 +129,52 @@ pub struct GpsStatus {
     pub signals: Vec<u8>,
 }
 
+/// Which live system figures the header shows (owner request 2026-11-11, change `top-bar-stats`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StatsItems {
+    pub cpu: bool,
+    pub ram: bool,
+    pub rom: bool,
+    pub net: bool,
+}
+
+impl Default for StatsItems {
+    /// CPU and RAM on, storage and network off.
+    fn default() -> Self {
+        StatsItems {
+            cpu: true,
+            ram: true,
+            rom: false,
+            net: false,
+        }
+    }
+}
+
+impl StatsItems {
+    pub fn any(&self) -> bool {
+        self.cpu || self.ram || self.rom || self.net
+    }
+}
+
+/// Live system figures (owner request 2026-11-11). A figure is `None` while its item is off, before
+/// its first sample, or when /proc or the filesystem could not be read: unavailable, never guessed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StatsStatus {
+    pub items: StatsItems,
+    /// Busy share of all CPUs over the last interval, 0-100.
+    pub cpu_pct: Option<u8>,
+    pub ram_used_kb: Option<u64>,
+    pub ram_total_kb: Option<u64>,
+    /// The filesystem holding `/` (the userdata root).
+    pub rom_used_b: Option<u64>,
+    pub rom_total_b: Option<u64>,
+    /// Bytes per second over wlan0, ccmni*, rndis0 and usb0 (never lo).
+    pub net_down_bps: Option<u64>,
+    pub net_up_bps: Option<u64>,
+}
+
 /// Bluetooth controller state (owner request 2026-11-10).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -426,6 +472,9 @@ pub struct Status {
     /// GPS switch and position (owner request 2026-11-11).
     #[serde(default)]
     pub gps: GpsStatus,
+    /// Header stats and their switches (owner request 2026-11-11).
+    #[serde(default)]
+    pub stats: StatsStatus,
     #[serde(default)]
     pub phone: PhoneStatus,
     #[serde(default)]

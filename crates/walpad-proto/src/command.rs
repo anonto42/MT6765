@@ -18,6 +18,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "hotspot",
     "hotspot_config",
     "gps",
+    "stats_config",
     "mobile_radio",
     "mobile_data",
     "mobile_apn",
@@ -241,6 +242,18 @@ pub enum Command {
     /// Persisted in /var/lib/walpad/gps-enabled.
     Gps {
         on: bool,
+    },
+    /// Which header stats are shown (owner request 2026-11-11): any subset of the four switches;
+    /// the rest keep their value. Persisted in /var/lib/walpad/statusbar.json.
+    StatsConfig {
+        #[serde(default)]
+        cpu: Option<bool>,
+        #[serde(default)]
+        ram: Option<bool>,
+        #[serde(default)]
+        rom: Option<bool>,
+        #[serde(default)]
+        net: Option<bool>,
     },
     /// Mobile radio on/off (owner request 2026-11-10): AT+CFUN=1/0 over the modem's AT channel;
     /// off is the airplane mode. Persisted in /var/lib/walpad/mobile-radio.
@@ -692,6 +705,12 @@ impl Command {
                 Err("path must be a .vcf file in a user folder".into())
             }
             Command::SetSetting { key, value } => validate_setting(key, value),
+            Command::StatsConfig {
+                cpu: None,
+                ram: None,
+                rom: None,
+                net: None,
+            } => Err("give at least one of cpu, ram, rom, net".into()),
             Command::LockSet {
                 kind,
                 secret,
