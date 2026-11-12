@@ -40,7 +40,7 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm fish mesa-dri-gallium font-dejavu font-noto-emoji font-noto font-noto-bengali font-noto-devanagari font-noto-arabic font-noto-naskh-arabic font-noto-nastaliq-urdu font-noto-tamil font-noto-telugu font-noto-gujarati font-noto-gurmukhi font-noto-kannada font-noto-malayalam font-noto-oriya font-noto-sinhala font-noto-thai font-noto-hebrew font-noto-khmer font-noto-myanmar font-noto-lao font-noto-georgian font-noto-armenian font-noto-ethiopic font-noto-cjk font-noto-symbols font-noto-math \
-      python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme"
+      python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme lite-xl"
 # fish (owner request 2026-11-12, change terminal-autocomplete-shell): autosuggestions + tab
 # completion out of the box, no plugin wiring needed (unlike zsh+zsh-autosuggestions); only the
 # "terminal" app's st runs it (-e fish in apps.json), kept out of the NO_PY trim list below so
@@ -50,6 +50,10 @@ GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xr
 # walpad-keys.py/walpad-devd.py (the Rust core injects keys itself over XTEST).  Kept on purpose:
 # matchbox-keyboard and alsa-utils (amixer), which walpad-core spawns; xset/xsetroot (session);
 # st, firefox-esr (apps.json); xkbcomp/xrdb/xclip/xrandr/xinput/setxkbmap (X tooling, no gain dropping).
+# lite-xl (owner request 2026-11-12, "an ide ... geany or lite xl"): a prebuilt Alpine community
+# aarch64 package (2.1.8-r3, apk-verified, docs/46-ide.md), chosen over geany for CPU/RAM footprint
+# (SDL2 + Lua, no GTK/dbus/at-spi2 stack): it adds only itself + lua5.4-libs on top of this package
+# set (freetype/pcre2/zlib/libpng/brotli-libs/musl are already pulled in by fontconfig/firefox-esr).
 if [ "$NO_PY" = 1 ]; then
   KEEP=""; for p in $GUI_PKGS; do
     case $p in python3|python3-tkinter|tk|py3-xlib|xdotool) ;; *) KEEP="$KEEP $p" ;; esac
