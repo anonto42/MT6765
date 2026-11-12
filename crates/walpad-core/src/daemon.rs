@@ -6,6 +6,7 @@ use crate::brain::{Brain, Effect};
 use crate::gnss::{Gnss, GnssError};
 use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
+use crate::jack::Jack;
 use crate::lock::{Lock, LockError, Unlock};
 use crate::logic::{battery, key_gestures::Action, screen_timeout as st, soc, touch_map as tm};
 use crate::modem::{MobileError, Modem};
@@ -125,6 +126,7 @@ pub struct Daemon {
     vpn: Vpn,
     modem: Modem,
     volume: Volume,
+    jack: Jack,
     lock: Lock,
     xb: Option<XBridge>,
     x_retry: Instant,
@@ -333,6 +335,7 @@ impl Daemon {
             vpn: Vpn::new(&root),
             modem: Modem::new(&root),
             volume: Volume::new(&root, now),
+            jack: Jack::new(&root, now),
             lock: Lock::new(&root, wall_ms()),
             xb: None,
             x_retry: now,
@@ -1131,6 +1134,7 @@ impl Daemon {
             stats: self.stats.status().clone(),
             bluetooth: bt.clone(),
             audio: self.volume.status(),
+            jack: self.jack.status(),
             lock: self.lock.status(wall_ms()),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
@@ -1270,6 +1274,10 @@ impl Daemon {
                 Ok(false) => Err((ErrorCode::Busy, "the test tone is still playing".into())),
                 Err(m) => Err((ErrorCode::Internal, m)),
             },
+            Command::JackForce { route } => {
+                let st = self.jack.set_force(route);
+                Ok(json!(st))
+            }
             Command::Rotate { mode } => {
                 let a = self.brain.rotation.command(mode);
                 let mut fx = Vec::new();
@@ -1806,6 +1814,7 @@ impl Daemon {
         }
         did |= self.modem.tick(Instant::now());
         did |= self.volume.tick(Instant::now());
+        did |= self.jack.tick(Instant::now());
         for n in self.modem.take_notices() {
             self.publish(Topic::Notice, "notice", n);
             did = true;

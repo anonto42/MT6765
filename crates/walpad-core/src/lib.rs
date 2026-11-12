@@ -9,6 +9,7 @@ pub mod fake;
 pub mod gnss;
 pub mod hotspot;
 pub mod inputs;
+pub mod jack;
 pub mod layout;
 pub mod lock;
 pub mod logic;

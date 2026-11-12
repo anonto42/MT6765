@@ -3,6 +3,7 @@
 
 pub mod battery;
 pub mod gesture;
+pub mod jack;
 pub mod key_gestures;
 pub mod power_key;
 pub mod rotation;

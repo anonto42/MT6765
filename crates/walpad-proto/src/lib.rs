@@ -25,9 +25,9 @@ pub use secret::{redact_hex_ssid, Secret};
 pub use status::{
     AppState, AudioStatus, Battery, BatterySource, BluetoothController, BluetoothDevice,
     BluetoothStatus, CallState, GpsState, GpsStatus, Hardware, HotspotInternet, HotspotState,
-    HotspotStatus, LegacyStatus, LockKind, LockStatus, MobileData, MobileReg, MobileStatus,
-    ModemState, PhoneStatus, ScreenState, SimState, StatsItems, StatsStatus, Status, VpnKind,
-    VpnProfile, VpnState, VpnStatus, WifiRadio, WifiStatus,
+    HotspotStatus, JackKind, JackStatus, LegacyStatus, LockKind, LockStatus, MobileData, MobileReg,
+    MobileStatus, ModemState, PhoneStatus, ScreenState, SimState, StatsItems, StatsStatus, Status,
+    VpnKind, VpnProfile, VpnState, VpnStatus, WifiRadio, WifiStatus,
 };
 
 use serde::{Deserialize, Serialize};

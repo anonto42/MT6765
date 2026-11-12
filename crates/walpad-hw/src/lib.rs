@@ -7,6 +7,7 @@ pub mod battery;
 pub mod evdev;
 pub mod gsensor;
 pub mod input;
+pub mod jack;
 pub mod sysfs;
 pub mod sysinfo;
 

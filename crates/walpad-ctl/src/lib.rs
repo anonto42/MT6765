@@ -14,6 +14,8 @@ pub const USAGE: &str = "usage: walpad-ctl <command>
   brightness N|+N|-N              native units 0-255
   volume N|+N|-N                  output volume in percent (0-100)
   mute on|off
+  jack off|headphones|headset     force the headphone/mic route (no live jack detection on this
+                                  kernel build yet; see docs/45-headphone-mic.md)
   rotate auto|lock|toggle|0|90|180|270
   keyboard [show|hide|toggle]
   home | back | screenshot | restart-shell
@@ -82,6 +84,15 @@ pub fn build_request(args: &[String]) -> Result<(String, Value), String> {
                 _ => return Err(USAGE.to_string()),
             };
             ("mute".into(), json!({"on": on}))
+        }
+        Some("jack") => {
+            let route = match need(1)? {
+                "off" => Value::Null,
+                "headphones" => json!("headphones"),
+                "headset" => json!("headset_with_mic"),
+                _ => return Err(USAGE.to_string()),
+            };
+            ("jack_force".into(), json!({"route": route}))
         }
         Some("keyboard") => (
             "keyboard".into(),
@@ -566,6 +577,19 @@ mod tests {
             ("mute".into(), json!({"on": true}))
         );
         assert!(build_request(&s(&["mute", "maybe"])).is_err());
+        assert_eq!(
+            build_request(&s(&["jack", "headphones"])).unwrap(),
+            ("jack_force".into(), json!({"route": "headphones"}))
+        );
+        assert_eq!(
+            build_request(&s(&["jack", "headset"])).unwrap(),
+            ("jack_force".into(), json!({"route": "headset_with_mic"}))
+        );
+        assert_eq!(
+            build_request(&s(&["jack", "off"])).unwrap(),
+            ("jack_force".into(), json!({"route": null}))
+        );
+        assert!(build_request(&s(&["jack", "nonsense"])).is_err());
         assert!(build_request(&s(&["volume", "loud"])).is_err());
         assert!(build_request(&s(&["screen"])).is_err());
         assert!(build_request(&s(&["nonsense"])).is_err());

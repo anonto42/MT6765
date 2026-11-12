@@ -1,4 +1,4 @@
-use crate::{ErrorCode, LockKind, Secret};
+use crate::{ErrorCode, JackKind, LockKind, Secret};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -58,6 +58,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "volume_delta",
     "mute",
     "volume_test",
+    "jack_force",
     "lock_set",
     "lock_remove",
     "unlock",
@@ -428,6 +429,14 @@ pub enum Command {
     },
     /// Play the 1 s test tone through the default sink (`walpad-volume test`, bounded).
     VolumeTest,
+    /// Headphone jack route / mic source override (owner request 2026-11-12, change
+    /// `headphone-mic-jack`). `None` clears the override (back to speaker + built-in mic): this
+    /// kernel build has no live jack detection, so this is the only way to switch route until a
+    /// future change loads the accdet module (docs/45-headphone-mic.md).
+    JackForce {
+        #[serde(default)]
+        route: Option<JackKind>,
+    },
     /// Set or change the screen lock (owner request 2026-11-10, `lock-screen`). `current` is the
     /// present secret and is required when a lock is already set. Secrets are never logged, never
     /// in argv; the core stores only a salted PBKDF2 hash.
@@ -557,7 +566,7 @@ impl Command {
             // nothing to insert
         } else if !raw.args.is_null() {
             obj.insert("args".into(), raw.args.clone());
-        } else if matches!(raw.cmd.as_str(), "set_brightness" | "layout") {
+        } else if matches!(raw.cmd.as_str(), "set_brightness" | "layout" | "jack_force") {
             obj.insert("args".into(), Value::Object(Default::default()));
         }
         let cmd: Command = serde_json::from_value(Value::Object(obj))

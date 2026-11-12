@@ -431,6 +431,32 @@ impl Default for AudioStatus {
     }
 }
 
+/// Headphone jack route / microphone source (owner request 2026-11-12). Honest limits: this kernel
+/// build does not run the MT6357 accdet module (present at /vendor/lib/modules/mt6357-accdet.ko
+/// but not insmod'd; see docs/45-headphone-mic.md), so there is no live jack-insert interrupt.
+/// `detected` stays `None` until a future, explicitly-approved boot image loads it; `forced` is the
+/// owner's manual Settings override, applied the same way either source would be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JackKind {
+    /// Headphones with no mic (or a mic path the detector could not confirm).
+    Headphones,
+    /// A headset whose mic should be used instead of the built-in one.
+    HeadsetWithMic,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct JackStatus {
+    /// Live accdet detection; always `None` on this kernel build (never guessed).
+    pub detected: Option<JackKind>,
+    /// The owner's manual override (Settings "force headphone output" / "use headset mic").
+    pub forced: Option<JackKind>,
+    /// `detected` when present, else `forced`, else `None` (speaker + built-in mic): what the
+    /// core actually applied.
+    pub route: Option<JackKind>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hardware {
     pub touch: String,
@@ -490,6 +516,9 @@ pub struct Status {
     pub bluetooth: BluetoothStatus,
     #[serde(default)]
     pub audio: AudioStatus,
+    /// Headphone jack / mic route (owner request 2026-11-12, change headphone-mic-jack).
+    #[serde(default)]
+    pub jack: JackStatus,
     pub lock: LockStatus,
     /// VPN, DNS and proxy (owner request 2026-11-10, change vpn-and-dns).
     #[serde(default)]

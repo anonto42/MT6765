@@ -447,6 +447,7 @@ fn sample_status() -> Status {
         stats: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
+        jack: Default::default(),
         lock: Default::default(),
         vpn: Default::default(),
         apps: vec![AppState {
