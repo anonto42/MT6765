@@ -209,7 +209,7 @@ pub fn info_row(p: &mut Painter, r: Rect, label: &str, value: &str, tone: Tone) 
     if !p.cv.visible(r) {
         return;
     }
-    p.divider(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4);
+    p.divider(r.x, r.bottom() - 1, r.w);
     let vw = (p.fonts.measure(value, Face::Regular, SIZE_BODY) as i32 + SP_4).min(r.w * 2 / 3);
     p.text(
         label,
@@ -313,7 +313,7 @@ pub fn render(
                 if pr(Target::Rot(*i)) && online {
                     p.row_pressed(r);
                 }
-                p.divider(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4);
+                p.divider(r.x, r.bottom() - 1, r.w);
                 let on = rot == Some(*i);
                 p.text(
                     label,

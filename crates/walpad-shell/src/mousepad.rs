@@ -393,25 +393,24 @@ impl PadState {
 
 // ------------------------------------------------------------------------------------ drawing
 
-/// The mini-map: the visible area in small, the pad's band greyed, a crosshair and a dot where
-/// the cursor is.
+/// The mini-map: the visible area in small, the pad's band greyed, a crosshair and a square marker
+/// where the cursor is.
 pub fn paint_map(p: &mut Painter, map: Rect, area: (i32, i32), cursor: (i32, i32)) {
     p.cv.rect(map.inset(-2), SURFACE_BG);
-    p.cv.rrect(map, 4, PRESSED_TINT);
+    p.cv.rect(map, PRESSED_TINT);
     let pad = pad_rect(area);
     let band_y = map.y + pad.y * map.h / area.1.max(1);
     p.cv.rect(
-        Rect::new(map.x + 1, band_y, map.w - 2, map.bottom() - band_y - 1),
+        Rect::new(map.x, band_y, map.w, map.bottom() - band_y),
         DIVIDER,
     );
-    p.cv.rrect_stroke(map, 4, 1.0, CARD_BORDER);
     let dx = map.x + cursor.0 * map.w / area.0.max(1);
     let dy = map.y + cursor.1 * map.h / area.1.max(1);
-    // crosshair through the cursor (inside the map), then the dot with a dark ring
-    p.cv.rect(Rect::new(map.x + 1, dy, map.w - 2, 1), DIVIDER);
-    p.cv.rect(Rect::new(dx, map.y + 1, 1, map.h - 2), DIVIDER);
-    p.cv.circle(dx as f32, dy as f32, 6.5, Color::hex(0x000000));
-    p.cv.circle(dx as f32, dy as f32, 4.5, TEXT);
+    // crosshair through the cursor (inside the map), then the square marker
+    p.cv.rect(Rect::new(map.x, dy, map.w, 1), DIVIDER);
+    p.cv.rect(Rect::new(dx, map.y, 1, map.h), DIVIDER);
+    p.cv.rect(Rect::new(dx - 6, dy - 6, 13, 13), Color::hex(0x000000));
+    p.cv.rect(Rect::new(dx - 4, dy - 4, 9, 9), TEXT);
 }
 
 /// Draws the whole pad over the canvas (pad-sized).
@@ -421,7 +420,7 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
     let l = pad_layout(area);
     p.cv.rect(bounds, STRIP);
     p.divider(0, 0, bounds.w);
-    p.outline_box(l.surface, RADIUS_CARD, false, false, false);
+    p.outline_box(l.surface, 0, false, false, false);
     let compact = l.surface.h < 200;
     let hint = Rect::new(
         l.surface.x + SP_5,
@@ -458,7 +457,7 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
     paint_map(p, l.map, area, st.cursor);
     let pressed = st.pressed_button();
     for (r, b) in &l.buttons {
-        p.outline_box(*r, RADIUS - 4, pressed == Some(*b), false, false);
+        p.outline_box(*r, 0, pressed == Some(*b), false, false);
         let label = |s: &str, p: &mut Painter| {
             p.text(
                 s,

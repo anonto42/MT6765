@@ -133,7 +133,7 @@ impl Painter<'_> {
                 self.cv.rect(r, PRESSED_TINT);
             }
             if i > 0 {
-                self.cv.rect(Rect::new(r.x, 10, 1, r.h - 20), DIVIDER);
+                self.cv.rect(Rect::new(r.x, 0, 1, r.h), DIVIDER);
             }
             self.text(
                 b.label(),
@@ -142,7 +142,7 @@ impl Painter<'_> {
                 Align::Center,
             );
         }
-        self.cv.rrect_stroke(area, 0, 1.0, CARD_BORDER);
+        self.divider(0, 0, area.w);
     }
 
     /// Draws the clipboard list over the whole canvas. Returns the hit rectangles.
@@ -207,7 +207,7 @@ impl Painter<'_> {
                 Align::Center,
             );
         }
-        self.cv.rrect_stroke(area, 0, 1.0, CARD_BORDER);
+        self.divider(0, 0, area.w);
         hits
     }
 }

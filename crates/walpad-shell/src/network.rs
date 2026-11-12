@@ -295,13 +295,9 @@ pub fn render(
         sw_off,
     );
     hits.push((switch_hit(l.switch), Target::WifiSwitch));
-    p.outline_box(l.chip, 16, false, false, false);
-    p.cv.circle(
-        (l.chip.x + 16) as f32,
-        (l.chip.y + 16) as f32,
-        4.0,
-        chip_col,
-    );
+    p.outline_box(l.chip, 0, false, false, false);
+    p.cv.rect(Rect::new(l.chip.x, l.chip.y, 3, l.chip.h), chip_col);
+    p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip_text,
         Style::new(Face::Regular, SIZE_SECONDARY, TEXT),

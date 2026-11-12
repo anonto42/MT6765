@@ -240,13 +240,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     let g = gps(v.st);
     p.screen_title("GPS", l.title);
     let (chip, chip_col) = chip(v.st);
-    p.outline_box(l.chip, 16, false, false, false);
-    p.cv.circle(
-        (l.chip.x + 16) as f32,
-        (l.chip.y + 16) as f32,
-        4.0,
-        chip_col,
-    );
+    p.outline_box(l.chip, 0, false, false, false);
+    p.cv.rect(Rect::new(l.chip.x, l.chip.y, 3, l.chip.h), chip_col);
+    p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip,
         Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
@@ -383,7 +379,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             let h = bar_height(*s, chart.h);
             let x = chart.x + i as i32 * (bw + gap);
             let col = if *s == 0 { DIVIDER } else { TEXT };
-            p.cv.rrect(Rect::new(x, base - h, bw, h), 3, col);
+            p.cv.rect(Rect::new(x, base - h, bw, h), col);
         }
     }
     p.text(

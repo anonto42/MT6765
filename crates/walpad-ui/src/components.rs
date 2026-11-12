@@ -379,34 +379,40 @@ impl Painter<'_> {
     ) {
         let disabled = state == ButtonState::Disabled;
         let pressed = state == ButtonState::Pressed;
-        let (wash, line, fg) = match (kind, disabled) {
-            (_, true) => (None, DIVIDER, TEXT_DISABLED),
-            (ButtonKind::Primary, _) => (pressed.then_some(PRESSED_TINT), TEXT, TEXT),
+        let (fill, wash, line, line_h, fg) = match (kind, disabled) {
+            (_, true) => (SURFACE, None, DIVIDER, 1, TEXT_DISABLED),
+            (ButtonKind::Primary, _) => (
+                SURFACE_STRONG,
+                pressed.then_some(PRESSED_TINT),
+                TEXT,
+                2,
+                TEXT,
+            ),
             (ButtonKind::Danger, _) => (
+                SURFACE,
                 Some(if pressed {
                     DANGER_TINT_PRESSED
                 } else {
                     DANGER_TINT
                 }),
                 DANGER,
+                2,
                 DANGER,
             ),
             (ButtonKind::Secondary, _) => (
+                SURFACE,
                 pressed.then_some(PRESSED_TINT),
-                if pressed { TEXT } else { OUTLINE },
+                if pressed { TEXT } else { DIVIDER },
+                if pressed { 2 } else { 1 },
                 TEXT,
             ),
         };
-        self.cv.rrect(r, RADIUS, SURFACE);
+        self.cv.rect(r, fill);
         if let Some(f) = wash {
-            self.cv.rrect(r, RADIUS, f);
+            self.cv.rect(r, f);
         }
-        let width = if kind == ButtonKind::Primary && !disabled {
-            2.0
-        } else {
-            OUTLINE_W
-        };
-        self.cv.rrect_stroke(r, RADIUS, width, line);
+        self.cv
+            .rect(Rect::new(r.x, r.bottom() - line_h, r.w, line_h), line);
         if let ButtonState::Loading(deg) = state {
             let (cx, cy) = r.center();
             self.cv
@@ -480,20 +486,28 @@ impl Painter<'_> {
     // ------------------------------------------------------------------ Toggle / Slider / Segmented
     pub fn toggle(&mut self, x: i32, y: i32, on: bool, pressed: bool, disabled: bool) -> Rect {
         let r = Rect::new(x, y, 56, 32);
-        let knob_r = if pressed { 11.0 } else { 10.0 };
-        let cy = (r.y + 16) as f32;
+        let kx = if on { r.right() - 28 } else { r.x + 4 };
+        let knob = Rect::new(kx, r.y + 4, 24, 24);
         if on && !disabled {
-            self.cv.rrect(r, 16, TEXT);
-            self.cv.circle((r.right() - 16) as f32, cy, knob_r, BG);
+            self.cv.rect(r, TEXT);
+            if pressed {
+                self.cv.rect(r, PRESSED_TINT);
+            }
+            self.cv.rect(knob, BG);
         } else {
-            let line = if disabled { DIVIDER } else { OUTLINE };
-            self.cv.rrect_stroke(r, 16, OUTLINE_W, line);
-            let kx = if on { r.right() - 16 } else { r.x + 16 };
-            self.cv.circle(
-                kx as f32,
-                cy,
-                knob_r - 2.0,
-                if disabled { DIVIDER } else { OUTLINE },
+            self.cv.rect(r, SURFACE_STRONG);
+            if pressed && !disabled {
+                self.cv.rect(r, PRESSED_TINT);
+            }
+            self.cv
+                .rect(Rect::new(r.x, r.bottom() - 1, r.w, 1), DIVIDER);
+            self.cv.rect(
+                knob,
+                if disabled {
+                    TEXT_DISABLED
+                } else {
+                    TEXT_SECONDARY
+                },
             );
         }
         r
@@ -504,17 +518,18 @@ impl Painter<'_> {
         let v = value.clamp(0.0, 1.0);
         let track = Rect::new(r.x + 16, r.y + r.h / 2 - 2, r.w - 32, 4);
         let fill = if disabled { TEXT_DISABLED } else { TEXT };
-        self.cv.rrect(track, 2, DIVIDER);
+        self.cv.rect(track, DIVIDER);
         let fw = (track.w as f32 * v) as i32;
         if fw > 0 {
             self.cv
-                .rrect(Rect::new(track.x, track.y, fw.max(4), 4), 2, fill);
+                .rect(Rect::new(track.x, track.y, fw.max(4), 4), fill);
         }
-        let kx = (track.x + fw) as f32;
-        let ky = (track.y + 2) as f32;
+        let kx = track.x + fw;
+        let ky = track.y + 2;
+        let (tw, th) = if dragging { (20, 28) } else { (16, 24) };
         self.cv
-            .circle(kx, ky, if dragging { 15.0 } else { 12.0 }, fill);
-        self.cv.circle(kx, ky, if dragging { 5.0 } else { 4.0 }, BG);
+            .rect(Rect::new(kx - tw / 2, ky - th / 2, tw, th), fill);
+        self.cv.rect(Rect::new(kx - 2, ky - 4, 4, 8), BG);
         track
     }
 
@@ -527,25 +542,31 @@ impl Painter<'_> {
         pressed: Option<usize>,
         disabled: bool,
     ) -> Vec<Rect> {
-        self.cv.rrect(r, RADIUS, SURFACE);
-        self.cv
-            .rrect_stroke(r, RADIUS, 1.0, if disabled { DIVIDER } else { OUTLINE });
+        self.cv.rect(r, SURFACE);
         let n = labels.len().max(1) as i32;
-        let w = (r.w - 8) / n;
+        let sw = r.w / n;
         let mut out = Vec::new();
         for (i, l) in labels.iter().enumerate() {
-            let seg = Rect::new(r.x + 4 + i as i32 * w, r.y + 4, w, r.h - 8);
+            let sx = r.x + i as i32 * sw;
+            let w = if i as i32 == n - 1 {
+                r.right() - sx
+            } else {
+                sw
+            };
+            let seg = Rect::new(sx, r.y, w, r.h);
             let sel = i == selected;
             if sel {
-                self.cv.rrect(seg, RADIUS - 4, PRESSED_TINT);
-                self.cv.rrect_stroke(
-                    seg,
-                    RADIUS - 4,
-                    OUTLINE_W,
+                self.cv.rect(seg, SURFACE_STRONG);
+                self.cv.rect(seg, PRESSED_TINT);
+                self.cv.rect(
+                    Rect::new(seg.x, seg.bottom() - 2, seg.w, 2),
                     if disabled { TEXT_DISABLED } else { TEXT },
                 );
             } else if pressed == Some(i) && !disabled {
-                self.cv.rrect(seg, RADIUS - 4, PRESSED_TINT);
+                self.cv.rect(seg, PRESSED_TINT);
+            }
+            if i > 0 {
+                self.cv.rect(Rect::new(sx, r.y, 1, r.h), DIVIDER);
             }
             let fg = match (sel, disabled) {
                 (_, true) => TEXT_DISABLED,
@@ -568,13 +589,10 @@ impl Painter<'_> {
     }
 
     // ------------------------------------------------------------------ ListRow
-    /// Pressed highlight of a list row: a rounded `PRESSED_TINT` inset from the row edges.
+    /// Pressed highlight of a list row: flush edge-to-edge `PRESSED_TINT` across the row.
     pub fn row_pressed(&mut self, r: Rect) {
-        self.cv.rrect(
-            Rect::new(r.x + 4, r.y + 3, r.w - 8, r.h - 6),
-            RADIUS - 2,
-            PRESSED_TINT,
-        );
+        self.cv
+            .rect(Rect::new(r.x, r.y, r.w, (r.h - 1).max(1)), PRESSED_TINT);
     }
 
     /// Returns the rect of the toggle when the accessory is one (for hit testing).
@@ -596,7 +614,7 @@ impl Painter<'_> {
         if pressed && !disabled {
             self.row_pressed(r);
         }
-        self.divider(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4);
+        self.divider(r.x, r.bottom() - 1, r.w);
         let fg = if disabled { TEXT_DISABLED } else { TEXT };
         let mut x = r.x + SP_4;
         if let Some(ic) = icon {
@@ -681,9 +699,8 @@ impl Painter<'_> {
         for i in 0..4 {
             let h = 6 + i * 4;
             let lit = (i as u8) < bars;
-            self.cv.rrect(
+            self.cv.rect(
                 Rect::new(x + i * 7, y + 18 - h, 4, h),
-                1,
                 if lit { color } else { DIVIDER },
             );
         }
@@ -704,7 +721,7 @@ impl Painter<'_> {
         if pressed {
             self.row_pressed(r);
         }
-        self.divider(r.x + SP_4, r.bottom() - 1, r.w - 2 * SP_4);
+        self.divider(r.x, r.bottom() - 1, r.w);
         let (sub, subcol) = match (state, secured) {
             (NetState::Connected, _) => ("Connected", SUCCESS),
             (NetState::Connecting(_), _) => ("Connecting…", WARNING),
@@ -777,8 +794,9 @@ impl Painter<'_> {
     /// Bottom sheet container; returns the content rect inside it.
     pub fn sheet(&mut self, r: Rect, title: &str) -> Rect {
         self.popover(r);
+        self.divider(r.x, r.y, r.w);
         self.cv
-            .rrect(Rect::new(r.x + r.w / 2 - 24, r.y + 8, 48, 4), 2, DIVIDER);
+            .rect(Rect::new(r.x + r.w / 2 - 24, r.y + 8, 48, 4), DIVIDER);
         self.text(
             title,
             Style::new(Face::Regular, SIZE_TITLE, TEXT),
@@ -811,6 +829,7 @@ impl Painter<'_> {
             h,
         );
         self.popover(r);
+        self.divider(r.x, r.y, r.w);
         self.text(
             title,
             Style::new(Face::Regular, SIZE_TITLE, TEXT),
@@ -848,8 +867,8 @@ impl Painter<'_> {
         (cancel_r, confirm_r)
     }
 
-    /// Power menu (long power press). `focus` is the keyboard/hardware-key focus ring, `armed` the
-    /// item whose first tap happened (danger + "Tap again"). Returns one rect per item.
+    /// Power menu (long power press). `focus` is the keyboard/hardware-key focus indicator, `armed`
+    /// the item whose first tap happened (danger + "Tap again"). Returns one rect per item.
     pub fn power_menu(
         &mut self,
         screen: Rect,
@@ -867,6 +886,7 @@ impl Painter<'_> {
             h,
         );
         self.popover(r);
+        self.divider(r.x, r.y, r.w);
         self.text(
             "Power",
             Style::new(Face::Regular, SIZE_TITLE, TEXT),
@@ -894,8 +914,9 @@ impl Painter<'_> {
             };
             self.button(ir, &text, kind, ButtonState::Default, None);
             if focus == i {
-                // focus ring: a 2 px white outline just outside the button
-                self.cv.rrect_stroke(ir.inset(-4), RADIUS + 4, 2.0, TEXT);
+                // focus bar: 4 px white left indicator + pressed tint
+                self.cv.rect(ir, PRESSED_TINT);
+                self.cv.rect(Rect::new(ir.x, ir.y, 4, ir.h), TEXT);
             }
             out.push(ir);
         }
@@ -915,15 +936,16 @@ impl Painter<'_> {
         focused: bool,
         error: Option<&str>,
     ) -> Option<Rect> {
-        let (border, width) = if error.is_some() {
-            (DANGER, OUTLINE_W)
+        let (line, line_h) = if error.is_some() {
+            (DANGER, 2)
         } else if focused {
-            (TEXT, OUTLINE_W)
+            (TEXT, 2)
         } else {
-            (OUTLINE, 1.0)
+            (DIVIDER, 1)
         };
-        self.cv.rrect(r, RADIUS, SURFACE);
-        self.cv.rrect_stroke(r, RADIUS, width, border);
+        self.cv.rect(r, SURFACE);
+        self.cv
+            .rect(Rect::new(r.x, r.bottom() - line_h, r.w, line_h), line);
         let eye = secret.then(|| Rect::new(r.right() - TOUCH_MIN, r.y, TOUCH_MIN, r.h));
         let text_w = r.w - 2 * SP_4 - if secret { TOUCH_MIN - SP_4 } else { 0 };
         let area = Rect::new(r.x + SP_4, r.y, text_w, r.h);
@@ -977,8 +999,9 @@ impl Painter<'_> {
             .min(area.w - 2 * SP_5)
             .max(160);
         let r = Rect::new(area.x + (area.w - w) / 2, area.y + SP_2, w, 48);
-        self.cv.rrect(r, 24, SURFACE_STRONG);
-        self.cv.rrect_stroke(r, 24, OUTLINE_W, tone_color(tone));
+        self.cv.rect(r, SURFACE_STRONG.over(BG));
+        self.cv.rect(r, banner_tint(tone));
+        self.cv.rect(Rect::new(r.x, r.y, 3, r.h), tone_color(tone));
         let ic = match tone {
             Tone::Info => Icon::Check,
             _ => Icon::Warning,
@@ -1000,9 +1023,9 @@ impl Painter<'_> {
     }
 
     pub fn banner(&mut self, r: Rect, text: &str, tone: Tone) {
-        self.cv.rrect(r, RADIUS, SURFACE_STRONG);
-        self.cv.rrect(r, RADIUS, banner_tint(tone));
-        self.cv.rrect_stroke(r, RADIUS, 1.0, tone_color(tone));
+        self.cv.rect(r, SURFACE_STRONG);
+        self.cv.rect(r, banner_tint(tone));
+        self.cv.rect(Rect::new(r.x, r.y, 3, r.h), tone_color(tone));
         self.cv.icon(
             Icon::Warning,
             r.x + SP_4,
@@ -1144,9 +1167,8 @@ impl Painter<'_> {
         for i in 0..4 {
             let h = 4 + i * 4;
             let lit = (i as u8) < bars;
-            self.cv.rrect(
+            self.cv.rect(
                 Rect::new(x + i * 5, y + 16 - h, 3, h),
-                1,
                 if lit { color } else { DIVIDER },
             );
         }
@@ -1220,7 +1242,7 @@ impl Painter<'_> {
         let w = self.quick_pill_w_marks(battery, cell.is_some(), bt, gps.is_some());
         let (charging, battery) = split_charging(battery);
         let r = Rect::new(right - w, cy - 20, w, 40);
-        self.outline_box(r, 20, pressed, open, false);
+        self.outline_box(r, 0, pressed, open, false);
         let mut x = r.x + 14;
         if let Some((bars, c)) = cell {
             self.cell_bars(x, cy - 8, bars, c);
@@ -1411,18 +1433,13 @@ impl Painter<'_> {
             let down = pressed == Some(i);
             // a pressed key is filled white: the strongest feedback while typing blind-ish
             if down {
-                self.cv.rrect(k.rect, RADIUS - 4, TEXT);
+                self.cv.rect(k.rect, TEXT);
             } else if k.key == Key::Shift && layer == KeyboardLayer::Upper {
                 // shift engaged: drawn as held
-                self.outline_box(k.rect, RADIUS - 4, true, true, false);
+                self.outline_box(k.rect, 0, true, true, false);
             } else {
-                self.cv.rrect(k.rect, RADIUS - 4, SURFACE_ICON);
-                self.cv.rrect_stroke(
-                    k.rect,
-                    RADIUS - 4,
-                    1.0,
-                    if special { OUTLINE } else { DIVIDER },
-                );
+                self.cv
+                    .rect(k.rect, if special { SURFACE } else { SURFACE_ICON });
             }
             let fg = if down { BG } else { TEXT };
             let c = k.rect;
@@ -1619,8 +1636,8 @@ impl Painter<'_> {
                 _ => false,
             };
             let down = pressed == Some(i);
-            // surface fill; pressed: + white 12 % and a white outline; latched modifier: white outline
-            self.outline_box(k.rect, RADIUS - 4, down || latched, latched, false);
+            // surface fill; pressed: + white 12 %; latched modifier: stronger fill + 2 px indicator bar
+            self.outline_box(k.rect, 0, down || latched, latched, false);
             let c = k.rect;
             let label = |s: &'static str| (s, Face::Bold, label_px);
             let text: Option<(&str, Face, f32)> = match k.key {

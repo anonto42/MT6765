@@ -331,6 +331,7 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         w.suffix,
         &w.date,
     );
+    p.divider(h.x, h.bottom() - 1, h.w);
     (pill, bell)
 }
 

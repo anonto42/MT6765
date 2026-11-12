@@ -207,17 +207,20 @@ pub fn grip_rect(win: WRect, area: (i32, i32)) -> Rect {
     Rect::new(x, y, GRIP, GRIP)
 }
 
-/// A small picture of a snap zone: an outlined window with the target part filled.
+/// A small picture of a snap zone: a sharp rectangular frame with the target part filled.
 fn snap_glyph(p: &mut Painter, zone: SnapZone, at: Rect, colour: Color) {
     let s = 22;
     let g = Rect::new(at.x + (at.w - s) / 2, at.y + (at.h - s) / 2, s, s);
-    p.cv.rrect_stroke(g, 3, 1.5, colour);
+    p.cv.rect(Rect::new(g.x, g.y, s, 1), colour);
+    p.cv.rect(Rect::new(g.x, g.bottom() - 1, s, 1), colour);
+    p.cv.rect(Rect::new(g.x, g.y, 1, s), colour);
+    p.cv.rect(Rect::new(g.right() - 1, g.y, 1, s), colour);
     let half = (s - 4) / 2;
     let fill = match zone {
         SnapZone::Left => Rect::new(g.x + 2, g.y + 2, half, s - 4),
         SnapZone::Right => Rect::new(g.x + 2 + half, g.y + 2, half, s - 4),
         SnapZone::Top => Rect::new(g.x + 2, g.y + 2, s - 4, half),
-        SnapZone::Bottom => Rect::new(g.x + 2, g.y + 2 + half, s - 4, half),
+        SnapZone::Bottom => Rect::new(g.x + 2, g.y + 2 + half, g.x + s - 2 - (g.x + 2), half),
         SnapZone::Full => Rect::new(g.x + 2, g.y + 2, s - 4, s - 4),
     };
     p.cv.rect(fill, colour);
@@ -230,19 +233,23 @@ pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
     let tw = tab_width(m);
     let mut x = SP_2;
     for (i, t) in m.tabs.iter().enumerate() {
-        let r = Rect::new(x, 6, tw - SP_1, BAR_H - 12);
+        let r = Rect::new(x, 0, tw, BAR_H - 1);
         let down = matches!(pressed, Some(Hit::Tab(wn) | Hit::TabClose(wn)) if wn == t.win);
-        p.outline_box(r, r.h / 2, down, t.win == m.active, false);
+        let active = t.win == m.active;
+        p.cv.rect(r, if active { SURFACE } else { SURFACE_ICON });
+        if active {
+            p.cv.rect(Rect::new(r.x, BAR_H - 2, r.w, 2), TEXT);
+        }
+        if down {
+            p.cv.rect(r, PRESSED_TINT);
+        }
+        p.cv.rect(Rect::new(r.right() - 1, 0, 1, BAR_H - 1), DIVIDER);
         let label = if tw >= 120 {
             t.label.clone()
         } else {
             (i + 1).to_string()
         };
-        let colour = if t.win == m.active {
-            TEXT
-        } else {
-            TEXT_SECONDARY
-        };
+        let colour = if active { TEXT } else { TEXT_SECONDARY };
         p.text(
             &label,
             Style::new(Face::Regular, SIZE_SECONDARY, colour),
@@ -262,8 +269,12 @@ pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
         );
     }
     if m.can_new {
-        let r = Rect::new(x + 6, 6, PLUS_W - 12, BAR_H - 12);
-        p.outline_box(r, r.h / 2, pressed == Some(Hit::New), false, false);
+        let r = Rect::new(x, 0, PLUS_W, BAR_H - 1);
+        p.cv.rect(r, SURFACE_ICON);
+        if pressed == Some(Hit::New) {
+            p.cv.rect(r, PRESSED_TINT);
+        }
+        p.cv.rect(Rect::new(r.right() - 1, 0, 1, BAR_H - 1), DIVIDER);
         let (cx, cy) = r.center();
         let (cx, cy) = (cx as f32, cy as f32);
         p.cv.line((cx - 8.0, cy), (cx + 8.0, cy), 2.0, TEXT);
@@ -272,6 +283,10 @@ pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
     if m.free {
         for (r, h) in layout(m) {
             if let Hit::Snap(z) = h {
+                if pressed == Some(h) {
+                    p.cv.rect(Rect::new(r.x, 0, r.w, BAR_H - 1), PRESSED_TINT);
+                }
+                p.cv.rect(Rect::new(r.x, 0, 1, BAR_H - 1), DIVIDER);
                 let colour = if pressed == Some(h) { TEXT } else { TEXT_LABEL };
                 snap_glyph(p, z, r, colour);
             }
@@ -279,19 +294,19 @@ pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
     }
 }
 
-/// The resize grip: two diagonal strokes in the corner.
+/// The resize grip: sharp square box with two diagonal strokes in the corner.
 pub fn render_grip(p: &mut Painter, pressed: bool) {
     let s = p.cv.width();
-    p.cv.rrect(
+    p.cv.rect(
         Rect::new(0, 0, s, s),
-        10,
         if pressed {
             PRESSED_TINT.over(SURFACE_STRONG.over(BG))
         } else {
             SURFACE_STRONG.over(BG)
         },
     );
-    p.cv.rrect_stroke(Rect::new(0, 0, s, s), 10, OUTLINE_W, CARD_BORDER);
+    p.divider(0, 0, s);
+    p.cv.rect(Rect::new(0, 0, 1, s), DIVIDER);
     let m = s as f32;
     for k in [0.0f32, 9.0] {
         p.cv.line(

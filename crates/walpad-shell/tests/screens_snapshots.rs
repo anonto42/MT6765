@@ -527,7 +527,7 @@ fn power_menu_snapshots() {
 /// circle changes; the corners of its bounding box keep the background (no square flash), and
 /// releasing it restores the resting frame exactly.
 #[test]
-fn pressed_round_toggle_paints_nothing_outside_its_circle() {
+fn pressed_round_toggle_paints_nothing_outside_its_box() {
     use walpad_shell::app::Target;
     use walpad_shell::chrome::{pinned_items, sidebar_layout, NAV_APPS};
     use walpad_ui::layout::Frame;
@@ -558,20 +558,15 @@ fn pressed_round_toggle_paints_nothing_outside_its_circle() {
                 .last()
                 .unwrap()
                 .rect;
-            let (cx, cy) = (
-                toggle.x as f32 + toggle.w as f32 / 2.0,
-                toggle.y as f32 + toggle.h as f32 / 2.0,
-            );
-            let rad = toggle.w as f32 / 2.0;
             let mut inside_changed = 0;
             // the bounding box and a 4 px margin around it
             for y in toggle.y - 4..toggle.bottom() + 4 {
                 for x in toggle.x - 4..toggle.right() + 4 {
-                    let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
                     let (p, r) = (pressed.pixel(x, y), rest.pixel(x, y));
-                    if d > rad + 1.0 {
-                        assert_eq!(p, r, "{w}x{h} open={open}: ({x},{y}) outside the circle");
-                    } else if d < rad - 3.0 && p != r {
+                    let inside = toggle.contains(x, y);
+                    if !inside {
+                        assert_eq!(p, r, "{w}x{h} open={open}: ({x},{y}) outside the box");
+                    } else if p != r {
                         inside_changed += 1;
                     }
                     assert_eq!(again.pixel(x, y), r, "release restores ({x},{y})");
@@ -579,7 +574,7 @@ fn pressed_round_toggle_paints_nothing_outside_its_circle() {
             }
             assert!(
                 inside_changed > 500,
-                "the pressed tint fills the circle: {inside_changed}"
+                "the pressed tint fills the box: {inside_changed}"
             );
         }
     }

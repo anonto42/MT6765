@@ -38,8 +38,8 @@ pub struct QsGeom {
 }
 
 pub fn qs_geom(frame: &Frame) -> QsGeom {
-    let x = frame.w - SP_4 - QS_W;
-    let top = HEADER_H - 4;
+    let x = frame.w - QS_W;
+    let top = HEADER_H;
     let (ix, iw) = (x + QS_PAD, QS_W - 2 * QS_PAD);
     let mut y = top + QS_PAD;
     let mut row = || {
@@ -378,7 +378,7 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
         false,
     );
     hits.push((g.battery, Target::BatteryCard));
-    p.divider(g.panel.x + SP_4, g.divider1, g.panel.w - 2 * SP_4);
+    p.divider(g.panel.x, g.divider1, g.panel.w);
 
     // no core status = no known brightness: show "--", not a made-up 0%
     let pct = if m.status.is_some() || m.slider_active {
@@ -421,7 +421,7 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
         g.volume_mute,
         &mut hits,
     );
-    p.divider(g.panel.x + SP_4, g.divider2, g.panel.w - 2 * SP_4);
+    p.divider(g.panel.x, g.divider2, g.panel.w);
 
     let rot = if m.status.as_ref().is_some_and(|s| s.rotation_locked) {
         "Rotation: Locked"
@@ -541,7 +541,7 @@ pub fn close_badge(cell: Rect) -> (Rect, Rect) {
     )
 }
 
-/// Bottom-left next to the sidebar: the panel grows upwards from 16 px above the bottom edge.
+/// Bottom-left flush against the sidebar and bottom edge.
 pub fn panel_geom(frame: &Frame, running: usize, tools: usize) -> PanelGeom {
     let active_h = if running == 0 { 24 } else { grid_h(running) };
     let h = PANEL_PAD
@@ -555,8 +555,8 @@ pub fn panel_geom(frame: &Frame, running: usize, tools: usize) -> PanelGeom {
         + SP_3
         + grid_h(tools)
         + PANEL_PAD;
-    let x = SIDEBAR_W + SP_3;
-    let top = (frame.h - SP_4 - h).max(HEADER_H + SP_2);
+    let x = SIDEBAR_W;
+    let top = (frame.h - h).max(HEADER_H);
     let ix = x + PANEL_PAD;
     let cells = |y0: i32, n: usize| -> Vec<Rect> {
         (0..n as i32)
@@ -609,15 +609,12 @@ fn panel_caption(p: &mut Painter, s: &str, r: Rect) {
     p.caption_upper(s, r);
 }
 
-/// Round close badge: it overlaps the icon box's corner, so it gets a near-opaque disc (the box
-/// outline must not show through the x), then the pressed tint, all circles.
+/// Square close badge: overlaps the icon box's corner with a dark fill, no outline.
 fn paint_close_badge(p: &mut Painter, r: Rect, pressed: bool) {
-    let (cx, cy) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
-    p.cv.circle(cx, cy, BADGE_R as f32, Tint::new(Color::hex(0x000000), 70));
+    p.cv.rect(r, Tint::new(Color::hex(0x000000), 80));
     if pressed {
-        p.cv.circle(cx, cy, BADGE_R as f32, PRESSED_TINT);
+        p.cv.rect(r, PRESSED_TINT);
     }
-    p.cv.rrect_stroke(r, BADGE_R, OUTLINE_W, TEXT);
     p.cv.icon(Icon::Close, r.x + 4, r.y + 4, r.w - 8, TEXT);
 }
 
@@ -657,7 +654,7 @@ pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect
         paint_close_badge(p, badge, m.pressed == Some(Target::PanelClose(i)));
         hits.push((hit, Target::PanelClose(i)));
     }
-    p.divider(g.panel.x + PANEL_PAD, g.divider, PANEL_W - 2 * PANEL_PAD);
+    p.divider(g.panel.x, g.divider, PANEL_W);
     panel_caption(p, "Tools", g.tools_label);
     for (i, (cell, t)) in g.tools.iter().zip(TOOLS.iter()).enumerate() {
         let target = Target::PanelTool(i);
@@ -709,8 +706,8 @@ mod tests {
     fn quick_settings_hang_under_the_pill_and_fit_both_orientations() {
         for f in [Frame::new(800, 1280), Frame::new(1280, 800)] {
             let g = qs_geom(&f);
-            assert_eq!(g.panel.right(), f.w - SP_4, "right-aligned with the pill");
-            assert!(g.panel.y < HEADER_H && g.panel.bottom() < f.h - SP_4);
+            assert_eq!(g.panel.right(), f.w, "flush with the right edge");
+            assert!(g.panel.y == HEADER_H && g.panel.bottom() < f.h - SP_4);
             let rows = [
                 g.wifi,
                 g.hotspot,
@@ -740,8 +737,8 @@ mod tests {
     fn apps_panel_sits_next_to_the_sidebar_at_the_bottom() {
         for f in [Frame::new(800, 1280), Frame::new(1280, 800)] {
             let g = panel_geom(&f, 2, 7);
-            assert_eq!(g.panel.x, SIDEBAR_W + SP_3);
-            assert_eq!(g.panel.bottom(), f.h - SP_4);
+            assert_eq!(g.panel.x, SIDEBAR_W);
+            assert_eq!(g.panel.bottom(), f.h);
             assert_eq!(g.panel.w, PANEL_W);
             assert_eq!(g.tools.len(), 7);
             assert_eq!(

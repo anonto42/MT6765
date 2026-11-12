@@ -110,29 +110,28 @@ pub fn render_qs(
         !on,
     );
     hits.push((slider, Target::VolumeSlider));
-    // mute toggle: a round outline button with the speaker (crossed out while muted)
-    if m.pressed == Some(Target::MuteToggle) {
-        p.row_pressed(mute);
-    }
+    // mute toggle: a square surface button with the speaker (crossed out while muted)
     let b = Rect::new(mute.x + 8, mute.y + 8, mute.w - 16, mute.h - 16);
-    p.cv.rrect_stroke(
+    p.surface_box(
         b,
-        b.h / 2,
-        OUTLINE_W,
-        if on && muted(m) {
-            WARNING
-        } else if on {
-            OUTLINE
-        } else {
-            TEXT_DISABLED
-        },
+        0,
+        SURFACE,
+        m.pressed == Some(Target::MuteToggle),
+        on && muted(m),
+        !on,
     );
     p.cv.icon(
         speaker(m),
         b.x + (b.w - ICON) / 2,
         b.y + (b.h - ICON) / 2,
         ICON,
-        if on { TEXT } else { TEXT_DISABLED },
+        if on && muted(m) {
+            WARNING
+        } else if on {
+            TEXT
+        } else {
+            TEXT_DISABLED
+        },
     );
     hits.push((mute, Target::MuteToggle));
 }
@@ -174,13 +173,16 @@ pub fn sound_rows(m: &Model) -> Vec<Row> {
     ]
 }
 
-/// The volume pill: a small translucent line-art capsule at the bottom centre of `area`.
+/// The volume bar (OSD): a sharp boxy overlay at the bottom centre of `area`.
 pub fn render_osd(p: &mut Painter, area: Rect, o: &Osd) -> Rect {
     let (w, h) = (280, 48);
     let r = Rect::new(area.x + (area.w - w) / 2, area.y + area.h * 72 / 100, w, h);
-    p.cv.rrect(r, h / 2, SURFACE_STRONG);
-    p.cv.rrect_stroke(r, h / 2, OUTLINE_W, OUTLINE);
     let off = o.muted || !o.available;
+    p.cv.rect(r, SURFACE_STRONG.over(BG));
+    p.cv.rect(
+        Rect::new(r.x, r.y, 3, r.h),
+        if off { TEXT_DISABLED } else { TEXT },
+    );
     p.cv.icon(
         if off { Icon::VolumeOff } else { Icon::Volume },
         r.x + SP_4,
@@ -194,14 +196,14 @@ pub fn render_osd(p: &mut Painter, area: Rect, o: &Osd) -> Rect {
         w - 2 * SP_4 - ICON - SP_3 - 56,
         4,
     );
-    p.cv.rrect(track, 2, DIVIDER);
+    p.cv.rect(track, DIVIDER);
     let fw = if off {
         0
     } else {
         (track.w as f32 * f32::from(o.volume) / 100.0) as i32
     };
     if fw > 0 {
-        p.cv.rrect(Rect::new(track.x, track.y, fw.max(4), 4), 2, TEXT);
+        p.cv.rect(Rect::new(track.x, track.y, fw.max(4), 4), TEXT);
     }
     let text = if !o.available {
         "--".to_string()

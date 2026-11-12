@@ -295,13 +295,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     );
     hits.push((switch_hit(l.switch), Target::BtSwitch));
     let (chip, chip_col) = chip(v.st);
-    p.outline_box(l.chip, 16, false, false, false);
-    p.cv.circle(
-        (l.chip.x + 16) as f32,
-        (l.chip.y + 16) as f32,
-        4.0,
-        chip_col,
-    );
+    p.outline_box(l.chip, 0, false, false, false);
+    p.cv.rect(Rect::new(l.chip.x, l.chip.y, 3, l.chip.h), chip_col);
+    p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip,
         Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
@@ -470,7 +466,7 @@ fn device_row(
     if pressed {
         p.row_pressed(row);
     }
-    p.divider(row.x + SP_4, row.bottom() - 1, row.w - 2 * SP_4);
+    p.divider(row.x, row.bottom() - 1, row.w);
     p.cv.icon(
         device_icon(d),
         row.x + SP_4,

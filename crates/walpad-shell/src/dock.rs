@@ -37,8 +37,8 @@ pub const HANDLE_W: i32 = 56;
 pub const HANDLE_H: i32 = 28;
 /// Gap between the handle and the right edge of the visible area.
 pub const HANDLE_MARGIN: i32 = SP_2;
-/// Rounded top corners of the handle (the SHAPE region and the drawing).
-pub const HANDLE_RADIUS: i32 = 10;
+/// Corner radius of the handle (0 px: sharp boxy handle).
+pub const HANDLE_RADIUS: i32 = 0;
 /// The expanded strip folds back after this long without a tap.
 pub const AUTO_COLLAPSE_MS: u64 = 5000;
 /// Title of the shell window (what Home raises).
@@ -92,53 +92,36 @@ pub fn handle_rect(area: (i32, i32), kbd_h: i32, expanded: bool) -> Rect {
     )
 }
 
-/// The handle's outline as rectangles (SHAPE bounding region, handle-local): rounded top
-/// corners, square bottom (it sits on the screen edge or on the strip).
+/// The handle's outline as rectangles (SHAPE bounding region, handle-local): sharp rectangular box.
 pub fn handle_shape() -> Vec<Rect> {
-    let r = HANDLE_RADIUS;
-    let mut out = Vec::new();
-    for y in 0..r {
-        let dy = (r - y) as f32 - 0.5;
-        let inset = (r as f32 - ((r * r) as f32 - dy * dy).max(0.0).sqrt()).round() as i32;
-        out.push(Rect::new(inset, y, HANDLE_W - 2 * inset, 1));
-    }
-    out.push(Rect::new(0, r, HANDLE_W, HANDLE_H - r));
-    out
+    vec![Rect::new(0, 0, HANDLE_W, HANDLE_H)]
 }
 
-/// Draw the handle with its top-left corner at `at` (in its own window: (0, 0)). Only the shaped
-/// area is painted: the opaque strip colour, a line-art outline (open at the bottom) and an arrow
-/// pointing where a tap moves the strip: up = expand, down = collapse.
+/// Draw the handle with its top-left corner at `at` (in its own window: (0, 0)). Sharp rectangular
+/// box with the opaque strip colour, a 1 px top divider hairline, and an arrow pointing where a tap
+/// moves the strip: up = expand, down = collapse.
 pub fn render_handle(p: &mut Painter, at: (i32, i32), expanded: bool, pressed: bool) {
     let r = Rect::new(at.0, at.1, HANDLE_W, HANDLE_H);
-    // taller than the window so the bottom corners are square (the window clips them)
-    let tall = Rect::new(r.x, r.y, r.w, r.h + HANDLE_RADIUS + 2);
     let strip = SURFACE_STRONG.over(BG);
     let fill = if pressed {
         PRESSED_TINT.over(strip)
     } else {
         strip
     };
-    // paint into a handle-sized canvas (it clips the bottom corners square), then copy only the
-    // shaped rows, so whatever lies around the rounded corners stays as it is
-    let Some(mut c) = Canvas::new(HANDLE_W as u32, HANDLE_H as u32, BG) else {
-        return;
-    };
-    let local = Rect::new(0, 0, tall.w, tall.h);
-    c.rrect(local, HANDLE_RADIUS, fill);
-    c.rrect_stroke(local, HANDLE_RADIUS, OUTLINE_W, CARD_BORDER);
-    let (cx, cy) = (HANDLE_W as f32 / 2.0, HANDLE_H as f32 / 2.0 + 1.0);
+    p.cv.rect(r, fill);
+    p.divider(r.x, r.y, r.w);
+    let (cx, cy) = (
+        r.x as f32 + HANDLE_W as f32 / 2.0,
+        r.y as f32 + HANDLE_H as f32 / 2.0 + 1.0,
+    );
     let (dx, dy) = (8.0, 4.5);
     let (tip, base) = if expanded {
         (cy + dy, cy - dy)
     } else {
         (cy - dy, cy + dy)
     };
-    c.line((cx - dx, base), (cx, tip), 2.0, TEXT);
-    c.line((cx, tip), (cx + dx, base), 2.0, TEXT);
-    for s in handle_shape() {
-        p.cv.copy_rect_from_at(&c, (r.x, r.y), Rect::new(r.x + s.x, r.y + s.y, s.w, s.h));
-    }
+    p.cv.line((cx - dx, base), (cx, tip), 2.0, TEXT);
+    p.cv.line((cx, tip), (cx + dx, base), 2.0, TEXT);
 }
 
 /// `_NET_WM_STRUT_PARTIAL`: struts count from the screen edge, so the part of the root below the
@@ -176,13 +159,17 @@ pub fn button_at(w: i32, x: i32, y: i32) -> Option<DockButton> {
 pub fn render(p: &mut Painter, pressed: Option<DockButton>) {
     let w = p.cv.width();
     // its own window over other apps (no compositor): SURFACE_STRONG over BG flattened into one
-    // opaque strip, a divider on top, translucent outlined pill buttons
+    // opaque strip, a divider on top, flush full-height button cells separated by 1 px dividers
     p.cv.rect(Rect::new(0, 0, w, DOCK_H), SURFACE_STRONG.over(BG));
     p.divider(0, 0, w);
     for (i, (r, b)) in button_rects(w).iter().enumerate() {
         let (_, label, icon) = BUTTONS[i];
-        let pill = Rect::new(r.x + SP_3, 7, r.w - 2 * SP_3, DOCK_H - 14);
-        p.outline_box(pill, pill.h / 2, pressed == Some(*b), false, false);
+        if pressed == Some(*b) {
+            p.cv.rect(*r, PRESSED_TINT);
+        }
+        if i > 0 {
+            p.cv.rect(Rect::new(r.x, 1, 1, DOCK_H - 1), DIVIDER);
+        }
         let tw = p.fonts.measure(label, Face::Regular, SIZE_SECONDARY).ceil() as i32;
         let group = ICON + SP_2 + tw;
         let x0 = r.x + (r.w - group) / 2;
@@ -1018,19 +1005,15 @@ mod tests {
     }
 
     #[test]
-    fn handle_shape_rounds_only_the_top_corners() {
+    fn handle_shape_is_a_sharp_box() {
         let s = handle_shape();
         let inside = |x, y| s.iter().any(|r| r.contains(x, y));
-        assert!(!inside(0, 0) && !inside(HANDLE_W - 1, 0), "top corners cut");
+        assert!(inside(0, 0) && inside(HANDLE_W - 1, 0), "sharp top corners");
         assert!(inside(HANDLE_W / 2, 0), "top edge");
         assert!(inside(0, HANDLE_H - 1) && inside(HANDLE_W - 1, HANDLE_H - 1));
         assert!(s
             .iter()
             .all(|r| r.x >= 0 && r.right() <= HANDLE_W && r.bottom() <= HANDLE_H));
-        // rows widen monotonically down to the full width
-        let widths: Vec<i32> = s.iter().map(|r| r.w).collect();
-        assert!(widths.windows(2).all(|p| p[0] <= p[1]));
-        assert_eq!(*widths.last().unwrap(), HANDLE_W);
     }
 
     #[test]

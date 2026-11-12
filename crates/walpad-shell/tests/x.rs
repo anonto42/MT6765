@@ -478,8 +478,10 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     // tap "Home" (secured): the password sheet opens, type the passphrase on the on-screen keyboard
     click(row0.center().0, view_y + row0.center().1);
     let g = password_geom(&frame);
-    // the focused password field's white outline crosses the sidebar column (x 60)
-    let field_edge = |img: &[u8]| px(img, 800, 60, g.field.y as usize) == (TEXT.r, TEXT.g, TEXT.b);
+    // the focused password field's bottom indicator bar crosses the sidebar column (x 60); owner
+    // request 2026-11-12: sharp corners, no full-field outline, just a 2 px bottom bar
+    let field_edge =
+        |img: &[u8]| px(img, 800, 60, (g.field.bottom() - 1) as usize) == (TEXT.r, TEXT.g, TEXT.b);
     wait_for("password sheet", || {
         field_edge(&probe.image(win, 800, 1280))
     });
@@ -542,12 +544,17 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
     let frame = Frame::new(800, 1280);
     let (placed, _) = device_screen::layout(&frame, &None, &DevdSettings::default());
     let dim = placed.iter().find(|p| p.item == Item::DimSeg).unwrap().rect;
-    let seg_w = (dim.w - 8) / 5;
+    // full-width segments, no gaps (owner request 2026-11-12: sharp corners, no outline); the
+    // selected indicator is now a 2 px bar at the very bottom of the CONTROL itself (56 px tall,
+    // same as device_screen::height's DimSeg row minus its trailing SP_3 row gap), not a full
+    // stroke around the whole row (which also includes that gap)
+    let seg_w = dim.w / 5;
+    let ctrl_h = 56;
     let seg = |i: i32| Rect4 {
-        x: dim.x + 4 + i * seg_w,
-        y: frame.content.y + dim.y + 4,
+        x: dim.x + i * seg_w,
+        y: frame.content.y + dim.y + ctrl_h - 3,
         w: seg_w,
-        h: 48,
+        h: 2,
     };
     struct Rect4 {
         x: i32,
@@ -577,7 +584,7 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
         accent_in(&img, &seg(3)) > 100
     });
     // tap "30 s": the core writes devd.json, the shell reads it back and moves the highlight
-    let (cx, cy) = (seg(1).x + seg(1).w / 2, seg(1).y + 20);
+    let (cx, cy) = (seg(1).x + seg(1).w / 2, frame.content.y + dim.y + dim.h / 2);
     probe.click(cx as i16, cy as i16);
     wait_for("devd.json written by the core", || {
         std::fs::read_to_string(root.join("etc/walpad/devd.json"))
