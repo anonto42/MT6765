@@ -57,6 +57,7 @@ fn status(volume: u8, muted: bool, available: bool) -> Status {
             muted,
             available,
         },
+        jack: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,

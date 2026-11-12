@@ -51,6 +51,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
         stats: Default::default(),
         bluetooth: Default::default(),
         audio: Default::default(),
+        jack: Default::default(),
         lock: Default::default(),
         vpn: Default::default(),
         apps: apps

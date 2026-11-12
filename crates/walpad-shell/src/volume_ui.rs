@@ -62,6 +62,18 @@ fn speaker(m: &Model) -> Icon {
     }
 }
 
+/// Headphone jack route caption (owner request 2026-11-12, change headphone-mic-jack): "Volume"
+/// normally; "Headphones" / "Headset mic" while the route is in effect. This kernel build has no
+/// live jack-insert detection (docs/45-headphone-mic.md), so it is always the owner's manual
+/// Settings override, never a sensed plug-in — the word itself is the whole status row.
+pub fn route_caption(m: &Model) -> &'static str {
+    match m.status.as_ref().and_then(|s| s.jack.route) {
+        Some(walpad_proto::JackKind::Headphones) => "Headphones",
+        Some(walpad_proto::JackKind::HeadsetWithMic) => "Headset mic",
+        None => "Volume",
+    }
+}
+
 /// Quick Settings: caption line, slider and mute button (hit areas are appended to `hits`).
 pub fn render_qs(
     p: &mut Painter,
@@ -75,7 +87,7 @@ pub fn render_qs(
     let lc = if on { TEXT } else { TEXT_DISABLED };
     p.cv.icon(Icon::Volume, caption.x, caption.y, ICON, lc);
     p.text(
-        "Volume",
+        route_caption(m),
         Style::new(Face::Regular, SIZE_SECONDARY + 1.0, lc),
         Rect::new(
             caption.x + ICON + SP_3,

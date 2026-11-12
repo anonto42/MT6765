@@ -74,6 +74,7 @@ fn status() -> Status {
             muted: false,
             available: true,
         },
+        jack: Default::default(),
         apps: vec![
             AppState {
                 app: "browser".into(),

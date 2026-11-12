@@ -46,6 +46,7 @@ fn status(apps: &[&str]) -> Status {
         bluetooth: Default::default(),
         lock: Default::default(),
         audio: Default::default(),
+        jack: Default::default(),
         vpn: Default::default(),
         phone: Default::default(),
         gps: Default::default(),

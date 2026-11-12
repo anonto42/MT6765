@@ -51,6 +51,7 @@ fn status(vpn: VpnStatus) -> Status {
         bluetooth: Default::default(),
         lock: Default::default(),
         audio: Default::default(),
+        jack: Default::default(),
         vpn,
         apps: vec![AppState {
             app: "browser".into(),

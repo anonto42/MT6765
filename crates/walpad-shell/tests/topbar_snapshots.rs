@@ -74,6 +74,7 @@ fn status(st: StatsStatus) -> Status {
         lock: Default::default(),
         vpn: Default::default(),
         audio: Default::default(),
+        jack: Default::default(),
         apps: vec![AppState {
             app: "browser".into(),
             running: true,
