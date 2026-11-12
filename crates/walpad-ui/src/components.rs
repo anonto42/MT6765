@@ -326,20 +326,24 @@ impl Painter<'_> {
         );
     }
 
-    /// Card container: translucent `SURFACE` fill and a 1 px border (pressed: + `PRESSED_TINT`).
+    /// Card container: translucent `SURFACE` fill only (pressed: + `PRESSED_TINT`). No outline
+    /// (owner request 2026-11-12, `ui-polish`): a card/row-group reads apart from the page purely
+    /// through the shade difference between `SURFACE` and `PAGE_SURFACE`/the wallpaper, the same
+    /// grouped-section language as iOS/Material settings (background colour, not a box outline).
     pub fn card(&mut self, r: Rect, pressed: bool) {
         self.cv.rrect(r, RADIUS_CARD, SURFACE);
         if pressed {
             self.cv.rrect(r, RADIUS_CARD, PRESSED_TINT);
         }
-        self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, CARD_BORDER);
     }
-    /// The page surface of a full-screen page: `PAGE_SURFACE` over the wallpaper with a thin
-    /// outline. Drawn once, into the cached background layer (never per row).
+    /// The page surface of a full-screen page: `PAGE_SURFACE` over the wallpaper, no outline
+    /// (owner request 2026-11-12, `ui-polish`: the scrollable content area read as a box inside a
+    /// box next to every card/row-group it holds; the shade difference from the wallpaper and from
+    /// the cards on top of it is enough). Drawn once, into the cached background layer (never per
+    /// row).
     pub fn page_surface(&mut self, content: Rect) {
         let r = page_rect(content);
         self.cv.rrect(r, RADIUS_CARD, PAGE_SURFACE);
-        self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, PAGE_BORDER);
     }
     /// The backing of a run of list rows (Settings, Device): a card around them, so rows over the
     /// wallpaper art stay readable. The rows themselves add no fill (only the pressed tint).

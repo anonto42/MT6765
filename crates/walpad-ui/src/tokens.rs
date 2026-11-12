@@ -3,7 +3,11 @@
 //! (opaque writes). Surfaces (popovers, cards, rows, buttons, icon boxes, sheets, the dock, the
 //! keyboard, the mouse pad) get a translucent dark fill (`Tint`, owner request 2026-11-10) that is
 //! alpha-blended over whatever is beneath (the wallpaper art), so a component always reads apart
-//! from the background. No gradients, no shadows.
+//! from the background. No gradients, no shadows. Cards, row groups and the page surface carry no
+//! outline (owner request 2026-11-12, `ui-polish`): the shade difference alone separates them, the
+//! way grouped sections work in iOS/Material settings; outlines stay on controls that need an edge
+//! to read as tappable or as a popover/sheet floating over arbitrary content (buttons, fields,
+//! icon boxes, popovers, dialogs).
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color {
@@ -117,8 +121,6 @@ pub const SURFACE_STRONG: Tint = Tint::new(BLACK, 65);
 /// into the cached background layer): the wallpaper art stays visible at the edges and through
 /// the gaps between cards; rows and cards add their own `SURFACE` on top.
 pub const PAGE_SURFACE: Tint = Tint::new(BLACK, 45);
-/// Thin outline of the page surface (white 22 %, over the background).
-pub const PAGE_BORDER: Color = white(22);
 /// Margin between the page surface and the content area edge / screen bottom (px).
 pub const PAGE_MARGIN: i32 = 8;
 /// small icon boxes (Home grid, sidebar, panel icons, keys) (30 %).
