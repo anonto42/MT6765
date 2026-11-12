@@ -10,6 +10,7 @@ pub mod input;
 pub mod jack;
 pub mod sysfs;
 pub mod sysinfo;
+pub mod usb;
 
 use std::path::{Path, PathBuf};
 
