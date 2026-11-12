@@ -22,6 +22,9 @@ pub struct DevdSettings {
     pub net_mac_mode: String,
     pub net_mac: String,
     pub net_hostname: String,
+    pub charge_mode: String,
+    pub charge_limit_pct: u32,
+    pub charge_current_ma: u32,
 }
 
 impl Default for DevdSettings {
@@ -45,6 +48,9 @@ impl Default for DevdSettings {
             net_mac_mode: "hardware".into(),
             net_mac: String::new(),
             net_hostname: String::new(),
+            charge_mode: "smart".into(),
+            charge_limit_pct: 85,
+            charge_current_ma: 1500,
         }
     }
 }
@@ -56,6 +62,9 @@ pub const NET_MASK_OPTIONS: [&str; 4] = [
     "255.0.0.0",
 ];
 pub const NET_MAC_MODES: [&str; 3] = ["hardware", "random", "custom"];
+pub const CHARGE_MODES: [&str; 4] = ["smart", "bypass", "eco", "fast"];
+pub const CHARGE_LIMIT_OPTIONS: [u32; 5] = [80, 85, 90, 95, 100];
+pub const CHARGE_CURRENT_OPTIONS: [u32; 4] = [500, 1000, 1500, 2000];
 
 pub fn read_devd(root: &Root) -> DevdSettings {
     let v: Value = std::fs::read_to_string(root.p("/etc/walpad/devd.json"))
@@ -90,6 +99,9 @@ pub fn read_devd(root: &Root) -> DevdSettings {
         net_mac_mode: s("net_mac_mode", &d.net_mac_mode),
         net_mac: s("net_mac", &d.net_mac),
         net_hostname: s("net_hostname", &d.net_hostname),
+        charge_mode: s("charge_mode", &d.charge_mode),
+        charge_limit_pct: u("charge_limit_pct", d.charge_limit_pct),
+        charge_current_ma: u("charge_current_ma", d.charge_current_ma),
     }
 }
 

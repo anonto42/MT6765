@@ -237,53 +237,103 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
             }
             r
         }
-        Page::Power => vec![
-            Row::Choice(
-                "Screen dims after".into(),
-                secs(c.devd.dim_after_s),
-                Target::PowerDimCycle,
-            ),
-            Row::Choice(
-                "Dimmed brightness".into(),
-                format!("{}%", (c.devd.dim_level * 100 / 255).max(1)),
-                Target::PowerDimLevelCycle,
-            ),
-            Row::Choice(
-                "Screen turns off after".into(),
-                secs(c.devd.off_after_s),
-                Target::PowerOffCycle,
-            ),
-            Row::Toggle(
-                "Turn off when cover closes",
-                c.devd.lid_off,
-                Target::LidToggle,
-            ),
-            Row::Choice(
-                "Low battery below".into(),
-                format!("{} mV", c.devd.low_batt_mv),
-                Target::LowBattCycle,
-            ),
-            Row::Choice(
-                "Shuts down below".into(),
-                format!("{} mV", c.devd.critical_batt_mv),
-                Target::CritBattCycle,
-            ),
-            Row::Info(
-                "Power button · tap".into(),
-                "Screen off / on".into(),
-                Tone::Info,
-            ),
-            Row::Info(
-                "Power button · hold".into(),
-                "Power menu".into(),
-                Tone::Info,
-            ),
-            Row::Action {
-                label: "Power menu",
-                target: Target::PowerMenu,
-                danger: false,
-            },
-        ],
+        Page::Power => {
+            let b = c.status.as_ref().map(|s| &s.battery);
+            let on_charger = b
+                .and_then(|b| b.state.as_deref())
+                .is_some_and(|s| s == "Charging" || s == "Full");
+            let power_path = if on_charger {
+                if c.devd.charge_mode == "bypass" {
+                    "Charger powering device (Bypass)".into()
+                } else if c.devd.charge_limit_pct < 100
+                    && b.and_then(|b| b.percent)
+                        .is_some_and(|p| u32::from(p) >= c.devd.charge_limit_pct)
+                {
+                    format!(
+                        "Charger powering device ({}% held)",
+                        c.devd.charge_limit_pct
+                    )
+                } else {
+                    "Charger powering device + charging".into()
+                }
+            } else {
+                "Running on battery".into()
+            };
+            let charge_mode = match c.devd.charge_mode.as_str() {
+                "bypass" => "Bypass (Run on Charger)",
+                "eco" => "Eco (Cool 1000 mA)",
+                "fast" => "Fast (2000 mA)",
+                _ => "Smart (Charger + Safe Charge)",
+            };
+            let charge_limit = if c.devd.charge_limit_pct >= 100 {
+                "100% (Full)".into()
+            } else {
+                format!("{}% (Protect)", c.devd.charge_limit_pct)
+            };
+            vec![
+                Row::Info("Power path".into(), power_path, Tone::Info),
+                Row::Choice(
+                    "Charging mode".into(),
+                    charge_mode.into(),
+                    Target::ChargeModeCycle,
+                ),
+                Row::Choice(
+                    "Charge limit".into(),
+                    charge_limit,
+                    Target::ChargeLimitCycle,
+                ),
+                Row::Choice(
+                    "Max charger current".into(),
+                    format!("{} mA", c.devd.charge_current_ma),
+                    Target::ChargeCurrentCycle,
+                ),
+                Row::Choice(
+                    "Screen dims after".into(),
+                    secs(c.devd.dim_after_s),
+                    Target::PowerDimCycle,
+                ),
+                Row::Choice(
+                    "Dimmed brightness".into(),
+                    format!("{}%", (c.devd.dim_level * 100 / 255).max(1)),
+                    Target::PowerDimLevelCycle,
+                ),
+                Row::Choice(
+                    "Screen turns off after".into(),
+                    secs(c.devd.off_after_s),
+                    Target::PowerOffCycle,
+                ),
+                Row::Toggle(
+                    "Turn off when cover closes",
+                    c.devd.lid_off,
+                    Target::LidToggle,
+                ),
+                Row::Choice(
+                    "Low battery below".into(),
+                    format!("{} mV", c.devd.low_batt_mv),
+                    Target::LowBattCycle,
+                ),
+                Row::Choice(
+                    "Shuts down below".into(),
+                    format!("{} mV", c.devd.critical_batt_mv),
+                    Target::CritBattCycle,
+                ),
+                Row::Info(
+                    "Power button · tap".into(),
+                    "Screen off / on".into(),
+                    Tone::Info,
+                ),
+                Row::Info(
+                    "Power button · hold".into(),
+                    "Power menu".into(),
+                    Tone::Info,
+                ),
+                Row::Action {
+                    label: "Power menu",
+                    target: Target::PowerMenu,
+                    danger: false,
+                },
+            ]
+        }
         Page::Network => {
             let w = c.status.as_ref().map(|s| &s.wifi);
             let non_empty = |s: &str| (!s.is_empty()).then(|| s.to_string());

@@ -166,6 +166,7 @@ impl Brain {
         self.screen.set_cfg(cfg(devd));
         self.rotation.set_cfg(cfg(devd));
         self.batt_cfg = cfg(devd);
+        self.guard.invalidate_charger();
         self.gestures.set_cfg(cfg(keys));
         let tcfg: tm::Cfg = cfg(touch);
         self.gest = gesture::Gestures::new(tcfg.gestures.clone());

@@ -1,26 +1,26 @@
 # Graph Report - walpad.8g  (2026-11-13)
 
 ## Corpus Check
-- 506 files · ~456,225 words
+- 506 files · ~458,035 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 55 file(s) not represented in the graph (top: .conf 23, (none) 12, .ttf 6)
 
 ## Summary
-- 8428 nodes · 18306 edges · 519 communities (342 shown, 177 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 522 edges (avg confidence: 0.86)
+- 8449 nodes · 18343 edges · 519 communities (342 shown, 177 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 523 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3cf96bb4`
+- Built from commit: `3f3f79ad`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - x.rs
-- tap
+- online
 - mousepad.rs
 - walpad-devd.py
-- Gesture
+- src/gesture.rs
 - _
 - Rect
 - src/components.rs
@@ -50,28 +50,28 @@
 - Icon
 - text.rs
 - time
-- modem_ipc.rs
+- walpad-core/src/layout.rs
 - Canvas
 - live.rs
 - network.rs
 - screens_snapshots.rs
 - walpad-proto/src/lib.rs
 - tests/components.rs
-- atomic
+- put
 - Sys
-- parse.rs
+- wpa/parse.rs
 - logic/gesture.rs
 - Wifi
 - Effect
 - Topic
 - wifi_finish.py
 - ime.rs
-- path
+- lock_snapshots.rs
 - hotspot_ipc.rs
 - ipc.rs
 - App
 - Cmd
-- chrome.rs
+- Recents
 - display_dashboard.py
 - run.sh
 - pkg.rs
@@ -86,11 +86,11 @@
 - status.rs
 - gsensor.rs
 - Outcome
-- InputEvent
+- shadow.rs
 - src/hotspot.rs
 - power_key.rs
 - SheetPurpose
-- argparse
+- subprocess
 - wifi.rs
 - art.rs
 - Root
@@ -99,15 +99,15 @@
 - manager.rs
 - app.rs
 - WiFi bring-up plan — WalPad 8G (MT6765)
-- logic/jack.rs
+- windows_ui.rs
 - keys_py_test.py
 - notifications_ui.rs
 - wire.rs
-- serde_json
+- root
 - M9.1-M9.3 Log caps, safe mode, reproducible build
 - device_screen.rs
 - modem/parse.rs
-- src/notifications.rs
+- TouchMap
 - recents.rs
 - M7.1 Python-free image as an explicit build mode
 - XWindow
@@ -240,10 +240,10 @@
 - propshim32/build.sh
 - propshim/build.sh
 - src/store.rs
-- XError
+- Keeper
 - camacdk.c
 - phone_ipc.rs
-- pathbuf
+- walpad-core/src/jack.rs
 - Vpn
 - phone/mod.rs
 - media_worker.rs
@@ -261,7 +261,7 @@
 - state.rs
 - src/volume.rs
 - Shell
-- walpad-touchd.py
+- Overlay
 - src/mobile.rs
 - 4. Feature groups
 - touch_gestures.rs
@@ -275,7 +275,7 @@
 - walpad-gnss/src/daemon.rs
 - tests/daemon.rs
 - Page
-- logic/notifications.rs
+- atomic
 - WalPad OS: tablet feature plan (2026-11-10)
 - volume_ipc.rs
 - Op
@@ -285,7 +285,7 @@
 - bluetooth/parse.rs
 - phone/store.rs
 - LockKind
-- Fonts
+- XError
 - .x_try
 - stats.rs
 - gnss_ipc.rs
@@ -293,24 +293,24 @@
 - tests/bluetooth.rs
 - phone_ui.rs
 - src/vpn.rs
-- super
-- quick
 - render
+- quick
+- walpad_proto
 - LockScreen
 - src/topbar.rs
 - run
-- arc
+- serde_json
 - launch
 - tests/store.rs
-- tests/mobile.rs
-- PhoneModel
+- terminal_ui.py
+- Rotation
 - Frozen contracts (do not change without an explicit card)
 - CallTarget
 - config.rs
 - GpsStatus
 - PhoneTarget
 - fbmirror.c
-- tests/lock.rs
+- reply_err
 - shell.rs
 - Tab
 - ADDED Requirements
@@ -325,17 +325,17 @@
 - render
 - MediaModel
 - Section
-- wall
+- walpad-powermenu.py
 - topbar_snapshots.rs
 - logic.h
-- render_sheet
-- edit_snapshots.rs
+- RotateMode
+- assert_snapshot_in
 - vpn_snapshots.rs
 - ADDED Requirements
 - ADDED Requirements
 - ADDED Requirements
 - ADDED Requirements
-- online
+- super
 - C
 - Stats
 - tests/media.rs
@@ -359,7 +359,7 @@
 - wmbar_snapshots.rs
 - 2. How it was recovered (static analysis only)
 - M5.11 Mobile network / SIM management (owner request 2026-11-10)
-- M8 display efficiency (M8.1 done on the host; M8.2 and M8.3 are owner measurements)
+- power_button.py
 - media_test.sh
 - vpn.sh
 - App switcher and navigation
@@ -374,12 +374,12 @@
 - callaudio.sh
 - jack.sh
 - MobileReg
-- .spawn
+- Gesture
 - StatItem
 - input.rs
-- Event
+- lock_window.rs
 - .new
-- Bluetooth with BlueZ (2026-11-10)
+- Event
 - Smooth battery percent and time left
 - Bluetooth settings
 - Clipboard and touch text editing
@@ -396,10 +396,10 @@
 - VPN, proxy and DNS
 - Wi-Fi monitor mode driver
 - gps.sh
-- assert_snapshot_in
+- path
 - Wr
 - ShellInput
-- PhoneView
+- SnapZone
 - Headphone jack and microphone (owner request 2026-11-12, change `headphone-mic-jack`)
 - UI polish: remove box-in-box borders (owner request 2026-11-12)
 - App catalogue and package manager
@@ -412,12 +412,12 @@
 - AddrSource
 - serial_pull.py
 - Hit
-- Value
-- st
+- windows.rs
+- BarState
 - camera-bringup/tasks.md
 - State
 - MobileData
-- Notifications
+- KeyboardMode
 - Battery percent and time left (owner request 2026-11-11)
 - Requirement: Still photo from the built-in camera
 - device-notifications/tasks.md
@@ -483,12 +483,12 @@
 - 5. Security-testing mode (Kali chroot)
 - Verb
 - codec.rs
-- NotificationCategory
-- ModemState
+- State
+- .render
 - terminal-tabs-and-autocomplete/tasks.md
 - M5.9-prep Quad tap launches the browser in both runtimes; shell capability advertised
-- VpnState
-- .rejected
+- VpnStatus
+- Role
 - Running
 - Engine
 - Running
@@ -496,14 +496,14 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `Rect` - 190 edges
-2. `Target` - 170 edges
+2. `Target` - 173 edges
 3. `XError` - 134 edges
-4. `Root` - 131 edges
+4. `Root` - 133 edges
 5. `Command` - 113 edges
 6. `Cmd` - 108 edges
 7. `online()` - 104 edges
 8. `_` - 104 edges
-9. `Daemon` - 86 edges
+9. `Daemon` - 87 edges
 10. `Icon` - 81 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -520,14 +520,14 @@
 
 ## Import Cycles
 - 1-file cycle: `crates/walpad-core/src/jack.rs -> crates/walpad-core/src/jack.rs`
-- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/chrome.rs -> crates/walpad-shell/src/app.rs`
-- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/device_screen.rs -> crates/walpad-shell/src/app.rs`
 - 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/network.rs -> crates/walpad-shell/src/app.rs`
-- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/settings_screen.rs -> crates/walpad-shell/src/app.rs`
-- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/gps_screen.rs -> crates/walpad-shell/src/app.rs`
-- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/overlay.rs -> crates/walpad-shell/src/app.rs`
 - 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/vpn_screen.rs -> crates/walpad-shell/src/app.rs`
 - 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/phone_ui.rs -> crates/walpad-shell/src/app.rs`
+- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/settings_screen.rs -> crates/walpad-shell/src/app.rs`
+- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/device_screen.rs -> crates/walpad-shell/src/app.rs`
+- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/chrome.rs -> crates/walpad-shell/src/app.rs`
+- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/overlay.rs -> crates/walpad-shell/src/app.rs`
+- 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/gps_screen.rs -> crates/walpad-shell/src/app.rs`
 - 2-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/notifications_ui.rs -> crates/walpad-shell/src/app.rs`
 - 3-file cycle: `crates/walpad-shell/src/app.rs -> crates/walpad-shell/src/settings_screen.rs -> crates/walpad-shell/src/device_screen.rs -> crates/walpad-shell/src/app.rs`
 - 3-file cycle: `crates/walpad-shell/src/present.rs -> crates/walpad-x/src/lib.rs -> crates/walpad-shell/src/window.rs -> crates/walpad-shell/src/present.rs`
@@ -538,9 +538,9 @@
 Cohesion: 0.21
 Nodes (36): a_shell_started_locked_covers_everything_grabs_and_takes_input(), activate_app(), active_fill(), app_window(), atom(), can_grab_pointer(), core_status(), count() (+28 more)
 
-### Community 1 - "tap"
-Cohesion: 0.13
-Nodes (39): an_available_network_with_stored_credentials_connects_without_the_sheet(), apps_panel_close_badge_closes_the_app_and_keeps_the_panel_open(), apps_screen_launches_closes_and_pins(), clock_toggle_restart_shell_and_two_step_power_confirm(), close_reply_that_closed_nothing_is_reported(), disconnect_button_and_core_loss_reset_the_transient_state(), entering_network_asks_for_saved_networks_and_scan_is_single_flight(), go() (+31 more)
+### Community 1 - "online"
+Cohesion: 0.09
+Nodes (58): an_available_network_with_stored_credentials_connects_without_the_sheet(), app_crash_notice_shows_a_danger_toast_that_expires(), apps_panel_close_badge_closes_the_app_and_keeps_the_panel_open(), apps_screen_launches_closes_and_pins(), arming_one_item_then_pressing_another_does_not_fire(), background_layer_is_cached_not_redrawn_every_frame(), centre(), clock_toggle_restart_shell_and_two_step_power_confirm() (+50 more)
 
 ### Community 2 - "mousepad.rs"
 Cohesion: 0.05
@@ -550,9 +550,9 @@ Nodes (63): ACCEL, ARROW, BRIDGE_LIFT_MS, BUTTON_LEFT, BUTTON_RIGHT, button_row(
 Cohesion: 0.24
 Nodes (18): battery(), battery_guard(), command(), decide(), find_inputs(), load_cfg(), log(), main() (+10 more)
 
-### Community 4 - "Gesture"
-Cohesion: 0.11
-Nodes (27): beyond_slop(), down(), drag_scrolls_with_deltas_and_ends_on_release(), Gesture, Cancel, Drag, DragEnd, DragStart (+19 more)
+### Community 4 - "src/gesture.rs"
+Cohesion: 0.22
+Nodes (14): beyond_slop(), down(), drag_scrolls_with_deltas_and_ends_on_release(), Input, Down, Move, Up, long_press_fires_once_at_500ms_and_release_is_silent() (+6 more)
 
 ### Community 5 - "_"
 Cohesion: 0.04
@@ -560,11 +560,11 @@ Nodes (64): STRIP, DANGER_TINT, DANGER_TINT_PRESSED, _, ACCENT, BG, BLACK, BOX_D
 
 ### Community 6 - "Rect"
 Cohesion: 0.08
-Nodes (15): dialog_rect(), render_pair(), Rect, banner_tint(), KeyBtn, page_rect(), Painter, split_charging() (+7 more)
+Nodes (17): Rect, banner_tint(), KeyBtn, page_rect(), Painter, split_charging(), tone_color(), WifiMark (+9 more)
 
 ### Community 7 - "src/components.rs"
 Cohesion: 0.03
-Nodes (72): Tap, Hide, Paste, Send, State, Accessory, Action, Chevron (+64 more)
+Nodes (68): Tap, Hide, Paste, Send, State, Accessory, Action, Chevron (+60 more)
 
 ### Community 8 - "Command"
 Cohesion: 0.02
@@ -572,11 +572,11 @@ Nodes (87): Command, Back, BluetoothConfirm, BluetoothConnect, BluetoothDisconne
 
 ### Community 9 - "dock.rs"
 Cohesion: 0.05
-Nodes (41): app_for_class(), Atoms, AUTO_COLLAPSE_MS, button_at(), button_rects(), BUTTONS, command_for(), Dock (+33 more)
+Nodes (42): app_for_class(), Atoms, AUTO_COLLAPSE_MS, button_at(), button_rects(), BUTTONS, command_for(), Dock (+34 more)
 
 ### Community 10 - "Target"
 Cohesion: 0.02
-Nodes (103): Target, AppTile, Avail, Back, BatteryCard, BtAction, BtAvail, BtCard (+95 more)
+Nodes (106): Target, AppTile, Avail, Back, BatteryCard, BtAction, BtAvail, BtCard (+98 more)
 
 ### Community 11 - "padui.c"
 Cohesion: 0.15
@@ -595,8 +595,8 @@ Cohesion: 0.20
 Nodes (5): App, Keyboard, scan_results(), status(), wcli()
 
 ### Community 15 - "Frame"
-Cohesion: 0.06
-Nodes (35): app_sheet_geom(), app_sheet_has_close_only_when_running(), AppSheet, dns_list(), key_at(), normalize_mac(), Overlay, App (+27 more)
+Cohesion: 0.13
+Nodes (23): app_sheet_geom(), app_sheet_has_close_only_when_running(), AppSheet, dns_list(), key_at(), normalize_mac(), password_geom(), password_sheet_fits_both_orientations_and_targets_are_big_enough() (+15 more)
 
 ### Community 16 - "key_gestures.rs"
 Cohesion: 0.11
@@ -604,15 +604,15 @@ Nodes (32): Action, Back, Ctl, Home, Key, Keyboard, Launch, None (+24 more)
 
 ### Community 17 - "src/apps.rs"
 Cohesion: 0.07
-Nodes (33): app_that_disappears_from_disk_is_unlisted_again(), AppDef, Apps, apps_d_adds_apps_but_never_replaces_the_shipped_ones(), apps_get_the_system_proxy_in_their_environment(), bad_json_means_no_apps(), BIN_DIRS, closing_child_that_ignores_sigterm_is_killed_after_the_grace_period() (+25 more)
+Nodes (34): app_that_disappears_from_disk_is_unlisted_again(), AppDef, Apps, apps_d_adds_apps_but_never_replaces_the_shipped_ones(), apps_get_the_system_proxy_in_their_environment(), bad_json_means_no_apps(), BIN_DIRS, closing_child_that_ignores_sigterm_is_killed_after_the_grace_period() (+26 more)
 
 ### Community 18 - "tests/apps.rs"
 Cohesion: 0.12
 Nodes (25): app_win(), atom(), Client, close_app_falls_back_to_sigterm_when_the_window_ignores_delete(), close_app_sends_wm_delete_window_to_an_app_we_did_not_start(), crash_publishes_a_notice_and_raises_home_but_clean_exit_and_close_do_not(), free_mode_clamps_moves_and_resizes_and_snaps(), geometry() (+17 more)
 
 ### Community 19 - "touch_map.rs"
-Cohesion: 0.14
-Nodes (27): Act, Move, Pair, Press, Release, Cfg, ev(), H (+19 more)
+Cohesion: 0.25
+Nodes (16): Cfg, ev(), H, multitouch_off_keeps_the_single_pointer(), protocol_a_single_contact_frames_are_unchanged(), rule1_3_press_on_first_report_then_only_moves(), rule1_alt_codes_and_btn_touch_counts_as_movement(), rule2_scale_clamp_flip_swap() (+8 more)
 
 ### Community 20 - "CoreEvent"
 Cohesion: 0.12
@@ -620,27 +620,27 @@ Nodes (17): connects_gets_status_sends_commands_and_reconnects(), Core, CoreClie
 
 ### Community 21 - "settings_screen.rs"
 Cohesion: 0.11
-Nodes (24): Ctx, find(), gather(), gather_reads_a_fake_root(), layout(), layout_top_level_and_subpage(), maintenance_has_the_dangerous_actions_as_danger_buttons(), page_rows() (+16 more)
+Nodes (23): Ctx, find(), gather(), gather_reads_a_fake_root(), layout(), layout_top_level_and_subpage(), maintenance_has_the_dangerous_actions_as_danger_buttons(), page_rows() (+15 more)
 
 ### Community 22 - "components"
 Cohesion: 0.10
 Nodes (18): battery_card(), CELL_H, CELL_W, grid_is_centred_fits_and_wraps(), HomeLayout, layout(), overlaps(), render() (+10 more)
 
 ### Community 23 - "rotation.rs"
-Cohesion: 0.10
-Nodes (25): Act, DockKeyboard, SetStruts, WriteOrientation, Cfg, decide(), missing_sample_does_nothing(), Rotation (+17 more)
+Cohesion: 0.22
+Nodes (12): Cfg, decide(), missing_sample_does_nothing(), rule1_sampling_conditions(), rule2_decide_table(), rule2_flip(), rule3_debounce(), rule3_no_change_sample_resets_candidate() (+4 more)
 
 ### Community 24 - "os"
-Cohesion: 0.10
-Nodes (19): ctl(), halt(), Menu, detect(), main(), main(), screen_off(), screen_on() (+11 more)
+Cohesion: 0.12
+Nodes (15): find_touch(), load_cal(), log(), main(), open_x(), orientation(), to_logical(), current_usb() (+7 more)
 
 ### Community 25 - "screen_timeout.rs"
 Cohesion: 0.15
 Nodes (19): Act, Backlight, Activity, NoWake, activity_resets_idle_timer(), Wakes, Brightness, Absolute (+11 more)
 
 ### Community 26 - "Tone"
-Cohesion: 0.12
-Nodes (21): hw_label(), Item, BrightnessCard, DimSeg, Gap, Info, Label, LidRow (+13 more)
+Cohesion: 0.11
+Nodes (22): hw_label(), Item, BrightnessCard, DimSeg, Gap, Info, Label, LidRow (+14 more)
 
 ### Community 27 - "io"
 Cohesion: 0.08
@@ -648,11 +648,11 @@ Nodes (24): BadMetadata, _descriptor(), human(), parse(), parse_geometry(), pars
 
 ### Community 28 - "evdev.rs"
 Cohesion: 0.08
-Nodes (25): ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_X, ABS_Y, BTN_TOUCH, ev(), EV_ABS, EV_KEY (+17 more)
+Nodes (27): ev(), ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_X, ABS_Y, BTN_TOUCH, ev(), EV_ABS (+19 more)
 
 ### Community 29 - "keyboard.rs"
 Cohesion: 0.06
-Nodes (27): Atoms, bottom_strut(), BottomWindows, create_bottom_windows(), HEIGHT_PCT, inject(), keyboard_rect(), KeyMap (+19 more)
+Nodes (25): Atoms, bottom_strut(), BottomWindows, create_bottom_windows(), HEIGHT_PCT, keyboard_rect(), layout_fills_both_orientations_with_big_enough_keys(), load_keymap() (+17 more)
 
 ### Community 30 - "panels.rs"
 Cohesion: 0.07
@@ -663,20 +663,20 @@ Cohesion: 0.04
 Nodes (56): build(), Canvas, draw_icon(), draw_icon_rotated(), every_icon_draws_something_inside_its_box(), Icon, .ALL, Apps (+48 more)
 
 ### Community 32 - "text.rs"
-Cohesion: 0.10
-Nodes (19): Align, Center, Left, Right, drawing_changes_pixels_only_inside_the_box(), ellipsis_fits_the_box(), Face, .ALL (+11 more)
+Cohesion: 0.12
+Nodes (15): drawing_changes_pixels_only_inside_the_box(), ellipsis_fits_the_box(), Face, .ALL, Bold, ExtraLight, Mono, Regular (+7 more)
 
 ### Community 33 - "time"
 Cohesion: 0.14
 Nodes (17): send_reboot(), usb_ids(), main(), reboot(), wait_gone(), attempt(), main(), stage() (+9 more)
 
-### Community 34 - "modem_ipc.rs"
-Cohesion: 0.12
-Nodes (14): a_failed_boot_and_a_missing_modem_are_reported(), Conn, data_failure_is_reported_with_its_reason(), FAKE_SCRIPT, FakeModem, FakeState, fast(), IMEI (+6 more)
+### Community 34 - "walpad-core/src/layout.rs"
+Cohesion: 0.21
+Nodes (18): a_lone_window_fills_the_work_area_and_a_second_one_takes_the_other_tile(), closed_windows_are_forgotten(), free_mode_floats_new_windows_and_keeps_them_inside(), hand_placed_windows_are_not_replaced(), Layout, LayoutOp, Maximize, Place (+10 more)
 
 ### Community 35 - "Canvas"
 Cohesion: 0.10
-Nodes (12): blit_and_crop_roundtrip(), Canvas, copy_rect_from_a_strip(), fills_and_reads_back(), origin_offsets_drawing_but_not_reads(), outlines_leave_the_inside_untouched(), paint(), rect_helpers() (+4 more)
+Nodes (10): blit_and_crop_roundtrip(), Canvas, copy_rect_from_a_strip(), fills_and_reads_back(), origin_offsets_drawing_but_not_reads(), outlines_leave_the_inside_untouched(), paint(), rect_helpers() (+2 more)
 
 ### Community 36 - "live.rs"
 Cohesion: 0.17
@@ -687,8 +687,8 @@ Cohesion: 0.13
 Nodes (25): bars_from_dbm(), CARD_H, client_off(), connected_card_and_failed_hint_take_space_only_when_present(), FORGET_W, hotspot_lines(), hotspot_on(), hotspot_status_lines() (+17 more)
 
 ### Community 38 - "screens_snapshots.rs"
-Cohesion: 0.16
-Nodes (39): app(), app_store_screens(), apps_options_sheet(), apps_panel_portrait_and_landscape(), bluetooth_busy_row_and_dialogs(), bluetooth_screen_states(), bt_on(), catalog() (+31 more)
+Cohesion: 0.07
+Nodes (64): active_target(), BELL_W, Cached, Chrome, ChromeKey, draw_item(), GAP, NAV_APPS (+56 more)
 
 ### Community 39 - "walpad-proto/src/lib.rs"
 Cohesion: 0.13
@@ -698,29 +698,29 @@ Nodes (9): ErrorBody, Event, parse_request(), PROTO_VERSION, Response, SOCKET_PA
 Cohesion: 0.19
 Nodes (17): assert_snapshot(), app_tiles_and_status_cards(), button_states(), controls(), dialogs_sheet_and_power_menu(), header_pill_and_icon_boxes(), keyboard_layers(), label() (+9 more)
 
-### Community 41 - "atomic"
+### Community 41 - "put"
 Cohesion: 0.09
-Nodes (21): parse_voltage_mv(), PS, reads_tree_and_missing(), SOURCES, falls_back_to_extcon(), no_detector_is_none(), PRESENCE_NODES, read_jack() (+13 more)
+Nodes (29): MASTER_CHG_LIMIT, MTK_CURRENT_CMD, parse_voltage_mv(), PS, reads_tree_and_missing(), set_charger_cmd(), set_charger_input_limit_ua(), SOURCES (+21 more)
 
 ### Community 42 - "Sys"
 Cohesion: 0.09
 Nodes (10): main(), table(), main(), versions(), cmd(), run(), _find_data_intf(), find_device() (+2 more)
 
-### Community 43 - "parse.rs"
-Cohesion: 0.12
-Nodes (22): decode_escapes(), Event, Connected, Disconnected, Other, ScanResults, TempDisabled, list_status_signal_events() (+14 more)
+### Community 43 - "wpa/parse.rs"
+Cohesion: 0.19
+Nodes (15): decode_escapes(), list_status_signal_events(), parse_list_networks(), parse_scan_results(), parse_status(), Saved, scan_merge_sort_and_security(), ScanEntry (+7 more)
 
 ### Community 44 - "logic/gesture.rs"
 Cohesion: 0.07
 Nodes (59): a_hold_shorter_than_500_ms_is_a_left_click(), a_late_or_distant_second_tap_is_a_separate_click(), a_touch_stops_a_fling_and_does_not_click(), BTN_LEFT, BTN_RIGHT, Cfg, CLICK, disabled_gestures_never_probe() (+51 more)
 
 ### Community 45 - "Wifi"
-Cohesion: 0.18
-Nodes (8): map(), Wifi, WifiError, Busy, Failed, Invalid, Unavailable, WifiLive
+Cohesion: 0.17
+Nodes (9): wifi_err(), map(), Wifi, WifiError, Busy, Failed, Invalid, Unavailable (+1 more)
 
 ### Community 46 - "Effect"
 Cohesion: 0.08
-Nodes (32): a_short_power_press_that_turns_the_screen_off_locks_and_waking_does_not(), BATTERY_EVERY, Brain, cfg(), Effect, Action, Backlight, Button (+24 more)
+Nodes (28): a_short_power_press_that_turns_the_screen_off_locks_and_waking_does_not(), BATTERY_EVERY, Brain, cfg(), Effect, Action, Backlight, Button (+20 more)
 
 ### Community 47 - "Topic"
 Cohesion: 0.33
@@ -734,9 +734,9 @@ Nodes (20): Three bugs worth remembering, Tooling added, main(), parse_args(), r
 Cohesion: 0.06
 Nodes (33): A, a_focus_that_does_not_stay_never_shows_the_keyboard(), Atoms, B, destroyed_context_and_vanished_client_hide(), FALLBACK_MS, focus(), focus_in_shows_and_focus_out_hides_after_the_debounce() (+25 more)
 
-### Community 50 - "path"
-Cohesion: 0.11
-Nodes (12): GUARD_EVERY_MS, WM_CLASS_CLASS, WM_CLASS_INSTANCE, GUARD_EVERY_MS, WM_CLASS_CLASS, WM_CLASS_INSTANCE, golden(), password_and_pattern() (+4 more)
+### Community 50 - "lock_snapshots.rs"
+Cohesion: 0.50
+Nodes (6): golden(), password_and_pattern(), pin_portrait_and_landscape(), pin_wrong_and_countdown(), screen(), shot()
 
 ### Community 51 - "hotspot_ipc.rs"
 Cohesion: 0.19
@@ -747,20 +747,20 @@ Cohesion: 0.23
 Nodes (9): brightness_rotate_screen_and_errors(), Conn, Harness, hello_is_required_and_version_checked(), keyboard_command_reaches_the_shell_on_the_input_topic(), oversized_line_closes_connection_and_socket_mode_is_0600(), settings_launch_screenshot_power_and_restart_shell(), status_event_on_change_and_devd_fifo_and_legacy_json() (+1 more)
 
 ### Community 53 - "App"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (3): App, AppEntry, WallTime
 
 ### Community 54 - "Cmd"
 Cohesion: 0.03
-Nodes (83): Cmd, Back, BtConfirm, BtConnect, BtDisconnect, BtEnable, BtForget, BtPair (+75 more)
+Nodes (84): Cmd, Back, BtConfirm, BtConnect, BtDisconnect, BtEnable, BtForget, BtPair (+76 more)
 
-### Community 55 - "chrome.rs"
-Cohesion: 0.12
-Nodes (25): active_target(), BELL_W, Cached, Chrome, ChromeKey, draw_item(), GAP, NAV_APPS (+17 more)
+### Community 55 - "Recents"
+Cohesion: 0.14
+Nodes (12): Action, Close, Dismiss, Focus, CLOSE_TIMEOUT_MS, Drag, Horizontal, None (+4 more)
 
 ### Community 56 - "display_dashboard.py"
-Cohesion: 0.11
-Nodes (26): command(), commit_display(), cpu_percent(), endpoint(), hardware_status(), indicator(), load_psf(), main() (+18 more)
+Cohesion: 0.19
+Nodes (19): command(), commit_display(), cpu_percent(), endpoint(), hardware_status(), indicator(), load_psf(), main() (+11 more)
 
 ### Community 57 - "run.sh"
 Cohesion: 0.10
@@ -768,19 +768,19 @@ Nodes (27): bad(), bt(), cam(), cam_env(), CAM_LOG, camrc(), chk(), conc_combo()
 
 ### Community 58 - "pkg.rs"
 Cohesion: 0.07
-Nodes (43): pkg_err(), APK_DB, app_entry_is_generated_from_the_catalogue(), cat_json(), CATALOGUE, catalogue_answer_lists_state_and_heals_a_missing_registration(), catalogue_drops_entries_that_could_reach_apk_wrongly(), check_space() (+35 more)
+Nodes (42): APK_DB, app_entry_is_generated_from_the_catalogue(), cat_json(), CATALOGUE, catalogue_answer_lists_state_and_heals_a_missing_registration(), catalogue_drops_entries_that_could_reach_apk_wrongly(), check_space(), clean() (+34 more)
 
 ### Community 59 - "walpad-keys.py"
 Cohesion: 0.28
 Nodes (10): ctl(), do(), find(), Key, keyboard_toggle(), load(), log(), main() (+2 more)
 
 ### Community 61 - "walpad-ctl/src/lib.rs"
-Cohesion: 0.16
-Nodes (16): build_request(), key_held(), key_held_exit_status(), key_held_status(), legacy_line(), lock_clear(), read_secret(), rpc() (+8 more)
+Cohesion: 0.12
+Nodes (19): build_request(), key_held(), key_held_exit_status(), key_held_status(), legacy_line(), lock_clear(), parse_secs(), parse_sig() (+11 more)
 
 ### Community 62 - "logic/battery.rs"
-Cohesion: 0.16
-Nodes (19): Act, CriticalPoweroff, LowChanged, Cfg, charger_online_means_charging_and_the_estimate_drops_the_charge_voltage(), charging_percent(), d4_consecutive_readings(), effective_status() (+11 more)
+Cohesion: 0.13
+Nodes (21): Act, CriticalPoweroff, LowChanged, Cfg, charger_online_means_charging_and_the_estimate_drops_the_charge_voltage(), charger_policy_smart_limit_bypass_and_thermal(), ChargerTarget, charging_percent() (+13 more)
 
 ### Community 63 - "Inputs"
 Cohesion: 0.19
@@ -804,83 +804,79 @@ Nodes (42): a_damaged_file_counts_as_no_lock_never_as_locked_forever(), a_new_se
 
 ### Community 68 - "status.rs"
 Cohesion: 0.06
-Nodes (40): kind_ext(), AppState, Battery, BatterySource, Gauge, Unknown, VoltageEstimate, Hardware (+32 more)
+Nodes (43): AppState, Battery, BatterySource, Gauge, Unknown, VoltageEstimate, BluetoothController, Absent (+35 more)
 
 ### Community 69 - "gsensor.rs"
-Cohesion: 0.12
-Nodes (7): BUF, GSENSOR_IOCTL, GsIoctl, .IS_MUTATING, parse_gsensor(), read_gsensor(), reads_fake_file_and_missing()
+Cohesion: 0.13
+Nodes (6): BUF, GSENSOR_IOCTL, GsIoctl, .IS_MUTATING, parse_gsensor(), read_gsensor()
 
 ### Community 70 - "Outcome"
-Cohesion: 0.17
+Cohesion: 0.16
 Nodes (5): PowerMenuState, friendly(), App, Outcome, ReplyError
 
-### Community 71 - "InputEvent"
-Cohesion: 0.21
-Nodes (14): cover_close_turns_screen_off(), ev(), idle_dims_then_touch_wakes(), lines(), lns(), new(), no_g(), power_short_press_toggles_screen_and_long_opens_menu() (+6 more)
+### Community 71 - "shadow.rs"
+Cohesion: 0.25
+Nodes (12): cover_close_turns_screen_off(), idle_dims_then_touch_wakes(), lines(), lns(), new(), no_g(), power_short_press_toggles_screen_and_long_opens_menu(), replay() (+4 more)
 
 ### Community 73 - "src/hotspot.rs"
-Cohesion: 0.09
-Nodes (21): hotspot_err(), CONF, DEFAULT_SSID, field(), Hotspot, HotspotError, Busy, Failed (+13 more)
+Cohesion: 0.08
+Nodes (22): hotspot_err(), CONF, DEFAULT_SSID, field(), Hotspot, HotspotError, Busy, Failed (+14 more)
 
 ### Community 74 - "power_key.rs"
 Cohesion: 0.21
 Nodes (12): Act, ActivateMenuItem, OpenPowerMenu, ToggleScreen, WakeScreen, LONG_MS, PowerKey, rule1_long_press_opens_menu_once() (+4 more)
 
 ### Community 75 - "SheetPurpose"
-Cohesion: 0.09
-Nodes (22): SheetPurpose, HotspotName, HotspotPassword, LockCurrent, LockNew, LockRemove, LockRepeat, MobileApn (+14 more)
+Cohesion: 0.06
+Nodes (27): PasswordSheet, SheetPurpose, HotspotName, HotspotPassword, LockCurrent, LockNew, LockRemove, LockRepeat (+19 more)
 
-### Community 76 - "argparse"
-Cohesion: 0.17
-Nodes (11): detect_server(), interactive(), main(), one_shot(), read_all(), wait_for_server(), main(), mtk() (+3 more)
+### Community 76 - "subprocess"
+Cohesion: 0.15
+Nodes (13): detect_server(), interactive(), main(), one_shot(), read_all(), wait_for_server(), main(), mtk() (+5 more)
 
 ### Community 78 - "wifi.rs"
 Cohesion: 0.32
 Nodes (10): connect_wpa2_derives_psk_never_sends_the_passphrase_and_saves_with_mode_600(), Env, open_network_uses_key_mgmt_none_and_timeout_is_reported(), reconnects_when_the_supplicant_restarts(), saved_list_forget_disconnect_and_validation(), scan_is_single_flight_merged_sorted_and_utf8_safe(), secret(), until() (+2 more)
 
 ### Community 79 - "art.rs"
-Cohesion: 0.20
-Nodes (12): both_wallpapers_decode_at_panel_size_with_the_background_colour_on_top(), coffee_rect(), cup_path(), draw_coffee(), rotated_square(), strokes_stay_inside_the_rect(), the_cup_fits_both_orientations_and_keeps_its_aspect(), VIEW_H (+4 more)
+Cohesion: 0.18
+Nodes (14): both_wallpapers_decode_at_panel_size_with_the_background_colour_on_top(), coffee_rect(), cup_path(), draw_coffee(), rotated_square(), strokes_stay_inside_the_rect(), the_cup_fits_both_orientations_and_keeps_its_aspect(), VIEW_H (+6 more)
 
 ### Community 80 - "Root"
-Cohesion: 0.14
-Nodes (22): resolve_open_path(), Root, BACKLIGHT, backlight_roundtrip_and_missing(), read_backlight(), read_trim(), uptime_s(), write_backlight() (+14 more)
+Cohesion: 0.15
+Nodes (20): resolve_open_path(), Root, BACKLIGHT, read_backlight(), read_trim(), uptime_s(), write_backlight(), alpine_release() (+12 more)
 
 ### Community 81 - "ctrl.rs"
 Cohesion: 0.26
 Nodes (7): bind_to(), CtrlClient, CtrlError, Down, Fail, Timeout, REQUEST_TIMEOUT
 
 ### Community 82 - "wpa/fake.rs"
-Cohesion: 0.23
-Nodes (7): default_aps(), FakeAp, FakeSupplicant, Net, serve(), spawn(), unhex()
+Cohesion: 0.29
+Nodes (6): default_aps(), FakeAp, FakeSupplicant, Net, serve(), spawn()
 
 ### Community 83 - "manager.rs"
 Cohesion: 0.13
 Nodes (13): CONNECT_POLL, CONNECT_TIMEOUT, Op, Connecting, Idle, Scanning, RECONNECT_EVERY, SCAN_TIMEOUT (+5 more)
 
 ### Community 84 - "app.rs"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (12): MediaInfo, MediaThumbs, DEFAULT_PINNED, POWER_ARM_MS, POWER_MENU_MS, read_pinned(), shell_json(), SLIDER_SEND_EVERY_MS (+4 more)
 
 ### Community 85 - "WiFi bring-up plan — WalPad 8G (MT6765)"
 Cohesion: 0.14
 Nodes (13): Fallback while WiFi is still down, If route C turns out to be necessary, Measured (2026-08-19) — what the on-device survey found, Phase 0 — stop fighting sudo (5 min), Phase 1 — survey (one boot window), Phase 2 — make /vendor reachable (no 4 GB dump needed), Phase 3 — userspace, Phase 4 — connect (+5 more)
 
-### Community 86 - "logic/jack.rs"
-Cohesion: 0.12
-Nodes (14): kind_name(), parse_kind(), effective(), mic_source_for(), MicSource, BuiltIn, HeadsetMic, Route (+6 more)
+### Community 86 - "windows_ui.rs"
+Cohesion: 0.14
+Nodes (11): LayoutMode, Free, Single, Split, mode_name(), read_prefs(), rows(), rows_show_the_split_buttons_only_in_split_mode() (+3 more)
 
 ### Community 88 - "notifications_ui.rs"
-Cohesion: 0.16
-Nodes (15): Store, Notification, CLEAR_W, EMPTY_H, empty_list_has_no_rows_or_clear_button(), fonts(), layout(), n() (+7 more)
+Cohesion: 0.05
+Nodes (47): a_sequence_of_snapshots_fires_only_on_transitions(), bluetooth_connect_and_disconnect(), cats(), charger_plug_and_unplug(), diff(), NewNotif, notif(), sd_card_and_usb_disk_mount_unmount() (+39 more)
 
 ### Community 89 - "wire.rs"
 Cohesion: 0.07
 Nodes (28): ADDR_LEN, C_CLEANUP, C_DELETE_AIDING, C_INIT, C_INJECT_LOCATION, C_INJECT_TIME, C_POSITION_MODE, C_START (+20 more)
-
-### Community 90 - "serde_json"
-Cohesion: 0.12
-Nodes (4): USAGE, Conn, scan_connect_forget_over_ipc(), CAPABILITIES
 
 ### Community 91 - "M9.1-M9.3 Log caps, safe mode, reproducible build"
 Cohesion: 0.15
@@ -894,21 +890,21 @@ Nodes (15): CRIT_BATT_OPTIONS, DIM_LEVEL_OPTIONS, DIM_OPTIONS, height(), info_ro
 Cohesion: 0.18
 Nodes (17): ati(), cfun(), cfun_and_cpin(), clean(), cme_sim(), cops(), cpin(), csq() (+9 more)
 
-### Community 94 - "src/notifications.rs"
-Cohesion: 0.22
-Nodes (12): a_transition_fires_once_is_unread_and_bumps_the_badge(), CAPACITY, charging(), EVERY, first_tick_is_a_baseline_no_notification(), mark_read_clear_and_clear_all(), MAX_FILE, newest_first_and_ring_buffer_caps_at_100() (+4 more)
+### Community 94 - "TouchMap"
+Cohesion: 0.16
+Nodes (11): Act, Move, Pair, Press, Release, LIFT_MS, mapv(), ORIENTATION_REREAD_MS (+3 more)
 
 ### Community 95 - "recents.rs"
-Cohesion: 0.08
-Nodes (33): a_refused_or_unanswered_close_brings_the_card_back(), a_short_upward_drag_springs_back(), Action, Close, Dismiss, Focus, Card, cards() (+25 more)
+Cohesion: 0.15
+Nodes (20): a_refused_or_unanswered_close_brings_the_card_back(), a_short_upward_drag_springs_back(), Card, cards(), cards_are_laid_out_in_order_left_to_right(), CLOSE_BTN, CLOSE_DRAG_PX, empty_strip_dismisses_on_any_tap() (+12 more)
 
 ### Community 96 - "M7.1 Python-free image as an explicit build mode"
 Cohesion: 0.17
 Nodes (11): Capabilities and the guard (no Python to fall back to), Checks run, Deviations, Device checks pending (owner), M7.1 Python-free image as an explicit build mode, Measurements, Owner steps (nothing here was run by me), Rollback (+3 more)
 
 ### Community 97 - "XWindow"
-Cohesion: 0.08
-Nodes (12): XWindow, visible_area(), zone_rect(), Atoms, CAPTURE_EVERY, CAPTURE_FIRST, EDGE_CLASS, intern() (+4 more)
+Cohesion: 0.09
+Nodes (10): XWindow, Atoms, CAPTURE_EVERY, CAPTURE_FIRST, EDGE_CLASS, intern(), Nav, NavOut (+2 more)
 
 ### Community 98 - "dmlinear.c"
 Cohesion: 0.36
@@ -968,7 +964,7 @@ Nodes (5): hex(), derive(), psk_hex(), PskError, BadLength
 
 ### Community 115 - "Purpose"
 Cohesion: 0.07
-Nodes (28): Purpose, BtOp, BtPair, Close, Connect, DefaultApp, Forget, Gps (+20 more)
+Nodes (27): Purpose, BtOp, BtPair, Close, Connect, DefaultApp, Forget, Gps (+19 more)
 
 ### Community 116 - "Walton WalPad 8G — MT6765 Recovery & Low-Level Learning Project"
 Cohesion: 0.22
@@ -1023,8 +1019,8 @@ Cohesion: 0.08
 Nodes (43): Alphabet, Gsm7, Ucs2, alphanumeric_sender_and_status_reports(), an_escape_pair_is_never_cut_between_parts(), bcd_decode(), bcd_encode(), concatenated_gsm7_decodes_back_in_order() (+35 more)
 
 ### Community 134 - "wmbar.rs"
-Cohesion: 0.04
-Nodes (63): SnapZone, Bottom, Full, Left, Right, Top, mode_name(), read_prefs() (+55 more)
+Cohesion: 0.07
+Nodes (44): app_for(), AppInfo, apps(), apps_json_gives_names_classes_and_limits(), Atoms, BAR_CLASS, BAR_H, BarModel (+36 more)
 
 ### Community 135 - "2026-08-16 — WalPad-Server USB gadget discovered; BROM mode reached"
 Cohesion: 0.33
@@ -1056,7 +1052,7 @@ Nodes (4): Agent Startup (WalPad 8G), Hard Rules, Load, Work Loop
 
 ### Community 142 - "seltools.rs"
 Cohesion: 0.04
-Nodes (53): load_keymap(), active_class(), BAR_CLASS, bar_rect(), BarState, button_stroke(), button_strokes_are_the_ctrl_shortcuts_and_never_interrupt_a_terminal(), buttons() (+45 more)
+Nodes (53): inject(), KeyMap, Stroke, active_class(), BAR_CLASS, bar_rect(), button_stroke(), button_strokes_are_the_ctrl_shortcuts_and_never_interrupt_a_terminal() (+45 more)
 
 ### Community 143 - "2026-08-20 — WiFi works end to end: `ssh root@192.168.0.100` over the built-in radio"
 Cohesion: 0.40
@@ -1098,41 +1094,41 @@ Nodes (3): mount_controller(), mountpoint(), docker_boot.sh script
 Cohesion: 0.08
 Nodes (35): Busy, catalogue_reply_is_parsed(), DEFAULT_RESERVE_KB, ERROR_H, fmt_size(), Item, Button, Error (+27 more)
 
-### Community 250 - "XError"
-Cohesion: 0.06
-Nodes (14): CallWindow, pointer_events(), Atoms, ClipEvent, HistoryChanged, PrimaryChanged, ENTRY_MAX, Fetch (+6 more)
+### Community 250 - "Keeper"
+Cohesion: 0.09
+Nodes (11): Atoms, ClipEvent, HistoryChanged, PrimaryChanged, ENTRY_MAX, Fetch, FETCH_TIMEOUT, History (+3 more)
 
 ### Community 251 - "camacdk.c"
 Cohesion: 0.14
 Nodes (39): bypass_flag(), cam_main(), cap_cb(), cat_file(), clamp8(), cmd_capture(), cmd_list(), cmd_preview() (+31 more)
 
 ### Community 252 - "phone_ipc.rs"
-Cohesion: 0.14
-Nodes (20): a_busy_line_and_an_error_end_the_call_with_a_reason(), an_outgoing_call_runs_through_every_state(), AUDIO, Conn, contacts_are_saved_listed_imported_and_validated(), emergency_numbers_dial_without_a_sim_and_others_do_not(), FakeModem, FakeState (+12 more)
+Cohesion: 0.07
+Nodes (34): a_failed_boot_and_a_missing_modem_are_reported(), Conn, data_failure_is_reported_with_its_reason(), FAKE_SCRIPT, FakeModem, FakeState, fast(), IMEI (+26 more)
 
-### Community 253 - "pathbuf"
-Cohesion: 0.14
-Nodes (10): DETECT_EVERY, FILE, Jack, new_reads_the_persisted_override_and_applies_once(), PATH, Run, SCRIPT, set_force_persists_and_clears() (+2 more)
+### Community 253 - "walpad-core/src/jack.rs"
+Cohesion: 0.07
+Nodes (24): DETECT_EVERY, FILE, Jack, kind_name(), new_reads_the_persisted_override_and_applies_once(), parse_kind(), PATH, Run (+16 more)
 
 ### Community 254 - "Vpn"
-Cohesion: 0.16
-Nodes (16): write_600(), is_b64_key(), kind_of_name(), name_from_path(), parse_settings(), read_candidate(), render_settings(), Settings (+8 more)
+Cohesion: 0.10
+Nodes (22): write_600(), field(), is_b64_key(), kind_of_name(), name_from_path(), read_candidate(), render_settings(), Run (+14 more)
 
 ### Community 255 - "phone/mod.rs"
 Cohesion: 0.15
 Nodes (23): a_cut_short_reply_does_not_end_the_call(), CALLAUDIO, clcc(), dial_failures_and_disconnect_causes(), dial_is_checked_and_gated(), EMERGENCY, fin(), Gate (+15 more)
 
 ### Community 256 - "media_worker.rs"
-Cohesion: 0.11
+Cohesion: 0.10
 Nodes (27): a_missing_helper_gives_no_thumbnail_instead_of_a_hang(), Event, Dropped, Info, Recent, Scanned, Thumb, fake_helper() (+19 more)
 
 ### Community 257 - "src/bluetooth.rs"
-Cohesion: 0.11
-Nodes (40): BluetoothDevice, BluetoothStatus, ACTION_W, available_devices(), bars_from_rssi(), bt(), BtLayout, BtRow (+32 more)
+Cohesion: 0.12
+Nodes (37): BluetoothDevice, BluetoothStatus, ACTION_W, available_devices(), bars_from_rssi(), bt(), BtLayout, BtRow (+29 more)
 
 ### Community 258 - "edge.rs"
 Cohesion: 0.11
-Nodes (28): a_tap_or_a_short_travel_in_the_zone_is_cancelled(), AREA, down(), EDGE_ZONE_PX, EdgeEvent, Cancelled, Home, Recents (+20 more)
+Nodes (29): a_tap_or_a_short_travel_in_the_zone_is_cancelled(), AREA, down(), EDGE_ZONE_PX, EdgeEvent, Cancelled, Home, Recents (+21 more)
 
 ### Community 259 - "gps_screen.rs"
 Cohesion: 0.13
@@ -1155,8 +1151,8 @@ Cohesion: 0.14
 Nodes (20): bad_addresses_never_reach_bluetoothctl(), Conn, dev(), disabled_switch_stays_off_at_startup(), failed_connect_gives_a_notice(), FAKE_CTL, FAKE_SCRIPT, KBD (+12 more)
 
 ### Community 264 - "command.rs"
-Cohesion: 0.06
-Nodes (42): ALLOWED_SETTINGS, BrightnessArgs, COMMAND_NAMES, DEFAULT_ROLES, KEY_ACTIONS, KeyboardMode, Hide, Show (+34 more)
+Cohesion: 0.07
+Nodes (40): parse_settings(), ALLOWED_SETTINGS, BrightnessArgs, COMMAND_NAMES, DEFAULT_ROLES, KEY_ACTIONS, LaunchArgs, lock_secret_rule() (+32 more)
 
 ### Community 265 - "phone/parse.rs"
 Cohesion: 0.16
@@ -1167,8 +1163,8 @@ Cohesion: 0.12
 Nodes (10): MobileError, AudioWant, Start, Stop, contacts_and_call_log_through_the_api(), Ended, is_emergency(), Phone (+2 more)
 
 ### Community 267 - "wm.rs"
-Cohesion: 0.06
-Nodes (54): LAYOUT_EVERY, load_layout(), WIN_CLOSE_GRACE, WinClose, a_lone_window_fills_the_work_area_and_a_second_one_takes_the_other_tile(), closed_windows_are_forgotten(), free_mode_floats_new_windows_and_keeps_them_inside(), hand_placed_windows_are_not_replaced() (+46 more)
+Cohesion: 0.13
+Nodes (28): L, P, assign_slots(), cascade(), cascade_stays_inside_and_offsets(), clamp_keeps_inside_and_enforces_the_minimum(), clamp_rect(), DIVIDER (+20 more)
 
 ### Community 268 - "state.rs"
 Cohesion: 0.17
@@ -1178,9 +1174,9 @@ Nodes (17): bad_checksum_counts_but_changes_nothing(), Counters, Fix, FIX_STALE_
 Cohesion: 0.10
 Nodes (14): field(), FILE, Job, Apply, Get, parse_state(), PATH, PROBE_EVERY (+6 more)
 
-### Community 271 - "walpad-touchd.py"
-Cohesion: 0.24
-Nodes (7): find_touch(), load_cal(), log(), main(), open_x(), orientation(), to_logical()
+### Community 271 - "Overlay"
+Cohesion: 0.12
+Nodes (16): PairState, Confirm, Display, Failed, Waiting, Overlay, App, AppsPanel (+8 more)
 
 ### Community 272 - "src/mobile.rs"
 Cohesion: 0.16
@@ -1191,15 +1187,15 @@ Cohesion: 0.13
 Nodes (15): 4.10 Phone features (SIM), 4.11 System services, 4.12 Developer features, 4.13 Automation (P4), 4.14 Security features of the OS itself, 4.1 Input and editing, 4.2 On-screen keyboard, 4.3 Gestures, navigation, windows (+7 more)
 
 ### Community 274 - "touch_gestures.rs"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (17): APPS, double_tap_arrives_as_two_clicks_on_one_spot(), drag_in_a_scroll_app_is_wheel_events_and_never_a_button_1(), ev(), long_press_then_drag_is_a_button_1_drag_for_selecting_text(), mouse_apps_and_shell_windows_keep_the_mouse_drag(), NEXT, presses() (+9 more)
 
 ### Community 275 - "call_screen.rs"
-Cohesion: 0.13
-Nodes (16): PhoneStatus, BIG_D, buttons_are_big_and_inside_the_screen(), CallScreen, hit_test(), in_call_controls_toggle_and_send_tones(), KEY_GAP, KEY_H (+8 more)
+Cohesion: 0.14
+Nodes (14): PhoneStatus, BIG_D, buttons_are_big_and_inside_the_screen(), CallScreen, in_call_controls_toggle_and_send_tones(), KEY_GAP, KEY_H, KEY_W (+6 more)
 
 ### Community 276 - "pkg_ipc.rs"
-Cohesion: 0.14
+Cohesion: 0.13
 Nodes (13): a_failed_install_adds_no_entry_and_shows_the_error(), a_hanging_install_is_killed_at_the_deadline(), CATALOGUE, code(), Conn, default_apps_are_recorded_and_applied_to_mimeapps(), FAKE_APK, FAKE_HELPER (+5 more)
 
 ### Community 278 - "nmea.rs"
@@ -1207,8 +1203,8 @@ Cohesion: 0.10
 Nodes (27): checksum_ok(), checksums(), coord(), days_from_civil(), gga(), gsv_and_gsa(), num(), parse() (+19 more)
 
 ### Community 279 - "XConn"
-Cohesion: 0.07
-Nodes (32): pixels(), pointer_to(), the_x_cursor_is_not_drawn_not_even_an_apps_own_cursor(), Xvfb, a_terminal_gets_only_copy_and_paste_and_paste_is_ctrl_shift_v(), atom(), click(), clipboard_list_pastes_the_tapped_entry() (+24 more)
+Cohesion: 0.09
+Nodes (28): a_terminal_gets_only_copy_and_paste_and_paste_is_ctrl_shift_v(), atom(), click(), clipboard_list_pastes_the_tapped_entry(), copied_text_survives_the_source_app_and_a_second_client_pastes_it(), focus_app(), focus_of(), fonts() (+20 more)
 
 ### Community 280 - "modem/mod.rs"
 Cohesion: 0.09
@@ -1234,9 +1230,9 @@ Nodes (13): first_sv_blob_is_saved_for_analysis(), garbage_datagrams_are_ignored
 Cohesion: 0.11
 Nodes (19): CATEGORIES, Page, About, Apps, Bluetooth, Clock, Display, Gps (+11 more)
 
-### Community 286 - "logic/notifications.rs"
+### Community 286 - "atomic"
 Cohesion: 0.20
-Nodes (11): a_sequence_of_snapshots_fires_only_on_transitions(), bluetooth_connect_and_disconnect(), cats(), charger_plug_and_unplug(), diff(), NewNotif, notif(), sd_card_and_usb_disk_mount_unmount() (+3 more)
+Nodes (3): Conn, scan_connect_forget_over_ipc(), N
 
 ### Community 287 - "WalPad OS: tablet feature plan (2026-11-10)"
 Cohesion: 0.17
@@ -1256,7 +1252,7 @@ Nodes (9): a_failing_or_hanging_tunnel_is_reported_and_cleaned_up(), Conn, dns_a
 
 ### Community 291 - "lock_screen.rs"
 Cohesion: 0.12
-Nodes (21): a_short_pattern_is_refused_on_the_spot(), AREAS, canvas(), DOT_CAPTURE, five_wrong_pins_show_a_countdown_and_the_pad_is_dead_during_it(), Digit, KB_H, KEY_GAP (+13 more)
+Nodes (15): a_short_pattern_is_refused_on_the_spot(), AREAS, DOT_CAPTURE, KB_H, KEY_GAP, KEY_H, KEY_W, next_deadline_is_the_next_second_of_the_countdown() (+7 more)
 
 ### Community 292 - "walpad-launcher.py"
 Cohesion: 0.12
@@ -1271,16 +1267,12 @@ Cohesion: 0.11
 Nodes (19): call_log_is_capped(), CallLog, CallRec, CALLS_FILE, CallsFile, clip_name(), CONTACTS_FILE, contacts_save_lookup_delete_import() (+11 more)
 
 ### Community 295 - "LockKind"
-Cohesion: 0.15
+Cohesion: 0.17
 Nodes (12): LockKind, Password, Pattern, Pin, AUTO_LOCK_OPTIONS, kind_name(), lock_rows(), LockFlow (+4 more)
 
-### Community 296 - "Fonts"
-Cohesion: 0.12
-Nodes (5): LockEvent, Submit, LockWindow, pointer_events(), Fonts
-
-### Community 297 - ".x_try"
-Cohesion: 0.17
-Nodes (3): terminate_pid(), Daemon, class_matches()
+### Community 296 - "XError"
+Cohesion: 0.06
+Nodes (13): CallWindow, pointer_events(), LockEvent, Submit, LockWindow, pointer_events(), Drag, DragKind (+5 more)
 
 ### Community 298 - "stats.rs"
 Cohesion: 0.14
@@ -1299,24 +1291,24 @@ Cohesion: 0.19
 Nodes (20): connect_disconnect_and_forget_from_my_devices(), dev(), failed_connect_is_a_toast_and_frees_the_row(), header_pill_shows_the_mark_only_while_powered(), KBD, keyboard_passkey_is_displayed(), notice(), off_controller_shows_only_the_state_card() (+12 more)
 
 ### Community 302 - "phone_ui.rs"
-Cohesion: 0.09
-Nodes (26): body_top(), CALL_H, contacts_filter_by_name_or_number(), Conversation, conversations_group_national_and_international_numbers(), DISPLAY_H, GRID_MAX_W, KEY_GAP (+18 more)
+Cohesion: 0.07
+Nodes (55): body_top(), CALL_H, call_kind_text(), CallEntry, CallKind, In, Missed, Out (+47 more)
 
 ### Community 303 - "src/vpn.rs"
 Cohesion: 0.10
 Nodes (16): APPLY_TIMEOUT, CONF, DOWN_TIMEOUT, KEY, MAX_PROFILE, OVPN_FORBIDDEN, PATH, SCRIPT (+8 more)
 
-### Community 304 - "super"
-Cohesion: 0.13
-Nodes (18): app_crash_notice_shows_a_danger_toast_that_expires(), render(), a_stats_only_change_redraws_the_header(), a_switch_sends_stats_config_with_the_opposite_value(), set_stats(), the_page_lists_four_switches_that_follow_the_status(), toggles(), audio_event() (+10 more)
+### Community 304 - "render"
+Cohesion: 0.18
+Nodes (17): catalog(), device_controls_do_nothing_while_the_core_is_down(), home_tiles_are_the_pinned_installed_apps(), switches_do_nothing_while_the_core_is_away(), offline_shows_the_banner_and_ignores_commands(), render(), the_menu_does_not_open_while_the_core_is_away(), dns_and_proxy_sheets_validate_and_save() (+9 more)
 
 ### Community 305 - "quick"
-Cohesion: 0.20
-Nodes (14): a_failed_switch_request_is_a_toast(), copy_buttons_put_the_position_and_the_map_link_on_the_clipboard(), gps_churn_redraws_only_where_it_is_visible(), open_screen(), quick_settings_row_has_a_switch_and_opens_the_screen(), set_gps(), settings_has_a_gps_entry(), the_switch_is_dead_while_starting_and_while_offline() (+6 more)
-
-### Community 306 - "render"
 Cohesion: 0.19
-Nodes (16): can_call(), fmt_when(), in_call(), key_box(), notice_line(), paint_badge(), phone(), Bubble (+8 more)
+Nodes (17): a_failed_switch_request_is_a_toast(), copy_buttons_put_the_position_and_the_map_link_on_the_clipboard(), gps_churn_redraws_only_where_it_is_visible(), open_screen(), quick_settings_row_has_a_switch_and_opens_the_screen(), set_gps(), settings_has_a_gps_entry(), the_switch_is_dead_while_starting_and_while_offline() (+9 more)
+
+### Community 306 - "walpad_proto"
+Cohesion: 0.22
+Nodes (7): hotspot_switch_turns_it_on_and_off_and_events_toast(), wifi_switch_in_quick_settings_and_on_the_network_screen(), with_status(), a_stats_only_change_redraws_the_header(), set_stats(), the_page_lists_four_switches_that_follow_the_status(), toggles()
 
 ### Community 307 - "LockScreen"
 Cohesion: 0.21
@@ -1324,13 +1316,13 @@ Nodes (6): drag(), LockScreen, Out, None, Redraw, Submit
 
 ### Community 308 - "src/topbar.rs"
 Cohesion: 0.14
-Nodes (14): ALL, BAR_H, Chip, chip_content(), DATE_MIN, GAP, has_figures(), Layout (+6 more)
+Nodes (19): StatsStatus, BAR_H, chip_content(), chip_texts_and_unavailable_figures(), chips_never_overlap_the_clock_or_the_pill(), DATE_MIN, degrades_in_order_date_then_short_text_then_chips(), fonts() (+11 more)
 
 ### Community 309 - "run"
 Cohesion: 0.25
 Nodes (13): a_silent_controller_stops_the_sequence_after_one_timeout(), build_plan(), closed_controller_aborts_without_hanging(), fake_controller(), full_sequence_against_a_scripted_controller(), initialise(), InitReport, pair() (+5 more)
 
-### Community 310 - "arc"
+### Community 310 - "serde_json"
 Cohesion: 0.19
 Nodes (5): Conn, defaults_switch_persist_and_sample(), NET0, Rig, stored_switches_are_read_at_start_and_missing_sources_are_unavailable()
 
@@ -1339,44 +1331,48 @@ Cohesion: 0.18
 Nodes (8): launch(), spawn(), `launch` with a file (security model), Multitasking and windows (owner request 2026-11-11, change `multitasking-windows`), M6.1 process manager, M6.2 installed-only apps, M6.3 crash notice and return to the shell, 1. Host, 1b. Media viewer (owner request 2026-11-11, docs/41-media.md), 2. Device (needs the tablet; no flashing)
 
 ### Community 312 - "tests/store.rs"
-Cohesion: 0.29
-Nodes (16): load_catalog(), catalog_and_settings_files(), app_list_follows_apps_d(), catalogue_data(), default_app_is_chosen_from_the_installed_candidates(), entry(), failed_install_shows_the_error_and_can_be_dismissed(), GIB (+8 more)
+Cohesion: 0.35
+Nodes (14): app_list_follows_apps_d(), catalogue_data(), default_app_is_chosen_from_the_installed_candidates(), entry(), failed_install_shows_the_error_and_can_be_dismissed(), GIB, install_shows_progress_then_reloads_the_app_list(), insufficient_space_is_explained_and_nothing_is_sent() (+6 more)
 
-### Community 313 - "tests/mobile.rs"
-Cohesion: 0.33
-Nodes (8): apn_sheet_saves_and_imei_shows_on_request(), data_failure_and_header_bars(), notice(), quick_settings_row_opens_the_screen_and_the_switch_toggles_data(), registered(), set_mobile(), settings_has_a_mobile_network_entry(), sim_pin_sheet_sends_a_secret_and_waits_for_the_answer()
+### Community 313 - "terminal_ui.py"
+Cohesion: 0.24
+Nodes (7): box(), commit(), font_load(), main(), mapxy(), px(), txt()
 
-### Community 314 - "PhoneModel"
-Cohesion: 0.19
-Nodes (9): call_kind_text(), CallEntry, CallKind, In, Missed, Out, ContactDraft, ContactEntry (+1 more)
+### Community 314 - "Rotation"
+Cohesion: 0.23
+Nodes (5): Act, DockKeyboard, SetStruts, WriteOrientation, Rotation
 
 ### Community 315 - "Frozen contracts (do not change without an explicit card)"
 Cohesion: 0.11
-Nodes (17): App environment (every launched app), App store (change app-catalogue-manager), Boot and process model, Config files (keep formats, add keys only), Display, Frozen contracts (do not change without an explicit card), GPS (owner request 2026-11-11; docs/43-gnss.md has the protocol and the experiments), Headphone jack / mic (owner request 2026-11-12, OpenSpec `headphone-mic-jack`) (+9 more)
+Nodes (18): App environment (every launched app), App store (change app-catalogue-manager), Bluetooth (owner request 2026-11-10), Boot and process model, Config files (keep formats, add keys only), Display, Frozen contracts (do not change without an explicit card), GPS (owner request 2026-11-11; docs/43-gnss.md has the protocol and the experiments) (+10 more)
 
 ### Community 317 - "CallTarget"
 Cohesion: 0.12
 Nodes (18): Call, CallState, Active, Dialing, Ended, Held, Idle, Ringing (+10 more)
 
 ### Community 318 - "config.rs"
-Cohesion: 0.19
-Nodes (11): devd_defaults_and_overrides(), DevdSettings, gestures_from_keys_json(), KEY_SLOTS, NET_MAC_MODES, NET_MASK_OPTIONS, next_key_action(), pretty_action() (+3 more)
+Cohesion: 0.15
+Nodes (14): CHARGE_CURRENT_OPTIONS, CHARGE_LIMIT_OPTIONS, CHARGE_MODES, devd_defaults_and_overrides(), DevdSettings, gestures_from_keys_json(), KEY_SLOTS, NET_MAC_MODES (+6 more)
 
 ### Community 319 - "GpsStatus"
 Cohesion: 0.24
 Nodes (9): GpsStatus, fix(), coordinates_and_link(), coords_text(), fix(), layout_has_the_position_block_only_with_a_position(), map_link(), st() (+1 more)
 
 ### Community 321 - "PhoneTarget"
-Cohesion: 0.12
-Nodes (17): PhoneTarget, AddContact, Backspace, Call, ClearLog, NewMessage, Reply, Search (+9 more)
+Cohesion: 0.05
+Nodes (37): PhoneSheet, ClearLog, Contact, DeleteContact, Message, PhoneTarget, AddContact, Backspace (+29 more)
 
 ### Community 322 - "fbmirror.c"
-Cohesion: 0.23
-Nodes (11): be32(), cmain(), map(), msleep(), read_ori(), say(), sc6(), slen() (+3 more)
+Cohesion: 0.22
+Nodes (12): be32(), cmain(), map(), msleep(), read_ori(), read_screen_off(), say(), sc6() (+4 more)
 
-### Community 324 - "tests/lock.rs"
-Cohesion: 0.44
-Nodes (8): changing_asks_for_the_current_secret_and_returns_to_it_when_wrong(), pin_set(), removing_needs_the_current_secret_and_lock_now_and_auto_lock_are_plain_commands(), security(), set_lock(), setting_a_pin_needs_it_twice_and_sends_a_secret_never_printed(), the_page_says_the_usb_recovery_shell_is_outside_the_lock(), sheet()
+### Community 324 - "reply_err"
+Cohesion: 0.33
+Nodes (12): hotspot_name_sheet_and_rejected_save(), hotspot_without_password_opens_the_password_sheet(), changing_asks_for_the_current_secret_and_returns_to_it_when_wrong(), pin_set(), removing_needs_the_current_secret_and_lock_now_and_auto_lock_are_plain_commands(), security(), set_lock(), setting_a_pin_needs_it_twice_and_sends_a_secret_never_printed() (+4 more)
+
+### Community 325 - "shell.rs"
+Cohesion: 0.18
+Nodes (5): load_catalog(), read_clock_24h(), catalog_and_settings_files(), initial_size(), Options
 
 ### Community 326 - "Tab"
 Cohesion: 0.12
@@ -1430,25 +1426,25 @@ Nodes (5): Info, MediaModel, only_what_is_near_the_screen_is_asked_for_once(), s
 Cohesion: 0.18
 Nodes (8): layout(), layout_grid_and_list_fit_both_orientations(), Section, .ALL, Music, Photos, Recent, Videos
 
-### Community 339 - "wall"
-Cohesion: 0.31
-Nodes (9): catalog(), device_controls_do_nothing_while_the_core_is_down(), home_tiles_are_the_pinned_installed_apps(), switches_do_nothing_while_the_core_is_away(), low_battery_is_a_toast_once_not_a_persistent_banner(), offline_shows_the_banner_and_ignores_commands(), status(), the_menu_does_not_open_while_the_core_is_away() (+1 more)
+### Community 339 - "walpad-powermenu.py"
+Cohesion: 0.39
+Nodes (3): ctl(), halt(), Menu
 
 ### Community 340 - "topbar_snapshots.rs"
 Cohesion: 0.43
 Nodes (12): app(), GIB, golden(), header_all_four_items(), header_default_cpu_and_ram(), header_tight_portrait_12h_gps_mark_high_load(), header_unavailable_figures(), header_without_items_or_before_the_first_sample_is_unchanged() (+4 more)
 
 ### Community 341 - "logic.h"
+Cohesion: 0.31
+Nodes (9): What works now (M8.1, host-verified only), fb_parse_screen_off(), fb_status_off(), gate_poll_due(), gate_sleep_ms(), gate_update(), idle_sleep_ms(), main() (+1 more)
+
+### Community 342 - "RotateMode"
 Cohesion: 0.25
-Nodes (11): Bluetooth (owner request 2026-11-10), What works now (M8.1, host-verified only), read_screen_off(), fb_parse_screen_off(), fb_status_off(), gate_poll_due(), gate_sleep_ms(), gate_update() (+3 more)
+Nodes (8): RotateMode, Auto, Lock, R0, R180, R270, R90, Toggle
 
-### Community 342 - "render_sheet"
-Cohesion: 0.19
-Nodes (12): PhoneSheet, ClearLog, Contact, DeleteContact, Message, Contact, SheetCall, pt() (+4 more)
-
-### Community 343 - "edit_snapshots.rs"
-Cohesion: 0.42
-Nodes (8): bar(), clipboard_list_with_entries_and_empty(), fonts(), golden(), list(), sample(), selection_toolbar_pressed_button(), selection_toolbar_text_and_terminal()
+### Community 343 - "assert_snapshot_in"
+Cohesion: 0.27
+Nodes (10): bar(), clipboard_list_with_entries_and_empty(), fonts(), golden(), list(), sample(), selection_toolbar_pressed_button(), selection_toolbar_text_and_terminal() (+2 more)
 
 ### Community 344 - "vpn_snapshots.rs"
 Cohesion: 0.37
@@ -1470,24 +1466,24 @@ Nodes (12): ADDED Requirements, Requirement: Alarms, Requirement: Calculator, Re
 Cohesion: 0.15
 Nodes (12): ADDED Requirements, Requirement: Locked at boot, Requirement: Locking and unlocking, Requirement: Rate limiting, Requirement: Rescue, Requirement: Setting a lock, Scenario: 5 wrong PINs are entered, Scenario: the correct PIN is entered (+4 more)
 
-### Community 349 - "online"
-Cohesion: 0.14
-Nodes (22): arming_one_item_then_pressing_another_does_not_fire(), background_layer_is_cached_not_redrawn_every_frame(), centre(), device_tab_controls_send_the_right_commands(), hw_key(), long_power_opens_the_menu_with_cancel_focused_and_tells_the_core(), losing_the_core_closes_the_menu(), online() (+14 more)
+### Community 349 - "super"
+Cohesion: 0.26
+Nodes (7): audio_event(), mute_button_toggles_and_the_label_says_so(), quick_settings_volume_slider_sets_a_percentage(), settings_sound_page_has_slider_mute_test_tone_and_output(), the_volume_pill_shows_for_keys_only_and_expires(), track(), with_audio()
 
 ### Community 350 - "C"
 Cohesion: 0.35
 Nodes (3): C, H, XimApp
 
 ### Community 352 - "Stats"
-Cohesion: 0.24
-Nodes (4): Stats, StatsItems, StatsStatus, ALL
+Cohesion: 0.19
+Nodes (4): Stats, StatsItems, ALL, ALL
 
 ### Community 353 - "tests/media.rs"
 Cohesion: 0.38
 Nodes (9): a_missing_player_or_core_is_a_toast_and_no_command(), a_refused_open_shows_the_core_message(), home_tile_and_apps_panel_tool_open_the_screen_and_start_a_scan(), it(), open_media(), scan_results_fill_the_sections_and_sections_switch_by_tap(), tapping_an_item_opens_it_in_the_matching_player_and_remembers_it(), the_visible_items_are_asked_for_through_tick_once() (+1 more)
 
 ### Community 354 - "recents_snapshots.rs"
-Cohesion: 0.35
+Cohesion: 0.30
 Nodes (8): cards(), fake_window(), fonts(), golden(), recents_card_dragged_up_and_empty(), recents_five_cards_scroll(), recents_three_cards_portrait_and_landscape(), shot()
 
 ### Community 355 - "ADDED Requirements"
@@ -1535,12 +1531,16 @@ Cohesion: 0.25
 Nodes (5): digits(), Contact, ContactsFile, ContactStore, same_number()
 
 ### Community 367 - "CallAct"
-Cohesion: 0.25
-Nodes (10): CallAct, Answer, Dtmf, Hangup, Mute, Speaker, Out, Act (+2 more)
+Cohesion: 0.22
+Nodes (11): CallAct, Answer, Dtmf, Hangup, Mute, Speaker, hit_test(), Out (+3 more)
 
 ### Community 368 - "Terminal: default shell with autosuggestions/completion (tabs already shipped)"
 Cohesion: 0.22
 Nodes (8): Device risk, Open questions, Out of scope, Secrets impact, Terminal: default shell with autosuggestions/completion (tabs already shipped), Verification on the tablet (not done by the agent that wrote this; needs a rebuilt+flashed image), What changes, Why
+
+### Community 369 - ".new"
+Cohesion: 0.35
+Nodes (5): canvas(), Layout, layouts_fit_the_screen_and_the_targets_are_big_enough(), password_typed_on_the_keyboard_submits_with_unlock_or_done(), tap()
 
 ### Community 370 - "Kind"
 Cohesion: 0.18
@@ -1562,9 +1562,9 @@ Nodes (10): 1. The problem, 2.1 Transport (confidence: high), 2.2 Framing (confi
 Cohesion: 0.18
 Nodes (10): Checks run, Dependencies, Deviations, Device checks pending, Files changed, M5.11 Mobile network / SIM management (owner request 2026-11-10), Next card, Rollback (+2 more)
 
-### Community 375 - "M8 display efficiency (M8.1 done on the host; M8.2 and M8.3 are owner measurements)"
-Cohesion: 0.18
-Nodes (10): Checks run, Deviations, Device checks pending (owner, in this order), M8.2 measurement: scripts/device/measure_fbmirror.sh, M8.3 measurement: scripts/device/measure_firefox_mem.sh, M8 display efficiency (M8.1 done on the host; M8.2 and M8.3 are owner measurements), Measurements, Next card (+2 more)
+### Community 375 - "power_button.py"
+Cohesion: 0.09
+Nodes (23): Bluetooth with BlueZ (2026-11-10), /dev/stpbt protocol (from `drivers/misc/mediatek/connectivity/bt/mt66xx/wmt/stp_chrdev_bt.c`, matching the strings of the shipped `/vendor/lib/modules/bt_drv.ko`), Device experiments for "no device found" (2026-11-11, not run yet), Device test plan, How it fits together, Recovered vendor init sequence (static analysis, 2026-11-11), The module build (`scripts/build_bt_module.sh`), Checks run (+15 more)
 
 ### Community 376 - "media_test.sh"
 Cohesion: 0.29
@@ -1618,29 +1618,29 @@ Nodes (8): bad(), eq(), ok(), run(), jack.sh script, T_BAD, T_CALLS, WALPAD_AUDI
 Cohesion: 0.25
 Nodes (8): combine_reg(), MobileReg, Denied, Home, NotRegistered, Roaming, Searching, Unknown
 
-### Community 391 - ".spawn"
-Cohesion: 0.16
-Nodes (8): field(), Run, Verb, Apply, Confirm, Down, Status, Up
+### Community 391 - "Gesture"
+Cohesion: 0.25
+Nodes (8): Gesture, Cancel, Drag, DragEnd, DragStart, LongPress, Pressed, Tap
 
 ### Community 392 - "StatItem"
-Cohesion: 0.25
-Nodes (6): StatItem, .ALL, Cpu, Net, Ram, Rom
+Cohesion: 0.22
+Nodes (7): Chip, StatItem, .ALL, Cpu, Net, Ram, Rom
 
 ### Community 393 - "input.rs"
-Cohesion: 0.25
-Nodes (10): discover(), discovers_by_name_not_number(), ensure_node(), existing_node_is_left_alone(), find(), InputDevice, key_device_name(), key_held() (+2 more)
+Cohesion: 0.32
+Nodes (8): discover(), discovers_by_name_not_number(), ensure_node(), find(), InputDevice, key_device_name(), key_held(), parse_majmin()
 
-### Community 394 - "Event"
-Cohesion: 0.09
-Nodes (15): CursorHider, hide(), CHUNK_BYTES, converts_rgba_to_bgrx_for_a_sub_rect(), present(), rgba_to_bgrx(), rows_per_chunk(), TITLE (+7 more)
+### Community 394 - "lock_window.rs"
+Cohesion: 0.06
+Nodes (25): GUARD_EVERY_MS, WM_CLASS_CLASS, WM_CLASS_INSTANCE, CursorHider, hide(), GUARD_EVERY_MS, WM_CLASS_CLASS, WM_CLASS_INSTANCE (+17 more)
 
 ### Community 395 - ".new"
 Cohesion: 0.20
 Nodes (10): builders_match_the_hal_encoding(), cleanup(), delete_aiding(), garbage_is_rejected_not_panicked_on(), init(), inject_time(), position_mode(), Rd (+2 more)
 
-### Community 396 - "Bluetooth with BlueZ (2026-11-10)"
-Cohesion: 0.25
-Nodes (7): Bluetooth with BlueZ (2026-11-10), /dev/stpbt protocol (from `drivers/misc/mediatek/connectivity/bt/mt66xx/wmt/stp_chrdev_bt.c`, matching the strings of the shipped `/vendor/lib/modules/bt_drv.ko`), Device experiments for "no device found" (2026-11-11, not run yet), Device test plan, How it fits together, Recovered vendor init sequence (static analysis, 2026-11-11), The module build (`scripts/build_bt_module.sh`)
+### Community 396 - "Event"
+Cohesion: 0.29
+Nodes (7): Event, Connected, Disconnected, Other, ScanResults, TempDisabled, parse_event()
 
 ### Community 397 - "Smooth battery percent and time left"
 Cohesion: 0.25
@@ -1706,17 +1706,17 @@ Nodes (7): Device risk, Open questions, Out of scope, Verification, What changes
 Cohesion: 0.46
 Nodes (5): bad(), eq(), gps(), ok(), gps.sh script
 
-### Community 413 - "assert_snapshot_in"
-Cohesion: 0.14
-Nodes (16): bottom_shot(), dock_handle_collapsed_and_expanded(), dock_portrait_and_landscape(), dock_pressed_buttons(), golden(), shot(), golden(), keyboard_portrait_and_landscape() (+8 more)
+### Community 413 - "path"
+Cohesion: 0.13
+Nodes (14): bottom_shot(), dock_handle_collapsed_and_expanded(), dock_portrait_and_landscape(), dock_pressed_buttons(), golden(), shot(), golden(), keyboard_portrait_and_landscape() (+6 more)
 
 ### Community 417 - "ShellInput"
 Cohesion: 0.29
 Nodes (7): ShellInput, KeyboardHide, KeyboardShow, PowerMenuOpen, PowerShort, VolumeDown, VolumeUp
 
-### Community 418 - "PhoneView"
+### Community 418 - "SnapZone"
 Cohesion: 0.29
-Nodes (6): PhoneView, .ALL, Contacts, Keypad, Messages, Recents
+Nodes (7): SnapZone, Bottom, Full, Left, Right, Top, SNAP_BUTTONS
 
 ### Community 420 - "Headphone jack and microphone (owner request 2026-11-12, change `headphone-mic-jack`)"
 Cohesion: 0.29
@@ -1763,16 +1763,12 @@ Cohesion: 0.33
 Nodes (7): carve(), connect(), drain(), Lost, main(), pull(), server_window()
 
 ### Community 431 - "Hit"
-Cohesion: 0.33
-Nodes (5): Hit, Backspace, Eye, Key, Submit
+Cohesion: 0.22
+Nodes (8): five_wrong_pins_show_a_countdown_and_the_pad_is_dead_during_it(), Hit, Backspace, Digit, Eye, Key, Submit, pin_digits_backspace_and_submit()
 
-### Community 432 - "Value"
-Cohesion: 0.67
-Nodes (5): json_parsers_are_tolerant(), parse_calls(), parse_contacts(), parse_sms(), s()
-
-### Community 433 - "st"
-Cohesion: 0.47
-Nodes (6): chip_texts_and_unavailable_figures(), chips_never_overlap_the_clock_or_the_pill(), degrades_in_order_date_then_short_text_then_chips(), fonts(), nothing_is_drawn_before_the_first_sample_or_with_everything_off(), st()
+### Community 432 - "windows.rs"
+Cohesion: 0.40
+Nodes (4): LAYOUT_EVERY, load_layout(), WIN_CLOSE_GRACE, WinClose
 
 ### Community 434 - "camera-bringup/tasks.md"
 Cohesion: 0.33
@@ -1783,8 +1779,12 @@ Cohesion: 0.40
 Nodes (4): State, Fix, Off, Searching
 
 ### Community 436 - "MobileData"
-Cohesion: 0.19
-Nodes (9): BluetoothController, Absent, Present, Starting, MobileData, Connecting, Failed, Off (+1 more)
+Cohesion: 0.40
+Nodes (5): MobileData, Connecting, Failed, Off, On
+
+### Community 437 - "KeyboardMode"
+Cohesion: 0.40
+Nodes (4): KeyboardMode, Hide, Show, Toggle
 
 ### Community 438 - "Battery percent and time left (owner request 2026-11-11)"
 Cohesion: 0.40
@@ -1882,45 +1882,45 @@ Nodes (4): Verb, Start, Status, Stop
 Cohesion: 0.32
 Nodes (4): LineDecoder, LineError, TooLong, MAX_LINE
 
-### Community 509 - "NotificationCategory"
-Cohesion: 0.25
-Nodes (8): NotificationCategory, Bluetooth, Charging, Gps, Hotspot, MobileData, Storage, UsbDevice
-
-### Community 510 - "ModemState"
-Cohesion: 0.33
-Nodes (6): ModemState, Absent, Booting, Failed, Present, Ready
+### Community 509 - "State"
+Cohesion: 0.40
+Nodes (5): State, Down, Dragging, Idle, LongFired
 
 ### Community 511 - "terminal-tabs-and-autocomplete/tasks.md"
 Cohesion: 0.50
 Nodes (3): 1. Research (done, evidence in docs/46-terminal-tabs-and-autocomplete.md), 2. Host (config/shell-script/docs only, no Rust touched), 3. Device (needs the tablet; no flashing by this change)
 
-### Community 513 - "VpnState"
-Cohesion: 0.33
-Nodes (6): VpnState, Failed, Off, On, Starting, Stopping
+### Community 513 - "VpnStatus"
+Cohesion: 0.15
+Nodes (13): kind_ext(), VpnKind, Openvpn, Wireguard, VpnProfile, VpnState, Failed, Off (+5 more)
+
+### Community 514 - "Role"
+Cohesion: 0.50
+Nodes (4): Role, Hall, Key, Touch
 
 ### Community 516 - "Engine"
 Cohesion: 0.50
 Nodes (4): Engine, Off, On, Unknown
 
 ## Knowledge Gaps
-- **2166 isolated node(s):** `apply.sh script`, `walpad-btbridge`, `ACL`, `EVENT`, `VENDOR` (+2161 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3171 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **2174 isolated node(s):** `apply.sh script`, `walpad-btbridge`, `ACL`, `EVENT`, `VENDOR` (+2169 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3183 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **177 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Target` connect `Target` to `tap`, `src/bluetooth.rs`, `gps_screen.rs`, `Rect`, `wmbar.rs`, `StatItem`, `Frame`, `src/mobile.rs`, `settings_screen.rs`, `components`, `src/media.rs`, `vpn_screen.rs`, `panels.rs`, `network.rs`, `phone_ui.rs`, `render`, `App`, `Cmd`, `chrome.rs`, `PhoneTarget`, `render`, `LockAct`, `app.rs`, `render_sheet`, `notifications_ui.rs`, `device_screen.rs`, `online`, `Model`, `Kind`, `src/store.rs`, `volume_snapshots.rs`?**
-  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+- **Why does `Target` connect `Target` to `online`, `src/bluetooth.rs`, `gps_screen.rs`, `StatItem`, `Frame`, `src/mobile.rs`, `settings_screen.rs`, `components`, `src/media.rs`, `vpn_screen.rs`, `panels.rs`, `network.rs`, `screens_snapshots.rs`, `phone_ui.rs`, `App`, `Cmd`, `PhoneTarget`, `render`, `LockAct`, `app.rs`, `windows_ui.rs`, `notifications_ui.rs`, `device_screen.rs`, `super`, `Model`, `Kind`, `src/store.rs`, `volume_snapshots.rs`?**
+  _High betweenness centrality (0.055) - this node is a cross-community bridge._
 - **What connects `apply.sh script`, `walpad-btbridge`, `ACL` to the rest of the system?**
-  _2166 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `tap` be split into smaller, more focused modules?**
-  _Cohesion score 0.12580943570767808 - nodes in this community are weakly interconnected._
-- **Why does `_` connect `_` to `x.rs`, `src/bluetooth.rs`, `mousepad.rs`, `gps_screen.rs`, `Gesture`, `wmbar.rs`, `src/components.rs`, `dock.rs`, `seltools.rs`, `Frame`, `src/mobile.rs`, `call_screen.rs`, `settings_screen.rs`, `components`, `src/media.rs`, `vpn_screen.rs`, `panels.rs`, `Icon`, `text.rs`, `lock_screen.rs`, `Canvas`, `network.rs`, `tests/components.rs`, `phone_ui.rs`, `super`, `src/topbar.rs`, `chrome.rs`, `art.rs`, `app.rs`, `notifications_ui.rs`, `device_screen.rs`, `recents.rs`, `recents_snapshots.rs`, `Model`, `src/store.rs`?**
+  _2174 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `online` be split into smaller, more focused modules?**
+  _Cohesion score 0.0945273631840796 - nodes in this community are weakly interconnected._
+- **Why does `_` connect `_` to `x.rs`, `src/bluetooth.rs`, `mousepad.rs`, `gps_screen.rs`, `src/gesture.rs`, `wmbar.rs`, `src/components.rs`, `dock.rs`, `seltools.rs`, `Frame`, `src/mobile.rs`, `call_screen.rs`, `settings_screen.rs`, `components`, `src/media.rs`, `vpn_screen.rs`, `panels.rs`, `Icon`, `text.rs`, `lock_screen.rs`, `Canvas`, `network.rs`, `screens_snapshots.rs`, `tests/components.rs`, `phone_ui.rs`, `src/topbar.rs`, `art.rs`, `app.rs`, `notifications_ui.rs`, `device_screen.rs`, `super`, `recents.rs`, `recents_snapshots.rs`, `Model`, `src/store.rs`?**
   _High betweenness centrality (0.042) - this node is a cross-community bridge._
 - **Should `mousepad.rs` be split into smaller, more focused modules?**
-  _Cohesion score 0.050505050505050504 - nodes in this community are weakly interconnected._
-- **Why does `Cmd` connect `Cmd` to `XWindow`, `Outcome`, `LockKind`, `StatItem`, `dock.rs`, `wmbar.rs`, `Shell`, `Purpose`, `app.rs`, `App`, `logic/jack.rs`, `Secret`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
-- **Should `Gesture` be split into smaller, more focused modules?**
-  _Cohesion score 0.11229946524064172 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0507048180096781 - nodes in this community are weakly interconnected._
+- **Why does `Root` connect `Root` to `media_worker.rs`, `wmbar.rs`, `input.rs`, `dock.rs`, `Daemon`, `src/volume.rs`, `Shell`, `src/apps.rs`, `settings_screen.rs`, `modem/mod.rs`, `src/media.rs`, `atomic`, `XError`, `put`, `stats.rs`, `Wifi`, `src/vpn.rs`, `windows.rs`, `pkg.rs`, `walpad-ctl/src/lib.rs`, `config.rs`, `Inputs`, `bluetooth/mod.rs`, `walpad-core/src/daemon.rs`, `src/lock.rs`, `gsensor.rs`, `shell.rs`, `src/hotspot.rs`, `manager.rs`, `app.rs`, `windows_ui.rs`, `notifications_ui.rs`, `Stats`, `gnss.rs`, `Modem`, `Kind`, `Gnss`, `walpad-core/src/jack.rs`, `Vpn`, `phone/mod.rs`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+- **Should `_` be split into smaller, more focused modules?**
+  _Cohesion score 0.03520164046479836 - nodes in this community are weakly interconnected._

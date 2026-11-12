@@ -436,7 +436,7 @@ if command -v python3 >/dev/null 2>&1 && command -v busybox >/dev/null 2>&1; the
   eq "  order: EIFCONFIG, activation, then the confirmation" "$(grep -e EIFCONFIG -e 'CGACT=1,1' -e '"up"' "$MR/at.log" | tr '\n' '|')" 'NW:AT+EIFCONFIG=3|AT+CGACT=1,1|NW:AT+EIF=302, "ifst", "up", 1|' 
   eq "  status reports on" "$(kv "$(md status)" state)/$(kv "$(md status)" ip)" "on/10.20.30.40"
   OUT=$(md off); eq "data off" "$?/$OUT" "0/state=off"
-  eq "  hook down, context deactivated" "$(tail -n 1 "$MR/hook.log")/$(grep -c '^AT+CGACT=0,1$' "$MR/at.log")" "ccmni2 down/1"
+  eq "  hook down, context deactivated" "$(tail -n 1 "$MR/hook.log")/$(tail -n 1 "$MR/at.log")" "ccmni2 down/AT+CGACT=0,1"
   grep -q '^NW:AT+EIF=302, "ifst", "down", 1$' "$MR/at.log" && ok "  ifst down confirmed" || bad "  ifst down confirmed" "$(cat "$MR/at.log")" ifst
   eq "  status off" "$(md status)" state=off
   printf 'apn=bad apn;AT\n' > "$MR/etc/walpad/mobile.conf"

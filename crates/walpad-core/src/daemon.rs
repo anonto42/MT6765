@@ -479,6 +479,7 @@ impl Daemon {
         let inp = battery::soc_input(&raw, &self.brain.batt_cfg);
         let ms = now.duration_since(self.started).as_millis() as u64;
         self.soc_out = self.soc.step(ms, &inp);
+        self.apply_charger_policy(&raw);
         if let Some(p) = self.soc_out.percent.filter(|_| inp.mv.is_some()) {
             let due = self.soc_saved.is_none_or(|(t, last)| {
                 last != p && now.duration_since(t) >= Duration::from_secs(300)
@@ -487,6 +488,19 @@ impl Daemon {
                 self.soc_saved = Some((now, p));
                 self.soc_write();
             }
+        }
+    }
+
+    fn apply_charger_policy(&mut self, raw: &walpad_hw::battery::RawBattery) {
+        let b = battery::model(raw, self.brain.guard.low(), Some(&self.soc_out));
+        if let Some(target) = self
+            .brain
+            .guard
+            .charger_step(raw, b.percent, &self.brain.batt_cfg)
+        {
+            let _ = walpad_hw::battery::set_charger_cmd(&self.root, false, target.disable_charging);
+            let _ =
+                walpad_hw::battery::set_charger_input_limit_ua(&self.root, target.input_limit_ua);
         }
     }
 
@@ -912,6 +926,8 @@ impl Daemon {
             &read_file(&self.root, "/etc/walpad/keys.json"),
             &read_file(&self.root, "/etc/walpad/touch.json"),
         );
+        let raw = read_battery(&self.root);
+        self.apply_charger_policy(&raw);
     }
 
     fn set_setting(&mut self, key: &str, value: Value) -> CmdResult {

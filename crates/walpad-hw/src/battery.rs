@@ -20,13 +20,26 @@ pub struct RawBattery {
     pub charge_full_uah: Option<u64>,
     /// Internal resistance in milliohm from the MediaTek gauge (`ptim_resist_get`), unchecked.
     pub r_int_mohm: Option<u32>,
+    /// Charger input voltage (`VBUS`) in mV when available.
+    pub charger_mv: Option<u32>,
 }
 
 /// Every supply that can only be a power source (not the battery or the fuel gauge).
 const SOURCES: [&str; 4] = ["ac", "usb", "mtk_charger_type", "wireless"];
+const MASTER_CHG_LIMIT: &str = "/sys/class/power_supply/mtk-master-charger/input_current_limit";
+const MTK_CURRENT_CMD: &str = "/proc/mtk_battery_cmd/current_cmd";
 
 pub fn read_battery(root: &Root) -> RawBattery {
     let g = |n: &str| read_trim(root, &format!("{PS}/{n}"));
+    let charger_mv = read_trim(root, "/sys/devices/platform/charger/ADC_Charger_Voltage")
+        .or_else(|| {
+            read_trim(
+                root,
+                "/sys/class/power_supply/mtk-master-charger/voltage_now",
+            )
+        })
+        .and_then(|s| parse_voltage_mv(&s))
+        .filter(|&mv| mv > 1000);
     RawBattery {
         capacity: g("capacity").and_then(|s| s.parse().ok()),
         status: g("status"),
@@ -39,7 +52,30 @@ pub fn read_battery(root: &Root) -> RawBattery {
         charger_online: SOURCES.iter().any(|n| {
             read_trim(root, &format!("/sys/class/power_supply/{n}/online")).as_deref() == Some("1")
         }),
+        charger_mv,
     }
+}
+
+/// Program the MediaTek master charger (ETA6937) input current limit in microamps
+/// (`100_000` = 100 mA power-path hold, `500_000` = 500 mA, `1_000_000` = 1000 mA,
+/// `1_500_000` = 1500 mA, `2_000_000` = 2000 mA, `-1` = kernel default).
+/// The buck converter supplies system load (`VSYS`) first and uses only leftover current to charge.
+pub fn set_charger_input_limit_ua(root: &Root, ua: i64) -> std::io::Result<()> {
+    std::fs::write(root.p(MASTER_CHG_LIMIT), format!("{ua}\n"))
+}
+
+/// Enable or pause battery charging via `/proc/mtk_battery_cmd/current_cmd`.
+pub fn set_charger_cmd(
+    root: &Root,
+    usb_unlimited: bool,
+    disable_charging: bool,
+) -> std::io::Result<()> {
+    let cmd = format!(
+        "{} {}\n",
+        u8::from(usb_unlimited),
+        u8::from(disable_charging)
+    );
+    std::fs::write(root.p(MTK_CURRENT_CMD), cmd)
 }
 
 /// voltage_now is in uV (divide by 1000 when above 100000), already mV otherwise.
@@ -83,11 +119,22 @@ mod tests {
             "/sys/class/power_supply/mtk-gauge/ptim_resist_get",
             "283\n",
         );
+        put(
+            &r,
+            "/sys/devices/platform/charger/ADC_Charger_Voltage",
+            "4950\n",
+        );
         let b2 = read_battery(&r);
         assert_eq!(
-            (b2.charge_full_uah, b2.r_int_mohm),
-            (Some(2946000), Some(283))
+            (b2.charge_full_uah, b2.r_int_mohm, b2.charger_mv),
+            (Some(2946000), Some(283), Some(4950))
         );
+        put(&r, MASTER_CHG_LIMIT, "-1\n");
+        put(&r, MTK_CURRENT_CMD, "0 0\n");
+        set_charger_input_limit_ua(&r, 1_000_000).unwrap();
+        set_charger_cmd(&r, false, true).unwrap();
+        assert_eq!(read_trim(&r, MASTER_CHG_LIMIT).as_deref(), Some("1000000"));
+        assert_eq!(read_trim(&r, MTK_CURRENT_CMD).as_deref(), Some("0 1"));
         assert!(b.charger_online);
         assert_eq!(b.capacity, Some(-1));
         assert_eq!(b.mv, Some(3880));

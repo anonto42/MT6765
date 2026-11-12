@@ -236,6 +236,9 @@ pub enum Target {
     PowerOffCycle,
     LowBattCycle,
     CritBattCycle,
+    ChargeModeCycle,
+    ChargeLimitCycle,
+    ChargeCurrentCycle,
     TouchGesturesToggle,
     MultitouchToggle,
     KeyGesture(usize),
@@ -2491,6 +2494,29 @@ impl App {
                     self.model.devd.critical_batt_mv,
                 );
                 out.cmd(Cmd::Setting("critical_batt_mv", json!(next)));
+            }
+            Target::ChargeModeCycle if interactive => {
+                let modes = crate::config::CHARGE_MODES;
+                let idx = modes
+                    .iter()
+                    .position(|&m| m == self.model.devd.charge_mode)
+                    .unwrap_or(0);
+                let next = modes[(idx + 1) % modes.len()];
+                out.cmd(Cmd::Setting("charge_mode", json!(next)));
+            }
+            Target::ChargeLimitCycle if interactive => {
+                let next = device_screen::next_u32(
+                    &crate::config::CHARGE_LIMIT_OPTIONS,
+                    self.model.devd.charge_limit_pct,
+                );
+                out.cmd(Cmd::Setting("charge_limit_pct", json!(next)));
+            }
+            Target::ChargeCurrentCycle if interactive => {
+                let next = device_screen::next_u32(
+                    &crate::config::CHARGE_CURRENT_OPTIONS,
+                    self.model.devd.charge_current_ma,
+                );
+                out.cmd(Cmd::Setting("charge_current_ma", json!(next)));
             }
             Target::TouchGesturesToggle if interactive => out.cmd(Cmd::Setting(
                 "touch_gestures",

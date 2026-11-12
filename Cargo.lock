@@ -678,6 +678,7 @@ dependencies = [
 name = "walpad-ctl"
 version = "0.1.0"
 dependencies = [
+ "rustix",
  "serde_json",
  "walpad-core",
  "walpad-hw",

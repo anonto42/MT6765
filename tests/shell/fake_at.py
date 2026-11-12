@@ -36,6 +36,9 @@ if nw:
     urc_m, _s3 = make(os.path.join(d, "pttynwurc"))
 
 REPLIES = {
+    "AT+CFUN?": "+CFUN: 1",
+    "AT+CFUN=1": "",
+    "AT+CREG?": "+CREG: 0,1",
     "AT+COPS=3,0": "",
     "AT+COPS?": '+COPS: 0,0,"Grameenphone",7',
     "AT+EDALLOW=1": "",

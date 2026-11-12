@@ -15,6 +15,12 @@ pub struct Cfg {
     /// Battery capacity in mAh from the label on the battery (owner request 2026-11-11); used for the
     /// time estimates. Unset or implausible: `charge_full` when >= 1500 mAh, else 3000.
     pub battery_mah: Option<u32>,
+    /// Power-path / charging mode: "smart" (default), "bypass", "eco", "fast".
+    pub charge_mode: String,
+    /// Stop charging and run on charger power once battery reaches this % (50-100, default 85).
+    pub charge_limit_pct: u8,
+    /// Maximum charger input current in mA (500, 1000, 1500, 2000; default 1500).
+    pub charge_current_ma: u32,
 }
 impl Default for Cfg {
     fn default() -> Self {
@@ -23,8 +29,20 @@ impl Default for Cfg {
             critical_batt_mv: 3350,
             critical_readings: 1,
             battery_mah: None,
+            charge_mode: "smart".into(),
+            charge_limit_pct: 85,
+            charge_current_ma: 1500,
         }
     }
+}
+
+/// Hardware charger configuration computed by the power-path / battery-protection policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChargerTarget {
+    /// Input current limit in microamps (`100_000` for power-path hold, `500_000`..=`2_000_000`, or `-1`).
+    pub input_limit_ua: i64,
+    /// Disable battery charging completely (`true` only when strictly above limit + hysteresis).
+    pub disable_charging: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,11 +161,83 @@ pub fn model(raw: &RawBattery, low: bool, est: Option<&soc::Output>) -> Battery 
 pub struct Guard {
     low: bool,
     below_critical: u32,
+    paused_for_limit: bool,
+    last_charger: Option<ChargerTarget>,
 }
 
 impl Guard {
     pub fn low(&self) -> bool {
         self.low
+    }
+    pub fn paused_for_limit(&self) -> bool {
+        self.paused_for_limit
+    }
+    pub fn invalidate_charger(&mut self) {
+        self.last_charger = None;
+    }
+    /// Compute the desired ETA6937 power-path / charger current target and return `Some` when changed.
+    pub fn charger_step(
+        &mut self,
+        raw: &RawBattery,
+        pct: Option<u8>,
+        cfg: &Cfg,
+    ) -> Option<ChargerTarget> {
+        let target = if !raw.charger_online {
+            self.paused_for_limit = false;
+            ChargerTarget {
+                input_limit_ua: -1,
+                disable_charging: false,
+            }
+        } else if cfg.charge_mode == "bypass" {
+            self.paused_for_limit = true;
+            let over = pct.is_some_and(|p| p >= cfg.charge_limit_pct.saturating_add(2));
+            ChargerTarget {
+                input_limit_ua: 100_000,
+                disable_charging: over,
+            }
+        } else {
+            let limit = cfg.charge_limit_pct.clamp(50, 100);
+            if limit < 100 {
+                if pct.is_some_and(|p| p >= limit) {
+                    self.paused_for_limit = true;
+                } else if pct.is_some_and(|p| p <= limit.saturating_sub(3)) {
+                    self.paused_for_limit = false;
+                }
+            } else {
+                self.paused_for_limit = false;
+            }
+            if self.paused_for_limit {
+                let strict_cut = pct.is_some_and(|p| p >= limit.saturating_add(2))
+                    || raw.mv.is_some_and(|mv| mv >= 4340 && limit < 100);
+                ChargerTarget {
+                    input_limit_ua: 100_000,
+                    disable_charging: strict_cut,
+                }
+            } else {
+                let mut ma = match cfg.charge_mode.as_str() {
+                    "eco" => cfg.charge_current_ma.clamp(500, 1000),
+                    "fast" => 2000,
+                    _ => cfg.charge_current_ma.clamp(500, 2000),
+                };
+                // Thermal battery protection: step down current when battery warms up so the
+                // charger still supplies system power (VSYS) without overheating the cell.
+                if raw.temp_dc.is_some_and(|t| t >= 410) {
+                    ma = ma.min(500);
+                } else if raw.temp_dc.is_some_and(|t| t >= 380) {
+                    ma = ma.min(1000);
+                }
+                ChargerTarget {
+                    input_limit_ua: i64::from(ma) * 1000,
+                    disable_charging: false,
+                }
+            }
+        };
+        if self.last_charger != Some(target) {
+            self.last_charger = Some(target);
+            Some(target)
+        } else {
+            None
+        }
     }
     /// Called every 10 s (rule 1).
     pub fn step(&mut self, raw: &RawBattery, cfg: &Cfg) -> Vec<Act> {
@@ -344,5 +434,66 @@ mod tests {
         assert_eq!(b.temp_c, Some(34.0));
         let u = model(&RawBattery::default(), false, None);
         assert_eq!((u.percent, u.source), (None, BatterySource::Unknown));
+    }
+
+    #[test]
+    fn charger_policy_smart_limit_bypass_and_thermal() {
+        let mut g = Guard::default();
+        let mut cfg = Cfg::default(); // smart, 85%, 1500 mA
+        let mut r = raw(Some(-1), "Charging", Some(4000));
+        r.charger_online = true;
+        // 60% at 34.0 C -> 1500 mA power-path + charge
+        assert_eq!(
+            g.charger_step(&r, Some(60), &cfg),
+            Some(ChargerTarget {
+                input_limit_ua: 1_500_000,
+                disable_charging: false,
+            })
+        );
+        // Unchanged on next poll -> None
+        assert_eq!(g.charger_step(&r, Some(60), &cfg), None);
+        // Warm battery (39.0 C) -> steps down to 1000 mA
+        r.temp_dc = Some(390);
+        assert_eq!(
+            g.charger_step(&r, Some(60), &cfg),
+            Some(ChargerTarget {
+                input_limit_ua: 1_000_000,
+                disable_charging: false,
+            })
+        );
+        r.temp_dc = Some(340);
+        // Reaches 85% limit -> enters 100 mA power-path hold (charger runs device, battery protected)
+        assert_eq!(
+            g.charger_step(&r, Some(85), &cfg),
+            Some(ChargerTarget {
+                input_limit_ua: 100_000,
+                disable_charging: false,
+            })
+        );
+        // Creeps to 87% -> strict cut
+        assert_eq!(
+            g.charger_step(&r, Some(87), &cfg),
+            Some(ChargerTarget {
+                input_limit_ua: 100_000,
+                disable_charging: true,
+            })
+        );
+        // Drops to 82% -> resumes normal 1500 mA charging
+        assert_eq!(
+            g.charger_step(&r, Some(82), &cfg),
+            Some(ChargerTarget {
+                input_limit_ua: 1_500_000,
+                disable_charging: false,
+            })
+        );
+        // Bypass mode at 50% -> holds 100 mA power-path
+        cfg.charge_mode = "bypass".into();
+        assert_eq!(
+            g.charger_step(&r, Some(50), &cfg),
+            Some(ChargerTarget {
+                input_limit_ua: 100_000,
+                disable_charging: false,
+            })
+        );
     }
 }

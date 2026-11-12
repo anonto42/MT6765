@@ -1674,9 +1674,21 @@ fn settings_all_pages_configurable_controls_and_manual_network() {
         vec![Cmd::Setting("key.vol_up.single", json!("volume:-5"))]
     );
 
-    // Power page: dim timeout, dimmed brightness, screen off, lid toggle, battery thresholds
+    // Power page: charging mode, charge limit, max current, dim timeout, dimmed brightness, screen off, battery thresholds
     tap(&mut app, Target::Back);
     tap(&mut app, Target::Page(Page::Power));
+    assert_eq!(
+        tap(&mut app, Target::ChargeModeCycle).cmds,
+        vec![Cmd::Setting("charge_mode", json!("bypass"))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::ChargeLimitCycle).cmds,
+        vec![Cmd::Setting("charge_limit_pct", json!(90))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::ChargeCurrentCycle).cmds,
+        vec![Cmd::Setting("charge_current_ma", json!(2000))]
+    );
     assert_eq!(
         tap(&mut app, Target::PowerDimCycle).cmds,
         vec![Cmd::Setting("dim_after_s", json!(0))]

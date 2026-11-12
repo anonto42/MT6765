@@ -156,6 +156,9 @@ pub const ALLOWED_SETTINGS: &[&str] = &[
     "net_mac_mode",
     "net_mac",
     "net_hostname",
+    "charge_mode",
+    "charge_limit_pct",
+    "charge_current_ma",
 ];
 
 /// Safe hardware volume-button actions selectable in Settings > Input (`keys.json`).
@@ -1153,6 +1156,18 @@ fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
         "net_hostname" => match v.as_str() {
             Some(s) if s.is_empty() || valid_hostname(s) => Ok(()),
             _ => Err("value must be a hostname of 1-63 letters, digits or -".into()),
+        },
+        "charge_mode" => match v.as_str() {
+            Some("smart" | "bypass" | "eco" | "fast") => Ok(()),
+            _ => Err("value must be \"smart\", \"bypass\", \"eco\" or \"fast\"".into()),
+        },
+        "charge_limit_pct" => match v.as_u64() {
+            Some(n) if (50..=100).contains(&n) => Ok(()),
+            _ => Err("value must be an integer 50-100".into()),
+        },
+        "charge_current_ma" => match v.as_u64() {
+            Some(500 | 1000 | 1500 | 2000) => Ok(()),
+            _ => Err("value must be 500, 1000, 1500 or 2000".into()),
         },
         k if k.starts_with("key.") => match v.as_str() {
             Some(s) if KEY_ACTIONS.contains(&s) => Ok(()),

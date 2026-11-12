@@ -7,6 +7,7 @@ klog() { echo "WALPAD-OS: $*" > /dev/kmsg 2>/dev/null; }
 klog "walpad-init started"
 
 /bin/busybox --install -s 2>/dev/null
+[ -x /usr/local/bin/walpad-ctl ] && ln -sfn /usr/local/bin/walpad-ctl /usr/local/bin/timeout
 hostname walpad 2>/dev/null
 hwclock -s -u 2>/dev/null   # system time from the RTC (kept right by the network sync in walpad-wifi)
 mkdir -p /var/log /var/lib/walpad /run/walpad /tmp/.X11-unix /root/.ssh /etc/dropbear

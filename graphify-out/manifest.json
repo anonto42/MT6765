@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "config/rootfs-nopython/files/sbin/walpad-init": {
-    "mtime": 1794324431.1637635,
-    "seen": 1794498070.8526218,
-    "ast_hash": "a563364cdcfa68a3dc058ba8eebbb68d",
+    "mtime": 1794508821.2160184,
+    "seen": 1794511825.5581865,
+    "ast_hash": "b6671af2230441a0ab6f9099f699fb19",
     "semantic_hash": ""
   },
   "config/rootfs-nopython/files/usr/local/sbin/walpad-rescue": {
@@ -66,9 +66,9 @@
     "semantic_hash": ""
   },
   "config/rootfs/sbin/walpad-init": {
-    "mtime": 1794324431.1637635,
-    "seen": 1794498070.852634,
-    "ast_hash": "a27f522fce8ac8097a82ba6184de8dec",
+    "mtime": 1794508794.3200185,
+    "seen": 1794511825.5582044,
+    "ast_hash": "6781bd62365a9b229a2bdb380a827eb0",
     "semantic_hash": ""
   },
   "config/rootfs/usr/local/bin/walpad-ctl": {
@@ -204,15 +204,15 @@
     "semantic_hash": ""
   },
   "crates/walpad-core/src/brain.rs": {
-    "mtime": 1794318448.2398791,
-    "seen": 1794498070.852676,
-    "ast_hash": "801304dfb5d6642ee6cebfe31c6053eb",
+    "mtime": 1794511018.6880217,
+    "seen": 1794511825.5582533,
+    "ast_hash": "43545a2be96c9cc8a02ace7ea81a5302",
     "semantic_hash": ""
   },
   "crates/walpad-core/src/daemon.rs": {
-    "mtime": 1794505779.608014,
-    "seen": 1794507369.7055976,
-    "ast_hash": "b2fac7bd9e64d9938f09cb72513d2809",
+    "mtime": 1794511042.3040216,
+    "seen": 1794511825.5582542,
+    "ast_hash": "9abc262af9f6cfd0f42abd414fd9842e",
     "semantic_hash": ""
   },
   "crates/walpad-core/src/fake.rs": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "crates/walpad-core/src/logic/battery.rs": {
-    "mtime": 1794416597.380179,
-    "seen": 1794498070.852686,
-    "ast_hash": "d66951d332e40dd307c26e59b4d9600b",
+    "mtime": 1794510939.3600216,
+    "seen": 1794511825.5582657,
+    "ast_hash": "da190fe1c290414572d99373e513505e",
     "semantic_hash": ""
   },
   "crates/walpad-core/src/logic/key_gestures.rs": {
@@ -378,21 +378,21 @@
     "semantic_hash": ""
   },
   "crates/walpad-ctl/Cargo.toml": {
-    "mtime": 1794227862.500036,
-    "seen": 1794312585.5727422,
-    "ast_hash": "79a6b5e221fa17a2b7d6064cad360a6f",
+    "mtime": 1794508758.8320184,
+    "seen": 1794511825.558315,
+    "ast_hash": "daf3375f1f897c6f021454dd6a86549f",
     "semantic_hash": ""
   },
   "crates/walpad-ctl/src/lib.rs": {
-    "mtime": 1794452136.2240045,
-    "seen": 1794498070.852728,
-    "ast_hash": "5cfa6a6e8826676bdd3dd7a947472959",
+    "mtime": 1794508915.3640187,
+    "seen": 1794511825.558316,
+    "ast_hash": "77e6143e4a496fcb002f5dffbdbcc36f",
     "semantic_hash": ""
   },
   "crates/walpad-ctl/src/main.rs": {
-    "mtime": 1794239083.284215,
-    "seen": 1794312585.5727437,
-    "ast_hash": "7675e8c46c56b7156fc1de9c85e60935",
+    "mtime": 1794508762.4800184,
+    "seen": 1794511825.5583167,
+    "ast_hash": "908fa88480437502256b0b63a2b843fe",
     "semantic_hash": ""
   },
   "crates/walpad-hw/Cargo.toml": {
@@ -402,9 +402,9 @@
     "semantic_hash": ""
   },
   "crates/walpad-hw/src/battery.rs": {
-    "mtime": 1794416597.3881788,
-    "seen": 1794498070.8527439,
-    "ast_hash": "a1c01db8ff7dc91f21aa6f700569a528",
+    "mtime": 1794511439.1600223,
+    "seen": 1794511825.5583284,
+    "ast_hash": "4e1e84c7fc1d6f5d649654741670a51b",
     "semantic_hash": ""
   },
   "crates/walpad-hw/src/evdev.rs": {
@@ -456,9 +456,9 @@
     "semantic_hash": ""
   },
   "crates/walpad-proto/src/command.rs": {
-    "mtime": 1794503436.3720107,
-    "seen": 1794503484.7538137,
-    "ast_hash": "e5070be9f8ebc6ff676438b70a18f0af",
+    "mtime": 1794510769.3160212,
+    "seen": 1794511825.5583398,
+    "ast_hash": "93f357f3a4545637ff7d285bc1ec7c9d",
     "semantic_hash": ""
   },
   "crates/walpad-proto/src/devd.rs": {
@@ -498,15 +498,15 @@
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/app.rs": {
-    "mtime": 1794505956.6240144,
-    "seen": 1794507369.7056932,
-    "ast_hash": "f07d16a4f4b7d24c9b1f6e957b8a4e02",
+    "mtime": 1794511146.3200219,
+    "seen": 1794511825.5583477,
+    "ast_hash": "b93940ac1f8998f462eede7e89e0bc24",
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/app/tests.rs": {
-    "mtime": 1794503385.8720107,
-    "seen": 1794503484.7538505,
-    "ast_hash": "cdea5812cac0435e1e38e135b4d91b1f",
+    "mtime": 1794511188.424022,
+    "seen": 1794511825.5583506,
+    "ast_hash": "f48c7b5c9acb7052cda1efe04311b716",
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/app/tests/hotspot.rs": {
@@ -522,9 +522,9 @@
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/config.rs": {
-    "mtime": 1794503436.4880106,
-    "seen": 1794503484.7539,
-    "ast_hash": "05ccd5cf853dd9e0fb7ccb24ef28f853",
+    "mtime": 1794511086.3800218,
+    "seen": 1794511825.5583646,
+    "ast_hash": "6150d69abd1aacc0a35057dfdc7a05c6",
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/core_client.rs": {
@@ -606,9 +606,9 @@
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/settings_screen.rs": {
-    "mtime": 1794502344.4160092,
-    "seen": 1794503484.7539732,
-    "ast_hash": "ee1a6585896e47b35fc2550081450316",
+    "mtime": 1794511439.3680222,
+    "seen": 1794511825.5583913,
+    "ast_hash": "78da6d29c3cc471146f4bc3242d27b6f",
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/shell.rs": {
@@ -798,9 +798,9 @@
     "semantic_hash": ""
   },
   "scripts/deploy.sh": {
-    "mtime": 1794503370.9760106,
-    "seen": 1794503484.7541182,
-    "ast_hash": "eb2bda1553e073ed5f74e9b2c499f49f",
+    "mtime": 1794508771.0760183,
+    "seen": 1794511825.5584435,
+    "ast_hash": "9cdeeaa53bce3fad1eef43c271186de1",
     "semantic_hash": ""
   },
   "scripts/detect_mode.sh": {
@@ -1194,9 +1194,9 @@
     "semantic_hash": ""
   },
   "tests/shell/run.sh": {
-    "mtime": 1794452136.3120046,
-    "seen": 1794498070.8529055,
-    "ast_hash": "9a19086126dcc72f2c44e1cfe4b6c79a",
+    "mtime": 1794509746.2160199,
+    "seen": 1794511825.5585067,
+    "ast_hash": "37b0bace977aadbb1c45ac1de8eeb46d",
     "semantic_hash": ""
   },
   "tools/build_wifi_userspace.sh": {
@@ -2412,9 +2412,9 @@
     "semantic_hash": ""
   },
   "tests/shell/fake_at.py": {
-    "mtime": 1794365665.8840377,
-    "seen": 1794498070.8529015,
-    "ast_hash": "a7d3147199b7df4b153353151fa90068",
+    "mtime": 1794509741.1440198,
+    "seen": 1794511825.558501,
+    "ast_hash": "effa4d6b0accaff3e93958954c14e293",
     "semantic_hash": ""
   },
   "tests/shell/gps.sh": {
