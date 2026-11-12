@@ -11,6 +11,7 @@ use crate::home;
 use crate::media::{self, MediaTarget};
 use crate::mobile::{self, MobileInfo};
 use crate::network::{self, bars_from_dbm, NetEntry, NetModel, SavedEntry};
+use crate::notifications_ui;
 mod lock_flow;
 mod phone_flow;
 
@@ -253,6 +254,11 @@ pub enum Target {
     Media(MediaTarget),
     /// Phone screen and its sheets (owner request 2026-11-11, change phone-dialer).
     Phone(PhoneTarget),
+    /// Notification centre (owner request 2026-11-12, change `device-notifications`): the bell
+    /// icon in the header, a row (index into `Model::notifications`), Clear all.
+    NotificationsCard,
+    NotificationRow(usize),
+    NotificationsClearAll,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -397,6 +403,10 @@ pub enum Cmd {
     ContactDelete(String),
     CallLog,
     CallLogClear,
+    /// Notification centre (owner request 2026-11-12, change `device-notifications`).
+    Notifications,
+    NotificationMarkRead(u64),
+    NotificationsClearAll,
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
     /// `stats_config`: show or hide one header figure.
@@ -444,6 +454,8 @@ pub enum Purpose {
     VpnSheet,
     VpnImport,
     VpnFiles,
+    /// Notification centre list fetch (owner request 2026-11-12, change `device-notifications`).
+    Notifications,
     Other,
 }
 
@@ -636,6 +648,9 @@ impl Cmd {
             Cmd::ContactDelete(id) => ("contact_delete", json!({"id": id})),
             Cmd::CallLog => ("call_log", Value::Null),
             Cmd::CallLogClear => ("call_log_clear", Value::Null),
+            Cmd::Notifications => ("notifications", Value::Null),
+            Cmd::NotificationMarkRead(id) => ("notification_mark_read", json!({"id": id})),
+            Cmd::NotificationsClearAll => ("notifications_clear_all", Value::Null),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Stats(i, on) => ("stats_config", json!({ i.key(): on })),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
@@ -666,6 +681,7 @@ impl Cmd {
             Cmd::VpnConfig { .. } => Purpose::Vpn,
             Cmd::VpnImport(_) => Purpose::VpnImport,
             Cmd::VpnFiles => Purpose::VpnFiles,
+            Cmd::Notifications => Purpose::Notifications,
             Cmd::BtPair(_) => Purpose::BtPair,
             Cmd::BtConnect(_) | Cmd::BtDisconnect(_) | Cmd::BtForget(_) => Purpose::BtOp,
             Cmd::LockSet { .. } | Cmd::LockRemove(_) | Cmd::LockNow | Cmd::LockConfig(_) => {
@@ -741,6 +757,9 @@ pub struct Model {
     pub media: media::MediaModel,
     /// Phone screen: dial pad, recents, contacts, messages (owner request 2026-11-11).
     pub phone: PhoneModel,
+    /// Notification centre list (owner request 2026-11-12, change `device-notifications`),
+    /// fetched when the screen opens; the unread badge comes from `status.notifications` instead.
+    pub notifications: Vec<walpad_proto::Notification>,
 }
 
 impl Model {
@@ -774,6 +793,7 @@ impl Model {
             store: store::StoreModel::default(),
             media: media::MediaModel::default(),
             phone: PhoneModel::default(),
+            notifications: Vec::new(),
         }
     }
 
@@ -1028,6 +1048,9 @@ impl App {
         }
         if tab == Tab::Phone {
             self.open_phone(out);
+        }
+        if tab == Tab::Notifications && self.model.connected {
+            out.cmd(Cmd::Notifications);
         }
         out.dirty = true;
     }
@@ -1606,6 +1629,16 @@ impl App {
                     self.toast("Could not close the app", Tone::Warning);
                 }
             }
+            (Purpose::Notifications, true) => {
+                self.model.notifications = data["notifications"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+            }
             (_, false) => {
                 if let Some(e) = error {
                     if e.code != "busy" {
@@ -1716,6 +1749,7 @@ impl App {
                 | Tab::Media
                 | Tab::Phone
                 | Tab::Gps
+                | Tab::Notifications
         )
     }
 
@@ -2061,6 +2095,21 @@ impl App {
                     out.cmd(Cmd::CopyText(t));
                     self.toast("Map link copied: paste it in the browser", Tone::Info);
                 }
+            }
+            Target::NotificationsCard => self.go(Tab::Notifications, out),
+            Target::NotificationRow(i) if interactive => {
+                if let Some(it) = self.model.notifications.get(i) {
+                    if !it.read {
+                        out.cmd(Cmd::NotificationMarkRead(it.id));
+                    }
+                }
+                if let Some(it) = self.model.notifications.get_mut(i) {
+                    it.read = true;
+                }
+            }
+            Target::NotificationsClearAll if interactive => {
+                self.model.notifications.clear();
+                out.cmd(Cmd::NotificationsClearAll);
             }
             Target::BtSwitch if interactive && bluetooth::switchable(&self.model.status) => {
                 out.cmd(Cmd::BtEnable(!bluetooth::switch_on(&self.model.status)))
@@ -2797,8 +2846,9 @@ impl App {
             self.hits.extend(home);
         }
         let qs_open = matches!(self.model.overlay, Some(Overlay::QuickSettings));
-        let pill = chrome::render_header(p, &frame, &self.model, qs_open);
+        let (pill, bell) = chrome::render_header(p, &frame, &self.model, qs_open);
         self.hits.push((pill, Target::QuickSettings));
+        self.hits.push((bell, Target::NotificationsCard));
         if let Some((text, tone)) = banner {
             p.banner(
                 Rect::new(
@@ -2877,6 +2927,9 @@ impl App {
             Tab::Bluetooth => bluetooth::layout(&frame, &self.model.status).total,
             Tab::Phone => phone_ui::layout_total(&frame, &self.model.phone, &self.model.status),
             Tab::Gps => gps_screen::layout(&frame, &self.model.status).total,
+            Tab::Notifications => {
+                notifications_ui::layout(&frame, self.model.notifications.len()).total
+            }
             _ => 0,
         }
         .max(self.view.h);
@@ -2970,6 +3023,14 @@ impl App {
                 &gps_screen::View {
                     st: &m.status,
                     online: m.connected,
+                    pressed: m.pressed,
+                },
+            ),
+            Tab::Notifications => notifications_ui::render(
+                p,
+                &frame,
+                &notifications_ui::View {
+                    items: &m.notifications,
                     pressed: m.pressed,
                 },
             ),

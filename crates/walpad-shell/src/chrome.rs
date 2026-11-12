@@ -109,7 +109,8 @@ pub fn active_target(active: Tab, panel_open: bool) -> Option<Target> {
         | Tab::Vpn
         | Tab::Media
         | Tab::Phone
-        | Tab::Gps => None,
+        | Tab::Gps
+        | Tab::Notifications => None,
     }
 }
 
@@ -243,7 +244,12 @@ impl Chrome {
 
 /// Header: clock (12/24 h as configured) and date at the left, the quick-settings pill at the
 /// right. Returns the pill rect.
-pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -> Rect {
+/// Width reserved for the notification bell icon box, left of the Quick Settings pill (owner
+/// request 2026-11-12, change `device-notifications`).
+const BELL_W: i32 = 40;
+
+/// Returns `(quick settings pill, bell icon box)`.
+pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -> (Rect, Rect) {
     let h = frame.header;
     let w = &m.wall;
     // 12-hour mode shows "2:22" (no leading zero) with AM/PM beside it
@@ -284,13 +290,35 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         bt,
         gps,
     );
+    // notification bell, just left of the pill (owner request 2026-11-12, change
+    // device-notifications): a small icon box, never part of the pill component itself.
+    let bell = Rect::new(
+        pill.x - SP_3 - BELL_W,
+        h.y + (h.h - BELL_W) / 2,
+        BELL_W,
+        BELL_W,
+    );
+    p.icon_box(
+        bell,
+        Icon::Bell,
+        m.pressed == Some(Target::NotificationsCard),
+        false,
+    );
+    let unread = m
+        .status
+        .as_ref()
+        .map_or(0, |s| s.notifications.unread_count);
+    if unread > 0 {
+        crate::phone_ui::paint_badge(p, bell, unread);
+    }
     let clock_x = h.x + SP_5;
-    let mut clock_right = clock_x + h.w - pill_w - SP_4 - 2 * SP_5;
-    // live stats between the clock and the pill (owner request 2026-11-11)
+    let mut clock_right = clock_x + h.w - pill_w - BELL_W - SP_3 - SP_4 - 2 * SP_5;
+    // live stats between the clock and the pill, stopping short of the bell (owner request
+    // 2026-11-11 / 2026-11-12)
     if let Some(st) = m.status.as_ref().map(|s| &s.stats) {
         let clock_end = clock_x + p.clock_time_w(&time, w.suffix);
         let date_w = p.fonts.measure(&w.date, Face::Regular, SIZE_CAPTION).ceil() as i32;
-        let l = topbar::layout(p.fonts, st, h, clock_end, date_w, pill.x - SP_3);
+        let l = topbar::layout(p.fonts, st, h, clock_end, date_w, bell.x - SP_3);
         if let Some(sp) = l.pill {
             // the date keeps its room only while it fits left of the stats
             clock_right = if l.date { sp.x - SP_3 } else { clock_end };
@@ -303,7 +331,7 @@ pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -
         w.suffix,
         &w.date,
     );
-    pill
+    (pill, bell)
 }
 
 #[cfg(test)]

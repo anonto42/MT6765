@@ -27,6 +27,7 @@ pub mod mobile;
 pub mod mousepad;
 pub mod nav;
 pub mod network;
+pub mod notifications_ui;
 pub mod overlay;
 pub mod panels;
 pub mod phone_ui;
