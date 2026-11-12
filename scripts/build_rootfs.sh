@@ -33,7 +33,10 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
       wpa_supplicant iw wireless-regdb e2fsprogs e2fsprogs-extra util-linux-misc ca-certificates-bundle tzdata \
       iproute2 procps curl nano htop kbd fuse-exfat ntfs-3g alsa-utils hostapd iptables \
       bluez bluez-deprecated dbus pulseaudio pulseaudio-utils \
-      iptables-legacy wireguard-go wireguard-tools-wg openvpn"
+      iptables-legacy wireguard-go wireguard-tools-wg openvpn \
+      usb-modeswitch tcpdump"
+# usb-modeswitch, not usb-modeswitch-udev: we run it manually (scripts/walpad-usbmode), no udev
+# rule; usb-modeswitch-udev pulls in tcl, which the no-Python build must not have.
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji font-noto font-noto-bengali font-noto-devanagari font-noto-arabic font-noto-naskh-arabic font-noto-nastaliq-urdu font-noto-tamil font-noto-telugu font-noto-gujarati font-noto-gurmukhi font-noto-kannada font-noto-malayalam font-noto-oriya font-noto-sinhala font-noto-thai font-noto-hebrew font-noto-khmer font-noto-myanmar font-noto-lao font-noto-georgian font-noto-armenian font-noto-ethiopic font-noto-cjk font-noto-symbols font-noto-math \
@@ -49,7 +52,10 @@ if [ "$NO_PY" = 1 ]; then
 fi
 PKGS="$BASE_PKGS"; [ "${WALPAD_GUI:-1}" = "1" ] && PKGS="$BASE_PKGS $GUI_PKGS"
 [ -z "${WALPAD_PRINT_PKGS:-}" ] || { echo "$PKGS"; exit 0; }   # dry run for tests/shell/run.sh
-mkdir -p "$OUT" build/bt data/camera   # build/bt/hci_vhci.ko comes from scripts/build_bt_module.sh (optional)
+mkdir -p "$OUT" build/bt build/zt9101 data/camera data/zt9101/fw   # build/bt/hci_vhci.ko comes from
+  # scripts/build_bt_module.sh (optional); build/zt9101/zt9101_ztopmac_usb.ko comes from
+  # scripts/build_zt9101_module.sh (optional); data/zt9101/fw/*.bin is this chip's firmware,
+  # committed (same as dobbsbp/ztop-wifi-driver's own public driver/fw/, not secret)
 # host-built static tools that go into the image (gitignored binaries): build them if missing
 for t in dmlinear padui fbmirror; do
   [ -x "tools/$t/$t" ] || { echo "building tools/$t"; bash "tools/$t/build.sh" >&2; }
@@ -59,7 +65,7 @@ done
 ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || true)
 [ -n "$ALPINE_DIGEST" ] || { docker pull -q "alpine:$ALPINE_REL" >/dev/null; ALPINE_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "alpine:$ALPINE_REL" 2>/dev/null || echo unknown); }
 AUTH=""; [ -f "$HOME/.ssh/id_ed25519.pub" ] && AUTH="$(cat "$HOME/.ssh/id_ed25519.pub")"
-docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro -v "$PWD/build/bt":/bt:ro -v "$PWD/data/camera":/camera:ro \
+docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootfs":/cfg:ro -v "$PWD/tools":/tools:ro -v "$PWD/scripts":/scripts:ro -v "$PWD/config/rootfs-nopython":/cfg-np:ro -v "$PWD/build/rust/aarch64":/rust:ro -v "$PWD/build/bt":/bt:ro -v "$PWD/build/zt9101":/zt9101:ro -v "$PWD/data/camera":/camera:ro -v "$PWD/data/zt9101/fw":/zt9101fw:ro \
   -e ALPINE_REL="$ALPINE_REL" -e ALPINE_DIGEST="$ALPINE_DIGEST" -e SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}" -e NO_PY="$NO_PY" -e SIZE_MIB="$SIZE_MIB" -e PKGS="$PKGS" -e WALPAD_GUI="${WALPAD_GUI:-1}" -e AUTH="$AUTH" -e UID_="$(id -u)" -e GID_="$(id -g)" \
   "alpine:$ALPINE_REL" sh -euc '
   REL=$(cut -d. -f1,2 /etc/alpine-release)
@@ -104,6 +110,17 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
   # Bluetooth: our hci_vhci.ko for the running 4.19.127 kernel (scripts/build_bt_module.sh), and the
   # D-Bus system user (apk runs with --no-scripts, so the dbus package did not create it)
   if [ -f /bt/hci_vhci.ko ]; then mkdir -p /out/root/usr/local/lib/modules && install -m 644 /bt/hci_vhci.ko /out/root/usr/local/lib/modules/; fi
+  # ZT9101 USB Wi-Fi dongle (scripts/build_zt9101_module.sh, optional): .ko + its firmware go where
+  # scripts/walpad-usbmode and the device-side wifi.cfg (config/rootfs/root/zt9101/wifi.cfg, which
+  # the existing `cp -a /cfg/. /out/root/` step above already copies) expect them. The
+  # usb-modeswitch config (config/rootfs/etc/usb_modeswitch.d/2310:1a2b) is likewise already
+  # covered by that copy.
+  install -m 755 /scripts/walpad-usbmode /out/root/usr/local/sbin/walpad-usbmode
+  if [ -f /zt9101/zt9101_ztopmac_usb.ko ]; then
+    install -m 644 /zt9101/zt9101_ztopmac_usb.ko /out/root/root/zt9101_ztopmac_usb.ko
+    mkdir -p /out/root/root/zt9101/fw
+    for f in /zt9101fw/*.bin; do [ -f "$f" ] && install -m 644 "$f" /out/root/root/zt9101/fw/; done
+  fi
   grep -q "^messagebus:" /out/root/etc/group || echo "messagebus:x:101:messagebus" >> /out/root/etc/group
   grep -q "^messagebus:" /out/root/etc/passwd || echo "messagebus:x:100:101:messagebus:/run/dbus:/sbin/nologin" >> /out/root/etc/passwd
   grep -q "^messagebus:" /out/root/etc/shadow 2>/dev/null || echo "messagebus:!::0:::::" >> /out/root/etc/shadow
@@ -130,6 +147,8 @@ docker run --rm --platform linux/amd64 -v "$PWD/$OUT":/out -v "$PWD/config/rootf
     echo ./usr/local/bin/dmlinear; echo ./usr/local/bin/padui; echo ./usr/local/bin/fbmirror
     [ -f /rust/walpad-core ] && for b in walpad-core walpad-shell walpad-ctl walpad-btbridge walpad-gnss; do echo ./usr/local/lib/walpad/image/$b; done
     echo ./usr/local/lib/modules/hci_vhci.ko; echo ./usr/local/bin/camacdk
+    echo ./usr/local/sbin/walpad-usbmode; echo ./root/zt9101_ztopmac_usb.ko
+    for f in /zt9101fw/*.bin; do [ -f "$f" ] && echo "./root/zt9101/fw/$(basename "$f")"; done
     true; } | LC_ALL=C sort -u | while read -r f; do
       [ -f "/out/root/$f" ] || continue
       echo "$(sha256sum "/out/root/$f" | cut -d" " -f1) $(stat -c %a "/out/root/$f") $f"
