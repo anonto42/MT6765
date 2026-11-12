@@ -852,6 +852,10 @@ case $MEDIAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 CAOUT=$(sh tests/shell/callaudio.sh); echo "$CAOUT"
 case $CAOUT in *FAIL*) FAIL=$((FAIL+1));; esac
 
+# ===== walpad-audio jack/mic routing (owner request 2026-11-12, change headphone-mic-jack) =====
+JKOUT=$(sh tests/shell/jack.sh); echo "$JKOUT"
+case $JKOUT in *FAIL*) FAIL=$((FAIL+1));; esac
+
 # --- walpad-gps (owner request 2026-11-11): fake root, fake linker and daemon
 GPSOUT=$(sh tests/shell/gps.sh); echo "$GPSOUT"
 case $GPSOUT in *FAIL*) FAIL=$((FAIL+1));; esac

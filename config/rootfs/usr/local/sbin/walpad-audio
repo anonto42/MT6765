@@ -1,13 +1,92 @@
 #!/bin/sh
-# walpad-audio: switch the speaker path of the MT6357 codec on (legacy mt-soc driver: plain switches,
-# no DAPM routing).  Playback must go through /etc/asound.conf (44.1 kHz plug), never raw hw:0,0 at
-# other rates.  Every amixer call has a timeout.
-set_ctl() { timeout 3 amixer -c 0 -q cset name="$1" "$2" 2>/dev/null || echo "walpad-audio: could not set $1"; }
-[ -e /dev/snd/controlC0 ] || { echo "walpad-audio: no sound card"; exit 0; }
-set_ctl Speaker_Amp_Switch On
-set_ctl Ext_Speaker_Amp_Switch On
-set_ctl Audio_Amp_L_Switch On
-set_ctl Audio_Amp_R_Switch On
-set_ctl Lineout_PGAL_GAIN 8   # 0 dB
-set_ctl Lineout_PGAR_GAIN 8
-echo "walpad-audio: speaker on"
+# walpad-audio: switch the speaker/headphone/mic path of the MT6357 codec (legacy mt-soc driver:
+# plain switches, no DAPM routing).  Playback/capture must go through /etc/asound.conf (44.1 kHz
+# plug), never raw hw:0,0/hw:0,1 at other rates.  Every amixer call has a timeout; a control that
+# does not exist is skipped, never guessed (same discipline as walpad-callaudio).
+#
+#   walpad-audio                           boot default: speaker amps on (unchanged behaviour)
+#   walpad-audio jack <route> <mic>        owner request 2026-11-12, change headphone-mic-jack:
+#     route: headphone | speaker            output amp path
+#     mic:   builtin   | headset            which mic feeds the capture PCM (hw:0,1)
+#
+# Control names are confirmed on the device (`amixer -c 0 controls`/`contents`) and cross-checked
+# against tools/kernel-mt6765-4.19/sound/soc/mediatek/codec/mt6357/mtk-soc-codec-6357.c; see
+# docs/45-headphone-mic.md for the full research notes (what is confirmed vs. not yet tested).
+#
+# Test hook: WALPAD_AUDIO_ROOT prefixes /dev/snd (tests/shell/jack.sh), same convention as
+# WALPAD_CALLAUDIO_ROOT.
+R=${WALPAD_AUDIO_ROOT:-}
+
+LIST=
+list() { [ -n "$LIST" ] || LIST=$(timeout 3 amixer -c 0 controls 2>/dev/null); printf '%s\n' "$LIST"; }
+exists() { list | grep -q "name='$1'"; }
+set_ctl() {
+  if exists "$1"; then
+    timeout 3 amixer -c 0 -q cset name="$1" "$2" 2>/dev/null \
+      && echo "walpad-audio: $1 = $2" \
+      || echo "walpad-audio: could not set $1"
+  else
+    echo "walpad-audio: no control $1 (skipped)"
+  fi
+}
+have_card() { [ -e "$R/dev/snd/controlC0" ]; }
+
+cmd=${1:-}
+case "$cmd" in
+  "")
+    have_card || { echo "walpad-audio: no sound card"; exit 0; }
+    set_ctl Speaker_Amp_Switch On
+    set_ctl Ext_Speaker_Amp_Switch On
+    set_ctl Audio_Amp_L_Switch On
+    set_ctl Audio_Amp_R_Switch On
+    set_ctl Lineout_PGAL_GAIN 8   # 0 dB
+    set_ctl Lineout_PGAR_GAIN 8
+    echo "walpad-audio: speaker on"
+    ;;
+  jack)
+    route=$2; mic=$3
+    have_card || { echo "walpad-audio: no sound card"; exit 0; }
+    case "$route" in
+      headphone)
+        set_ctl Speaker_Amp_Switch Off
+        set_ctl Ext_Speaker_Amp_Switch Off
+        set_ctl Headset_Speaker_Amp_Switch On
+        set_ctl Headset_PGAL_GAIN 8   # 0 dB (same index convention as Lineout_PGA*; unverified
+        set_ctl Headset_PGAR_GAIN 8   # live, see docs/45-headphone-mic.md)
+        ;;
+      speaker)
+        set_ctl Headset_Speaker_Amp_Switch Off
+        set_ctl Speaker_Amp_Switch On
+        set_ctl Ext_Speaker_Amp_Switch On
+        set_ctl Lineout_PGAL_GAIN 8
+        set_ctl Lineout_PGAR_GAIN 8
+        ;;
+      *) echo "walpad-audio: jack route must be headphone or speaker" >&2; exit 2 ;;
+    esac
+    case "$mic" in
+      builtin)
+        # MicSource1 is the only functional capture mux on this codec variant (ADC3/4,
+        # MicSource2-4 are stubbed out "6752 removed" in the vendor driver): point it at ADC1,
+        # the main/built-in mic chain (comment in Audio_MicSource1_Set: "ADC1 is main_mic, ADC2
+        # is headset_mic").
+        set_ctl Audio_ADC_2_Switch Off
+        set_ctl Audio_Preamp2_Switch OPEN
+        set_ctl Audio_ADC_1_Switch On
+        set_ctl Audio_Preamp1_Switch IN_ADC1
+        set_ctl Audio_MIC1_Mode_Select ACCMODE
+        set_ctl Audio_MicSource1_Setting ADC1
+        ;;
+      headset)
+        set_ctl Audio_ADC_1_Switch Off
+        set_ctl Audio_Preamp1_Switch OPEN
+        set_ctl Audio_ADC_2_Switch On
+        set_ctl Audio_Preamp2_Switch IN_ADC2
+        set_ctl Audio_MIC2_Mode_Select ACCMODE
+        set_ctl Audio_MicSource1_Setting ADC2
+        ;;
+      *) echo "walpad-audio: jack mic must be builtin or headset" >&2; exit 2 ;;
+    esac
+    echo "walpad-audio: jack route=$route mic=$mic"
+    ;;
+  *) echo "usage: walpad-audio [jack <headphone|speaker> <builtin|headset>]" >&2; exit 2 ;;
+esac

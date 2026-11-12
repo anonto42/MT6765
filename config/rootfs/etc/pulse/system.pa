@@ -6,6 +6,13 @@
 load-module module-native-protocol-unix auth-anonymous=1 socket=/run/pulse/native
 load-module module-alsa-sink device=hw:0,0 sink_name=walpad tsched=0 fragments=4 fragment_size=48000 rate=44100 format=s16le channels=2 mmap=0 ignore_dB=1
 set-default-sink walpad
+# Capture (owner request 2026-11-12, change headphone-mic-jack): the codec's capture PCM is the
+# separate ALSA device hw:0,1 (`00-01: MultiMedia1_Capture` in /proc/asound/pcm), never hw:0,0.
+# Which mic actually reaches it (built-in vs. headset) is chosen by walpad-audio's mixer switches
+# (Audio_ADC_1/2_Switch, Audio_MicSource1_Setting), not by this module; the source exists whether
+# or not a mic path is currently enabled, same as the sink exists whether or not anything plays.
+load-module module-alsa-source device=hw:0,1 source_name=walpad_mic tsched=0 fragments=4 fragment_size=48000 rate=44100 format=s16le channels=2 ignore_dB=1
+set-default-source walpad_mic
 # release the card after 10 s of silence (an idle PCM must not stay open)
 # no suspend-on-idle: closing and re-opening the codec PCM repeatedly hung the tablet (2026-11-11)
 #load-module module-suspend-on-idle timeout=10
