@@ -41,6 +41,37 @@
 - Volume keys: key action `volume:+N` / `volume:-N` (keys.json) = `volume_delta`, source `key`. The shipped keys.json maps the volume buttons to Up/Down/Home etc., so no default gesture changes the volume until one is set to `volume:+5` / `volume:-5`.
 - walpad-ctl: `volume N|+N|-N`, `mute on|off`.
 
+## Headphone jack / mic (owner request 2026-11-12, OpenSpec `headphone-mic-jack`)
+- No live jack-insert detection on this kernel build: the MT6357 accdet module
+  (`CONFIG_SND_SOC_MT6357_ACCDET=m`) is present, prebuilt, at `/vendor/lib/modules/mt6357-accdet.ko`
+  but not loaded (confirmed: not in `lsmod`, no `/sys/class/switch`/`extcon` node). See
+  `docs/45-headphone-mic.md` for the full research. `walpad_hw::jack::read_jack` polls for such a
+  node every 2 s and stays `None` until a future change loads the module.
+- `/var/lib/walpad/jack-force` (persistent): `none|headphones|headset`, the owner's manual
+  override. `jack_force {route: null|"headphones"|"headset_with_mic"}` persists it and answers the
+  new `JackStatus`; applied by running `/usr/local/sbin/walpad-audio jack <headphone|speaker>
+  <builtin|headset>` as a timed child (8 s), polled from the daemon loop, same pattern as
+  `volume.rs`. A core restart re-applies the saved override once.
+- `status.jack`: `{detected: null|"headphones"|"headset_with_mic", forced: same, route: same}`.
+  `detected` is live accdet state (always `null` today); `forced` is the owner's override;
+  `route` = `detected` else `forced` else `null` (speaker + built-in mic) — what was actually
+  applied. A plain presence switch can only ever produce `detected: "headphones"`, never
+  `"headset_with_mic"` (telling a mic-equipped headset apart needs accdet's own classification).
+- `walpad-audio jack <route> <mic>`: `route` toggles `Headset_Speaker_Amp_Switch` /
+  `Speaker_Amp_Switch` / `Ext_Speaker_Amp_Switch` (+ `Headset_PGAL/R_GAIN` or
+  `Lineout_PGAL/R_GAIN`); `mic` points the one functional capture mux
+  (`Audio_MicSource1_Setting`) at `ADC1` (built-in, `Audio_ADC_1_Switch` + `Audio_Preamp1_Switch`
+  `IN_ADC1`) or `ADC2` (headset mic, `Audio_ADC_2_Switch` + `Audio_Preamp2_Switch` `IN_ADC2`); every
+  `amixer cset` is checked against `amixer controls` first and `timeout 3`-wrapped (never guessed).
+  The no-arg boot invocation (speaker on) is unchanged.
+- Capture PCM: `pcm.walpad_in` in `/etc/asound.conf` (hw:0,1, the codec's separate
+  `MultiMedia1_Capture` device, plug 44.1 kHz S16 stereo, same shape as `walpad_out`);
+  `module-alsa-source device=hw:0,1 source_name=walpad_mic` in `/etc/pulse/system.pa`
+  (`set-default-source walpad_mic`). **Not opened on the device yet** — needs an on-device test
+  before relying on it (same risk class as the playback hang in `memory/known-issues.md`).
+- walpad-ctl: `jack off|headphones|headset`. Shell: the Quick Settings volume caption reads
+  "Headphones"/"Headset mic" instead of "Volume" while a route is in effect (text only).
+
 ## Wi-Fi switch and hotspot (owner request 2026-11-10)
 - The chip is never powered off/on after boot (a failed power-on latches until reboot): Wi-Fi off is network level only. walpad-wifi always brings the stack up at boot; its loop then honours the switch.
 - `/var/lib/walpad/wifi-enabled` (persistent): `0` = client off, anything else or missing = on. Off: the loop terminates wpa_supplicant, stops DHCP, flushes and downs wlan0 (wlan0 stays up while an exclusive hotspot runs); on: it restarts the supplicant, which auto-connects to saved networks. Checked every second.
