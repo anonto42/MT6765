@@ -166,5 +166,49 @@ Owner words: "i don't have multitasking on the terminal and also on the the scre
 ## App environment (every launched app)
 DISPLAY=:0 HOME=/root XDG_RUNTIME_DIR=/run/walpad LIBGL_ALWAYS_SOFTWARE=1 MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_WEBRENDER=0 MOZ_ACCELERATED=0 GTK_A11Y=none NO_AT_BRIDGE=1 PULSE_SERVER=unix:/run/pulse/native XMODIFIERS=@im=walpad GTK_IM_MODULE=xim QT_IM_MODULE=xim (PULSE_SERVER: owner request 2026-11-10, sound server; the last three: the shell is the input method)
 
+## Notification centre (owner request 2026-11-12, change `device-notifications`)
+Owner words: "i want a notification type system that it will notify every events like charging,
+any otg or other thinks was connected".
+- `status.notifications`: `{unread_count}` only (the badge). The history itself is fetched on
+  demand with `notifications`, not pushed into `status`.
+- Categories (`walpad_proto::NotificationCategory`): `charging` (charger plugged/unplugged),
+  `storage` (SD card / USB mass-storage mounted or unmounted by `walpad-storage`), `usb_device`
+  (a non-storage USB/OTG peripheral attached or detached), `mobile_data`, `bluetooth` (a device
+  connected/disconnected), `gps` (fix acquired/lost), `hotspot` (the client count changed). One
+  category covers both directions of an event (like `Charging` already does for the battery
+  state); the title says which ("Charger connected" / "Charger disconnected").
+- Generation (`walpad_core::logic::notifications::diff`, pure, unit-tested with synthetic
+  snapshots): the core already polls battery (`battery::effective_status`), Bluetooth
+  (`BluetoothStatus.devices[].connected`), mobile data (`MobileStatus.data`), the hotspot client
+  count (`HotspotStatus.clients`) and GPS (`GpsStatus.state`); a notification fires on a
+  transition only (never on every unchanged poll), and never on the very first observation after a
+  core start (no flood of "just connected" for everything already plugged in). USB/OTG device
+  attach-detach and SD-card/USB-disk mount-remove had no existing detection anywhere in the Rust
+  core before this change (`memory/hardware.md`: "USB OTG ... not working/not attempted"), so
+  `walpad_hw::usb` adds minimal, Option/Result sysfs reads: `attached_devices` (non-hub entries
+  under `/sys/bus/usb/devices`, by `idVendor`/`idProduct`/`product`/`manufacturer`) and
+  `removable_mounts` (`/proc/mounts` entries under `/mnt/sd` or `/mnt/usb/*`, the mountpoints
+  `walpad-storage` already keeps). Neither of these two sysfs readers has been exercised on the
+  real tablet by this change (no device SSH was done); everything else (charging, Bluetooth,
+  mobile data, hotspot, GPS) reuses signals the daemon already verified.
+- Store (`walpad_core::notifications::Notifications`): a ring buffer of the last 100, each
+  `{id, ts_ms, category, title, body, read}`. Sampled every 2 s (`Notifications::tick`), like
+  `stats.rs`. Persisted to `/var/lib/walpad/notifications.json` (atomic rename); a missing or
+  corrupt file starts empty rather than failing. `/var/lib/walpad` is on the userdata partition, so
+  this survives a reboot the same as e.g. the saved volume level, not only a shell/core restart.
+  No secret (SSID, IMEI, phone number) is ever put in a title or body: the sources used here never
+  carry one (Bluetooth name/address, a USB product name, a mount path, a client count).
+- Commands: `notifications` -> `{notifications: [...]}` (newest first); `notification_mark_read
+  {id}` -> `{id, marked: bool}`; `notifications_mark_all_read` -> `{marked: <count>}`;
+  `notification_clear {id}` -> `{id, cleared: bool}`; `notifications_clear_all` -> `{cleared:
+  true}`. A missing/unknown `id` is not a protocol error (`marked`/`cleared` false).
+- Event: a fired notification is also published on the `notice` topic as `{kind: "notification",
+  notification: {...}}` (same shape as `notifications`' entries) for a live shell without needing
+  to poll the list.
+- Shell: a bell icon in the header, next to the Wi-Fi/battery marks (`Icon::Bell`), with the
+  `phone_ui::paint_badge` unread count; tapping it opens the `Tab::Notifications` screen (a plain
+  list, newest first, tap a row to mark it read, Clear all button). Day-grouping and swipe-to-clear
+  are left out (a plain list and a Clear all button cover the same need, owner: keep it minimal).
+
 ## Known hardware status
 Working: display, power/volume keys, cover sensor. Touch works, calibration inaccurate. Auto-rotation built, direction unverified. Battery gauge broken (-1), voltage estimate only. Wi-Fi built, unverified after cold boot. Browser/terminal built, unverified. Audio unverified. Bluetooth: HCI up through hci_vhci + walpad-btbridge, UI and IPC built (no device found yet in scans), suspend, SD, USB OTG not working/not attempted. Camera unsupported.
