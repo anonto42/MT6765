@@ -8,8 +8,12 @@ use crate::hotspot::{Hotspot, HotspotError};
 use crate::inputs::Inputs;
 use crate::jack::Jack;
 use crate::lock::{Lock, LockError, Unlock};
-use crate::logic::{battery, key_gestures::Action, screen_timeout as st, soc, touch_map as tm};
+use crate::logic::{
+    battery, key_gestures::Action, notifications as notif_logic, screen_timeout as st, soc,
+    touch_map as tm,
+};
 use crate::modem::{MobileError, Modem};
+use crate::notifications::Notifications;
 use crate::pkg::{Op, Pkg, PkgError};
 use crate::stats::Stats;
 use crate::volume::Volume;
@@ -24,7 +28,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use walpad_hw::{battery::read_battery, gsensor::read_gsensor, input, sysfs, Root};
+use walpad_hw::{battery::read_battery, gsensor::read_gsensor, input, sysfs, usb, Root};
 use walpad_proto::{
     encode_line, parse_devd_line, parse_request, Command, ErrorCode, Event, Hardware, KeyboardMode,
     LegacyStatus, LineDecoder, PowerAction, Response, ScreenMode, ScreenState, ShellInput, Status,
@@ -121,6 +125,8 @@ pub struct Daemon {
     hotspot: Hotspot,
     gnss: Gnss,
     stats: Stats,
+    /// Notification centre (owner request 2026-11-12, change `device-notifications`).
+    notifications: Notifications,
     bluetooth: Bluetooth,
     pkg: Pkg,
     vpn: Vpn,
@@ -330,6 +336,7 @@ impl Daemon {
             hotspot: Hotspot::new(&root),
             gnss: Gnss::new(&root),
             stats: Stats::new(&root),
+            notifications: Notifications::new(&root),
             bluetooth: Bluetooth::new(&root),
             pkg: Pkg::new(&root),
             vpn: Vpn::new(&root),
@@ -1149,6 +1156,7 @@ impl Daemon {
                 .into(),
                 sd_card: "unavailable".into(),
             },
+            notifications: self.notifications.status(),
         }
     }
 
@@ -1459,6 +1467,23 @@ impl Daemon {
             }
             Command::CallLog => Ok(self.modem.phone().call_log()),
             Command::CallLogClear => self.modem.phone_mut().call_log_clear().map_err(mobile_err),
+            Command::Notifications => Ok(json!({"notifications": self.notifications.list()})),
+            Command::NotificationMarkRead { id } => {
+                let marked = self.notifications.mark_read(id);
+                Ok(json!({"id": id, "marked": marked}))
+            }
+            Command::NotificationsMarkAllRead => {
+                let marked = self.notifications.mark_all_read();
+                Ok(json!({"marked": marked}))
+            }
+            Command::NotificationClear { id } => {
+                let cleared = self.notifications.clear(id);
+                Ok(json!({"id": id, "cleared": cleared}))
+            }
+            Command::NotificationsClearAll => {
+                self.notifications.clear_all();
+                Ok(json!({"cleared": true}))
+            }
             Command::PkgCatalogue => Ok(self.pkg.catalogue_json()),
             Command::PkgInstall { id } => {
                 self.pkg.start(Op::Install, &id, Instant::now()).map_err(pkg_err)?;
@@ -1818,6 +1843,56 @@ impl Daemon {
         for n in self.modem.take_notices() {
             self.publish(Topic::Notice, "notice", n);
             did = true;
+        }
+        // notification centre (owner request 2026-11-12, change device-notifications): watches
+        // status transitions already tracked above, plus the new USB/OTG and removable-storage
+        // sysfs reads (walpad_hw::usb). Rate-limited to ~2 s inside `Notifications::tick`.
+        {
+            let raw = read_battery(&self.root);
+            let charging = battery::effective_status(&raw)
+                .as_deref()
+                .is_some_and(|s| s.to_ascii_lowercase().starts_with("charg"));
+            let usb_devices: Vec<(String, String)> = usb::attached_devices(&self.root)
+                .into_iter()
+                .map(|d| {
+                    let name = d.name.unwrap_or_else(|| d.id.clone());
+                    (d.id, name)
+                })
+                .collect();
+            let removable_mounts = usb::removable_mounts(&self.root);
+            let bt = self.bluetooth.status();
+            let mut bt_connected: Vec<(String, String)> = bt
+                .devices
+                .iter()
+                .filter(|d| d.connected)
+                .map(|d| (d.address.clone(), d.name.clone()))
+                .collect();
+            bt_connected.sort();
+            let mobile = self.modem.status();
+            let hotspot = self.hotspot.status();
+            let gps = self.gnss.status();
+            let snap = notif_logic::Snapshot {
+                charging,
+                usb_devices,
+                removable_mounts,
+                bt_connected,
+                mobile_data_on: mobile.data == walpad_proto::MobileData::On,
+                hotspot_clients: hotspot.clients.unwrap_or(0),
+                gps_fix: gps.state == walpad_proto::GpsState::Fix,
+            };
+            let fired = self.notifications.tick(Instant::now(), wall_ms(), snap);
+            if !fired.is_empty() {
+                for n in fired {
+                    if let Ok(v) = serde_json::to_value(&n) {
+                        self.publish(
+                            Topic::Notice,
+                            "notice",
+                            json!({"kind": "notification", "notification": v}),
+                        );
+                    }
+                }
+                did = true;
+            }
         }
         let now = Instant::now();
         if now >= self.next_soc {

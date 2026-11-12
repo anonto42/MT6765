@@ -14,6 +14,7 @@ pub mod layout;
 pub mod lock;
 pub mod logic;
 pub mod modem;
+pub mod notifications;
 pub mod phone;
 pub mod pkg;
 pub mod shadow;
