@@ -9,6 +9,12 @@ CRCs when more than one source file exports it (e.g. mm/slab.c and mm/slub.c; on
 Fails if a needed symbol has no CRC, if vendor and computed CRCs disagree for a needed symbol, or
 if a computed-only symbol has more than one candidate CRC.  Every other symbol both sources know
 is cross-checked and reported as a wider sample of the method.
+
+A 6th, optional argument names a file listing symbols where a vendor/computed MISMATCH is
+expected and should not fail the build (one symbol per line; vendor's CRC is still what gets
+written -- this only silences the hard stop). Use it only for a mismatch you have actually
+root-caused (e.g. the exporting .c file itself is vendor-patched, not just its headers, so no
+header overlay can fix it) and say so where it's invoked; it is not a blanket escape hatch.
 """
 import sys
 
@@ -24,6 +30,11 @@ def table(path):
 
 def main():
     needed_path, vendor_path, computed_path, symvers_path, report_path = sys.argv[1:6]
+    expected_mismatch_path = sys.argv[6] if len(sys.argv) > 6 else None
+    expected_mismatch = (
+        {l.strip() for l in open(expected_mismatch_path) if l.strip()}
+        if expected_mismatch_path else set()
+    )
     needed = sorted({l.strip() for l in open(needed_path) if l.strip()} | {"module_layout"})
     vendor = {k: min(v) for k, v in table(vendor_path).items()}
     computed = table(computed_path)
@@ -33,6 +44,8 @@ def main():
         if v is not None and c:
             if v in c:
                 tag = "vendor+computed agree"
+            elif sym in expected_mismatch:
+                tag = "MISMATCH (expected, vendor trusted)"
             else:
                 tag = "MISMATCH"
                 bad.append(f"{sym}: vendor {v:#010x} computed {sorted(map(hex, c))}")

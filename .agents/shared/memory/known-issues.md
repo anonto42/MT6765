@@ -87,3 +87,50 @@
   Conclusion: monitor mode is not usable on this tablet's current boot chain. Don't re-attempt the
   boot-race or live-swap approaches; they're confirmed dead ends. Revisit only if the owner explicitly
   wants to disable verified boot.
+- ZT9101 USB Wi-Fi dongle on WalPad itself (2026-11-12, `openspec/changes/zt9101-usb-wifi-driver/`):
+  station mode, monitor mode AND injection all confirmed working via a custom-built
+  `zt9101_ztopmac_usb.ko` (`scripts/build_zt9101_module.sh`) -- unlike the onboard CONNSYS chip above,
+  this one is NOT a dead end. Traps hit along the way, reusable for any future out-of-tree USB driver
+  build on this kernel:
+  - Building an out-of-tree module whose source lives outside the kernel tree (`M=<external path>`)
+    still needs `Module.symvers` written at the kernel BUILD tree's root ($S in `build_bt_module.sh`'s
+    scheme), never in the module's own directory -- modpost looks there regardless of where `M` points;
+    writing it to the module dir silently produces a CRC-less, unverified `.ko`.
+  - A driver with its own platform-select Makefile (`HOST_PLAT`) that doesn't list this device needs
+    `HOST_PLAT` set to anything unmatched to skip those branches and pass ARCH/CROSS_COMPILE/KSRC on
+    the command line instead -- but check what else those branches set besides the toolchain
+    (`-DCONFIG_LITTLE_ENDIAN` here) and pass it back via `USER_EXTRA_CFLAGS`/`EXTRA_CFLAGS`, or code
+    guarded on it silently breaks (here: a union's only member, used by TKIP/AES IV macros).
+  - `LLVM=1` must be passed explicitly to an external module's OWN inner `$(MAKE) -C $(KSRC)
+    M=$(WDRV_DIR)` invocation too, not just the outer one -- it is not automatically forwarded by every
+    out-of-tree Makefile the way ARCH/CROSS_COMPILE are.
+  - A genksyms-computed CRC can legitimately disagree with a real vendor module's CRC for a symbol
+    exported from a MTK-vendor-patched kernel file (`kernel/sched/core.c`, `mm/memory.c` here) when the
+    only kernel source tree available (`tools/kernel-mt6765-4.19`) is a different point-release than
+    what actually built the running kernel -- the header overlay fixes `include/`, not `kernel/sched/`
+    or `mm/`. Vendor's CRC (read from an already-loaded module) is ground truth in that case; trust it
+    explicitly and narrowly (see `scripts/bt/merge_symvers.py`'s optional expected-mismatch arg), don't
+    loosen the check generally.
+  - This chip ships in a fake-CD-ROM mode (`2310:1a2b`) until mode-switched to Wi-Fi mode (`2310:9086`);
+    on WalPad, `usb-storage` auto-binds the fake CD on enumeration same as on a PC (same trap as "USB
+    driver-CD dongles" above) -- unbind it (`echo IFACE > /sys/bus/usb/drivers/usb-storage/unbind`)
+    BEFORE running `usb_modeswitch`, or the switch can hang. The host PC's own known-good
+    `/etc/usb_modeswitch.d/2310:1a2b` config (`StandardEject=1`) works unchanged on WalPad.
+  - The dongle showed real USB enumeration instability directly on the bare OTG port (repeated
+    connect/reset/disconnect within ~200ms, several times) before ever settling -- looked like a
+    power-delivery limit, not a software bug. It did eventually enumerate and stay stable on retries
+    without a powered hub in the end, but that is the first thing to suspect if it recurs.
+  - Running the dongle in STATION mode (own DHCP lease) at the same time as the onboard Wi-Fi's own
+    station-mode connection broke the tablet's SSH/network reachability for several minutes
+    (`Destination Host Unreachable` from the LAN gateway) -- the tablet itself never crashed (uptime
+    never reset, screen stayed responsive) and it self-recovered (a later DHCP lease landed on a
+    different address), but avoid two simultaneous station-mode radios on this tablet until the actual
+    routing conflict is root-caused. Monitor mode does not carry this specific risk (no DHCP).
+  - `ifname=`/`if2name=` in this driver's config file MUST be set to something other than
+    `wlan0`/`p2p0` -- those names are already owned by the onboard CONNSYS chip, which stays up the
+    whole time; this driver defaults to `wlan0` in its sample config and would collide.
+  - For any aircrack-ng-suite work on this device, install `aircrack-ng` inside the already-provisioned
+    `walpad-kali` chroot (`openspec/changes/kali-chroot-mode/`, `/usr/local/sbin/walpad-kali mount` then
+    `run`), not via `apk add` into the base Alpine rootfs -- the chroot shares the host kernel so it
+    sees the dongle's netdev directly, and this keeps the security-testing tool stack out of the base
+    image.
