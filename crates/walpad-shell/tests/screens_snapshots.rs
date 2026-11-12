@@ -412,6 +412,8 @@ fn sys(telnet_open: bool) -> SysInfo {
         ],
         dns: vec!["1.1.1.1".into(), "8.8.8.8".into()],
         gateway: Some("192.168.0.1".into()),
+        mac: Some("A4:50:46:11:22:33".into()),
+        hostname: Some("walpad".into()),
         logs: (0..40)
             .map(|i| format!("walpad-core: line {i} orientation -> 90 accel x=4000 psk=hidden{i}"))
             .map(|l| walpad_hw::sysinfo::redact_log_line(&l))

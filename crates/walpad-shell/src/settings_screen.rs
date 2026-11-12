@@ -81,12 +81,20 @@ pub struct SysInfo {
     pub listening: Vec<(String, u16)>,
     pub dns: Vec<String>,
     pub gateway: Option<String>,
+    pub mac: Option<String>,
+    pub hostname: Option<String>,
     pub logs: Vec<String>,
     pub gestures: Vec<(String, String)>,
 }
 
 pub fn gather(root: &Root) -> SysInfo {
     let listening = sysinfo::listening_tcp(root);
+    let mac = sysfs::read_trim(root, "/sys/class/net/wlan0/address")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_ascii_uppercase());
+    let hostname = sysfs::read_trim(root, "/proc/sys/kernel/hostname")
+        .or_else(|| sysfs::read_trim(root, "/etc/hostname"))
+        .filter(|s| !s.is_empty());
     SysInfo {
         alpine: sysinfo::alpine_release(root),
         kernel: sysinfo::kernel_release(root),
@@ -98,6 +106,8 @@ pub fn gather(root: &Root) -> SysInfo {
         listening,
         dns: sysinfo::dns_servers(root),
         gateway: sysinfo::default_gateway(root),
+        mac,
+        hostname,
         logs: sysinfo::tail_lines(root, "/var/log/walpad-core.log", 200),
         gestures: read_gestures(root),
     }
@@ -144,6 +154,8 @@ pub fn telnet_scope(listening: &[(String, u16)]) -> (&'static str, Tone) {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Row {
     Info(String, String, Tone),
+    /// Tappable setting row with a label on the left and its current value on the right.
+    Choice(String, String, Target),
     Toggle(&'static str, bool, Target),
     Action {
         label: &'static str,
@@ -201,18 +213,61 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
         | Page::Apps
         | Page::Vpn => Vec::new(),
         Page::Input => {
-            let mut r: Vec<Row> = c
-                .sys
-                .gestures
-                .iter()
-                .map(|(l, a)| Row::Info(l.clone(), a.clone(), Tone::Info))
-                .collect();
-            if r.is_empty() {
-                r.push(info("Gestures", ("Unknown".into(), Tone::Warning)));
+            let mut r = vec![
+                Row::Toggle(
+                    "Touch scroll & gestures",
+                    c.devd.touch_gestures,
+                    Target::TouchGesturesToggle,
+                ),
+                Row::Toggle(
+                    "Two-finger pinch zoom",
+                    c.devd.multitouch,
+                    Target::MultitouchToggle,
+                ),
+            ];
+            for (i, (_, label, def_act)) in crate::config::KEY_SLOTS.iter().enumerate() {
+                let val = c
+                    .sys
+                    .gestures
+                    .iter()
+                    .find(|(l, _)| l == label)
+                    .map(|(_, a)| a.clone())
+                    .unwrap_or_else(|| crate::config::pretty_action(def_act));
+                r.push(Row::Choice((*label).into(), val, Target::KeyGesture(i)));
             }
             r
         }
         Page::Power => vec![
+            Row::Choice(
+                "Screen dims after".into(),
+                secs(c.devd.dim_after_s),
+                Target::PowerDimCycle,
+            ),
+            Row::Choice(
+                "Dimmed brightness".into(),
+                format!("{}%", (c.devd.dim_level * 100 / 255).max(1)),
+                Target::PowerDimLevelCycle,
+            ),
+            Row::Choice(
+                "Screen turns off after".into(),
+                secs(c.devd.off_after_s),
+                Target::PowerOffCycle,
+            ),
+            Row::Toggle(
+                "Turn off when cover closes",
+                c.devd.lid_off,
+                Target::LidToggle,
+            ),
+            Row::Choice(
+                "Low battery below".into(),
+                format!("{} mV", c.devd.low_batt_mv),
+                Target::LowBattCycle,
+            ),
+            Row::Choice(
+                "Shuts down below".into(),
+                format!("{} mV", c.devd.critical_batt_mv),
+                Target::CritBattCycle,
+            ),
             Row::Info(
                 "Power button · tap".into(),
                 "Screen off / on".into(),
@@ -223,38 +278,85 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
                 "Power menu".into(),
                 Tone::Info,
             ),
-            Row::Info(
-                "Screen dims after".into(),
-                secs(c.devd.dim_after_s),
-                Tone::Info,
-            ),
-            Row::Info(
-                "Screen turns off after".into(),
-                secs(c.devd.off_after_s),
-                Tone::Info,
-            ),
-            Row::Info(
-                "Low battery below".into(),
-                format!("{} mV", c.devd.low_batt_mv),
-                Tone::Info,
-            ),
-            Row::Info(
-                "Shuts down below".into(),
-                format!("{} mV", c.devd.critical_batt_mv),
-                Tone::Info,
-            ),
+            Row::Action {
+                label: "Power menu",
+                target: Target::PowerMenu,
+                danger: false,
+            },
         ],
         Page::Network => {
             let w = c.status.as_ref().map(|s| &s.wifi);
+            let non_empty = |s: &str| (!s.is_empty()).then(|| s.to_string());
+            let mac_mode = match c.devd.net_mac_mode.as_str() {
+                "random" => "Randomized",
+                "custom" => "Custom",
+                _ => "Hardware",
+            };
+            let ip_mode = if c.devd.net_ip_mode == "manual" {
+                "Manual (Static)"
+            } else {
+                "Automatic (DHCP)"
+            };
+            let proxy = c
+                .status
+                .as_ref()
+                .and_then(|s| s.vpn.proxy.clone())
+                .unwrap_or_else(|| "Off".into());
             vec![
+                Row::Toggle(
+                    "Wi-Fi",
+                    crate::network::wifi_enabled(c.status),
+                    Target::WifiSwitch,
+                ),
+                Row::Toggle(
+                    "Hotspot",
+                    crate::network::hotspot_on(c.status),
+                    Target::HotspotSwitch,
+                ),
+                Row::Action {
+                    label: "Wi-Fi networks & Hotspot",
+                    target: Target::WifiCard,
+                    danger: false,
+                },
+                Row::Action {
+                    label: "Join hidden network",
+                    target: Target::WifiManualSsid,
+                    danger: false,
+                },
+                Row::Action {
+                    label: "VPN, DNS and proxy",
+                    target: Target::Page(Page::Vpn),
+                    danger: false,
+                },
                 info("Wi-Fi state", opt(w.and_then(|w| w.state.clone()))),
                 info("Network", opt(w.and_then(|w| w.ssid.clone()))),
-                info("IP address", opt(w.and_then(|w| w.ip.clone()))),
                 info(
                     "Signal",
                     opt(w.and_then(|w| w.signal_dbm).map(|d| format!("{d} dBm"))),
                 ),
-                info("Gateway", opt(c.sys.gateway.clone())),
+                Row::Choice(
+                    "MAC address mode".into(),
+                    mac_mode.into(),
+                    Target::NetMacMode,
+                ),
+                info(
+                    "MAC address",
+                    opt(non_empty(&c.devd.net_mac).or_else(|| c.sys.mac.clone())),
+                ),
+                Row::Choice("IPv4 mode".into(), ip_mode.into(), Target::NetIpMode),
+                info(
+                    "IP address",
+                    opt(non_empty(&c.devd.net_ip).or_else(|| w.and_then(|w| w.ip.clone()))),
+                ),
+                Row::Choice(
+                    "Subnet mask".into(),
+                    c.devd.net_mask.clone(),
+                    Target::NetMaskCycle,
+                ),
+                info(
+                    "Gateway",
+                    opt(non_empty(&c.devd.net_gateway).or_else(|| c.sys.gateway.clone())),
+                ),
                 info(
                     "DNS",
                     if c.sys.dns.is_empty() {
@@ -262,6 +364,11 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
                     } else {
                         (c.sys.dns.join(", "), Tone::Info)
                     },
+                ),
+                Row::Choice("HTTP proxy".into(), proxy, Target::VpnProxy),
+                info(
+                    "Hostname",
+                    opt(non_empty(&c.devd.net_hostname).or_else(|| c.sys.hostname.clone())),
                 ),
             ]
         }
@@ -464,7 +571,38 @@ pub fn render(
     }
     for (r, row) in &l.rows {
         match row {
-            Row::Info(label, value, tone) => info_row(p, *r, label, value, *tone),
+            Row::Info(label, value, tone) => {
+                info_row(p, *r, label, value, *tone);
+                let hit = match label.as_str() {
+                    "IP address" => Some(Target::NetIpEdit),
+                    "Gateway" => Some(Target::NetGatewayEdit),
+                    "DNS" => Some(Target::VpnDns),
+                    "MAC address" => Some(Target::NetMacEdit),
+                    "Hostname" => Some(Target::NetHostnameEdit),
+                    "Network" => Some(Target::WifiManualSsid),
+                    "Wi-Fi state" => Some(Target::WifiSwitch),
+                    "Signal" => Some(Target::Scan),
+                    _ => None,
+                };
+                if let Some(t) = hit {
+                    if pressed == Some(t) {
+                        p.cv.rect(*r, PRESSED_TINT);
+                    }
+                    hits.push((*r, t));
+                }
+            }
+            Row::Choice(label, value, t) => {
+                p.list_row(
+                    *r,
+                    None,
+                    label,
+                    None,
+                    &Accessory::Value(value.clone()),
+                    pressed == Some(*t),
+                    !online,
+                );
+                hits.push((*r, *t));
+            }
             Row::Toggle(label, on, t) => {
                 p.list_row(
                     *r,
@@ -598,8 +736,10 @@ mod tests {
         }
     }
     fn find<'a>(rows: &'a [Row], label: &str) -> Option<&'a Row> {
-        rows.iter()
-            .find(|r| matches!(r, Row::Info(l, _, _) if l == label))
+        rows.iter().find(|r| match r {
+            Row::Info(l, _, _) | Row::Choice(l, _, _) => l == label,
+            _ => false,
+        })
     }
 
     #[test]
@@ -735,10 +875,10 @@ mod tests {
         let power = page_rows(Page::Power, &c);
         assert_eq!(
             find(&power, "Screen turns off after"),
-            Some(&Row::Info(
+            Some(&Row::Choice(
                 "Screen turns off after".into(),
                 "4 min".into(),
-                Tone::Info
+                Target::PowerOffCycle
             ))
         );
         // no keys + no ssh: warnings

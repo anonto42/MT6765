@@ -8,10 +8,20 @@ pub struct DevdSettings {
     pub auto_rotate: bool,
     pub rotate_flip: bool,
     pub dim_after_s: u32,
+    pub dim_level: u32,
     pub off_after_s: u32,
     pub lid_off: bool,
     pub low_batt_mv: u32,
     pub critical_batt_mv: u32,
+    pub touch_gestures: bool,
+    pub multitouch: bool,
+    pub net_ip_mode: String,
+    pub net_ip: String,
+    pub net_mask: String,
+    pub net_gateway: String,
+    pub net_mac_mode: String,
+    pub net_mac: String,
+    pub net_hostname: String,
 }
 
 impl Default for DevdSettings {
@@ -21,31 +31,103 @@ impl Default for DevdSettings {
             auto_rotate: true,
             rotate_flip: false,
             dim_after_s: 90,
+            dim_level: 20,
             off_after_s: 240,
             lid_off: true,
             low_batt_mv: 3550,
             critical_batt_mv: 3350,
+            touch_gestures: true,
+            multitouch: true,
+            net_ip_mode: "dhcp".into(),
+            net_ip: String::new(),
+            net_mask: "255.255.255.0".into(),
+            net_gateway: String::new(),
+            net_mac_mode: "hardware".into(),
+            net_mac: String::new(),
+            net_hostname: String::new(),
         }
     }
 }
+
+pub const NET_MASK_OPTIONS: [&str; 4] = [
+    "255.255.255.0",
+    "255.255.0.0",
+    "255.255.255.128",
+    "255.0.0.0",
+];
+pub const NET_MAC_MODES: [&str; 3] = ["hardware", "random", "custom"];
 
 pub fn read_devd(root: &Root) -> DevdSettings {
     let v: Value = std::fs::read_to_string(root.p("/etc/walpad/devd.json"))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or(Value::Null);
+    let tv: Value = std::fs::read_to_string(root.p("/etc/walpad/touch.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Value::Null);
     let d = DevdSettings::default();
     let u = |k: &str, def: u32| v[k].as_u64().map_or(def, |x| x as u32);
     let b = |k: &str, def: bool| v[k].as_bool().unwrap_or(def);
+    let s = |k: &str, def: &str| v[k].as_str().unwrap_or(def).to_string();
     DevdSettings {
         auto_rotate: b("auto_rotate", d.auto_rotate),
         rotate_flip: b("rotate_flip", d.rotate_flip),
         dim_after_s: u("dim_after_s", d.dim_after_s),
+        dim_level: u("dim_level", d.dim_level),
         off_after_s: u("off_after_s", d.off_after_s),
         lid_off: b("lid_off", d.lid_off),
         low_batt_mv: u("low_batt_mv", d.low_batt_mv),
         critical_batt_mv: u("critical_batt_mv", d.critical_batt_mv),
+        touch_gestures: tv["gestures"]["enabled"]
+            .as_bool()
+            .unwrap_or(d.touch_gestures),
+        multitouch: tv["multitouch"].as_bool().unwrap_or(d.multitouch),
+        net_ip_mode: s("net_ip_mode", &d.net_ip_mode),
+        net_ip: s("net_ip", &d.net_ip),
+        net_mask: s("net_mask", &d.net_mask),
+        net_gateway: s("net_gateway", &d.net_gateway),
+        net_mac_mode: s("net_mac_mode", &d.net_mac_mode),
+        net_mac: s("net_mac", &d.net_mac),
+        net_hostname: s("net_hostname", &d.net_hostname),
     }
+}
+
+/// Hardware volume-button gesture slots (`(setting_key, label, default_action)`).
+pub const KEY_SLOTS: [(&str, &str, &str); 11] = [
+    ("key.vol_up.single", "Volume up · tap", "volume:+5"),
+    ("key.vol_up.double", "Volume up · double tap", "key:Prior"),
+    (
+        "key.vol_up.triple",
+        "Volume up · triple tap",
+        "ctl:brightness +40",
+    ),
+    ("key.vol_up.quad", "Volume up · 4 taps", "none"),
+    ("key.vol_up.long", "Volume up · hold", "keyboard"),
+    ("key.vol_down.single", "Volume down · tap", "volume:-5"),
+    (
+        "key.vol_down.double",
+        "Volume down · double tap",
+        "key:Next",
+    ),
+    (
+        "key.vol_down.triple",
+        "Volume down · triple tap",
+        "ctl:brightness -40",
+    ),
+    ("key.vol_down.quad", "Volume down · 4 taps", "none"),
+    ("key.vol_down.long", "Volume down · hold", "home"),
+    ("key.both.press", "Both buttons", "ctl:rotate toggle"),
+];
+
+/// Cycle to the next action in `walpad_proto::KEY_ACTIONS` given the current raw or pretty action.
+pub fn next_key_action(cur: &str) -> &'static str {
+    let acts = walpad_proto::KEY_ACTIONS;
+    let idx = acts
+        .iter()
+        .position(|&a| a == cur || pretty_action(a) == cur)
+        .unwrap_or(acts.len() - 1);
+    acts[(idx + 1) % acts.len()]
 }
 
 /// "key:Up" -> "Key Up", "ctl:brightness +40" -> "Brightness +40", ...
@@ -65,6 +147,7 @@ pub fn pretty_action(a: &str) -> String {
         Some(("volume", v)) => format!("Volume {v}"),
         _ => match a {
             "home" => "Home".into(),
+            "back" => "Back".into(),
             "keyboard" => "Toggle keyboard".into(),
             "powermenu" => "Power menu".into(),
             "screenshot" => "Screenshot".into(),

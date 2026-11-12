@@ -38,6 +38,12 @@ pub enum SheetPurpose {
     PhoneContactNumber,
     PhoneCompose,
     PhoneNewNumber,
+    /// Manual Wi-Fi network SSID entry and manual network parameters (IP, Gateway, MAC, Hostname).
+    WifiManualSsid,
+    NetIp,
+    NetGateway,
+    NetMac,
+    NetHostname,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -178,6 +184,33 @@ impl PasswordSheet {
     pub fn is_vpn(&self) -> bool {
         matches!(self.purpose, SheetPurpose::VpnDns | SheetPurpose::VpnProxy)
     }
+    /// Manual network configuration sheet (SSID, IP, Gateway, MAC, Hostname).
+    pub fn net_config(purpose: SheetPurpose, initial: &str) -> Self {
+        let (title, layer) = match purpose {
+            SheetPurpose::WifiManualSsid => ("Join hidden network (SSID)", KeyboardLayer::Lower),
+            SheetPurpose::NetIp => ("IPv4 address", KeyboardLayer::Symbols),
+            SheetPurpose::NetGateway => ("Gateway / Router IP", KeyboardLayer::Symbols),
+            SheetPurpose::NetMac => ("MAC address", KeyboardLayer::Lower),
+            _ => ("Device hostname", KeyboardLayer::Lower),
+        };
+        PasswordSheet {
+            secret: initial.to_string(),
+            shown: true,
+            layer,
+            purpose,
+            ..PasswordSheet::new(String::new(), title.into())
+        }
+    }
+    pub fn is_net_config(&self) -> bool {
+        matches!(
+            self.purpose,
+            SheetPurpose::WifiManualSsid
+                | SheetPurpose::NetIp
+                | SheetPurpose::NetGateway
+                | SheetPurpose::NetMac
+                | SheetPurpose::NetHostname
+        )
+    }
     /// The sheet sets something on the mobile modem.
     pub fn is_mobile(&self) -> bool {
         matches!(self.purpose, SheetPurpose::MobileApn | SheetPurpose::SimPin)
@@ -214,6 +247,17 @@ impl PasswordSheet {
                 walpad_proto::valid_sms_number(&self.secret)
             }
             SheetPurpose::PhoneCompose => walpad_proto::valid_sms_text(&self.secret),
+            SheetPurpose::WifiManualSsid => walpad_proto::valid_hotspot_ssid(&self.secret),
+            SheetPurpose::NetIp | SheetPurpose::NetGateway => {
+                self.secret.is_empty() || walpad_proto::valid_dns_server(&self.secret)
+            }
+            SheetPurpose::NetMac => {
+                self.secret.is_empty()
+                    || walpad_proto::valid_bt_address(&normalize_mac(&self.secret))
+            }
+            SheetPurpose::NetHostname => {
+                self.secret.is_empty() || walpad_proto::valid_hostname(&self.secret)
+            }
         }
     }
     /// Longest text the field takes (bytes).
@@ -234,6 +278,10 @@ impl PasswordSheet {
             SheetPurpose::PhoneContactName => 96,
             SheetPurpose::PhoneContactNumber | SheetPurpose::PhoneNewNumber => 21,
             SheetPurpose::PhoneCompose => 1200,
+            SheetPurpose::WifiManualSsid => 32,
+            SheetPurpose::NetIp | SheetPurpose::NetGateway => 45,
+            SheetPurpose::NetMac => 17,
+            SheetPurpose::NetHostname => 63,
         }
     }
 }
@@ -244,6 +292,26 @@ pub fn dns_list(s: &str) -> Vec<String> {
         .filter(|d| !d.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+/// Normalize a typed MAC address (`aabbccddeeff`, `aa-bb-cc-dd-ee-ff`, or `aa:bb:cc:dd:ee:ff`) to
+/// upper-case `AA:BB:CC:DD:EE:FF`.
+pub fn normalize_mac(s: &str) -> String {
+    let s = s.trim();
+    if s.len() == 12 && s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        let up = s.to_ascii_uppercase();
+        format!(
+            "{}:{}:{}:{}:{}:{}",
+            &up[0..2],
+            &up[2..4],
+            &up[4..6],
+            &up[6..8],
+            &up[8..10],
+            &up[10..12]
+        )
+    } else {
+        s.replace('-', ":").to_ascii_uppercase()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -378,6 +446,11 @@ pub fn render_password(
         SheetPurpose::PhoneContactNumber => ("e.g. 01712345678", false, "Save"),
         SheetPurpose::PhoneCompose => ("Message", false, "Send"),
         SheetPurpose::PhoneNewNumber => ("Number to write to", false, "Next"),
+        SheetPurpose::WifiManualSsid => ("Network name (SSID)", false, "Next"),
+        SheetPurpose::NetIp => ("e.g. 192.168.0.100 (empty: automatic)", false, "Save"),
+        SheetPurpose::NetGateway => ("e.g. 192.168.0.1 (empty: automatic)", false, "Save"),
+        SheetPurpose::NetMac => ("AA:BB:CC:DD:EE:FF (empty: hardware)", false, "Save"),
+        SheetPurpose::NetHostname => ("e.g. walpad (empty: default)", false, "Save"),
     };
     if let Some(eye) = p.text_field(
         g.field,

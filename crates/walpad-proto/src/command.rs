@@ -129,10 +129,54 @@ pub const ALLOWED_SETTINGS: &[&str] = &[
     "auto_rotate",
     "rotate_flip",
     "dim_after_s",
+    "dim_level",
     "off_after_s",
     "lid_off",
+    "low_batt_mv",
+    "critical_batt_mv",
     "clock_24h",
     "pinned_apps",
+    "touch_gestures",
+    "multitouch",
+    "key.vol_up.single",
+    "key.vol_up.double",
+    "key.vol_up.triple",
+    "key.vol_up.quad",
+    "key.vol_up.long",
+    "key.vol_down.single",
+    "key.vol_down.double",
+    "key.vol_down.triple",
+    "key.vol_down.quad",
+    "key.vol_down.long",
+    "key.both.press",
+    "net_ip_mode",
+    "net_ip",
+    "net_mask",
+    "net_gateway",
+    "net_mac_mode",
+    "net_mac",
+    "net_hostname",
+];
+
+/// Safe hardware volume-button actions selectable in Settings > Input (`keys.json`).
+pub const KEY_ACTIONS: &[&str] = &[
+    "volume:+5",
+    "volume:-5",
+    "key:Up",
+    "key:Down",
+    "key:Prior",
+    "key:Next",
+    "ctl:brightness +40",
+    "ctl:brightness -40",
+    "ctl:rotate toggle",
+    "home",
+    "back",
+    "keyboard",
+    "powermenu",
+    "screenshot",
+    "launch:browser",
+    "launch:terminal",
+    "none",
 ];
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1050,6 +1094,14 @@ pub fn valid_app_id(app: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
+/// Device hostname: 1-63 characters of A-Z a-z 0-9 -, not starting or ending with `-`.
+pub fn valid_hostname(s: &str) -> bool {
+    (1..=63).contains(&s.len())
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
 fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
     if !ALLOWED_SETTINGS.contains(&key) {
         return Err(format!("setting {key:?} is not allowed"));
@@ -1061,10 +1113,51 @@ fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
             }
             _ => Err("value must be a list of at most 8 app ids".into()),
         },
-        "auto_rotate" | "rotate_flip" | "lid_off" | "clock_24h" => v
+        "auto_rotate" | "rotate_flip" | "lid_off" | "clock_24h" | "touch_gestures"
+        | "multitouch" => v
             .is_boolean()
             .then_some(())
             .ok_or_else(|| "value must be a boolean".to_string()),
+        "dim_level" => match v.as_u64() {
+            Some(n) if (1..=255).contains(&n) => Ok(()),
+            _ => Err("value must be an integer 1-255".into()),
+        },
+        "low_batt_mv" => match v.as_u64() {
+            Some(n) if (3300..=4000).contains(&n) => Ok(()),
+            _ => Err("value must be an integer 3300-4000".into()),
+        },
+        "critical_batt_mv" => match v.as_u64() {
+            Some(n) if (3100..=3800).contains(&n) => Ok(()),
+            _ => Err("value must be an integer 3100-3800".into()),
+        },
+        "net_ip_mode" => match v.as_str() {
+            Some("dhcp" | "manual") => Ok(()),
+            _ => Err("value must be \"dhcp\" or \"manual\"".into()),
+        },
+        "net_ip" | "net_gateway" => match v.as_str() {
+            Some(s) if s.is_empty() || valid_dns_server(s) => Ok(()),
+            _ => Err("value must be an IPv4/IPv6 address or empty".into()),
+        },
+        "net_mask" => match v.as_str() {
+            Some("255.255.255.0" | "255.255.0.0" | "255.255.255.128" | "255.0.0.0") => Ok(()),
+            _ => Err("value must be an allowed subnet mask".into()),
+        },
+        "net_mac_mode" => match v.as_str() {
+            Some("hardware" | "random" | "custom") => Ok(()),
+            _ => Err("value must be \"hardware\", \"random\" or \"custom\"".into()),
+        },
+        "net_mac" => match v.as_str() {
+            Some(s) if s.is_empty() || valid_bt_address(s) => Ok(()),
+            _ => Err("value must be AA:BB:CC:DD:EE:FF or empty".into()),
+        },
+        "net_hostname" => match v.as_str() {
+            Some(s) if s.is_empty() || valid_hostname(s) => Ok(()),
+            _ => Err("value must be a hostname of 1-63 letters, digits or -".into()),
+        },
+        k if k.starts_with("key.") => match v.as_str() {
+            Some(s) if KEY_ACTIONS.contains(&s) => Ok(()),
+            _ => Err("value must be an allowed key action".into()),
+        },
         _ => match v.as_u64() {
             Some(n) if n <= 3600 => Ok(()),
             _ => Err("value must be an integer 0-3600".into()),

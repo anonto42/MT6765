@@ -139,6 +139,12 @@ pub fn render_qs(
 /// Settings > Sound.
 pub fn sound_rows(m: &Model) -> Vec<Row> {
     let avail = m.status.as_ref().is_some_and(|s| s.audio.available);
+    let jack = m.status.as_ref().map(|s| s.jack).unwrap_or_default();
+    let route_label = match jack.route {
+        Some(walpad_proto::JackKind::Headphones) => "Headphones",
+        Some(walpad_proto::JackKind::HeadsetWithMic) => "Headset & mic",
+        None => "Speaker",
+    };
     vec![
         Row::Slider {
             icon: speaker(m),
@@ -160,7 +166,7 @@ pub fn sound_rows(m: &Model) -> Vec<Row> {
             if m.status.is_none() {
                 "Unknown".into()
             } else if avail {
-                "Speaker".into()
+                route_label.into()
             } else {
                 "No sound service".into()
             },
@@ -169,6 +175,16 @@ pub fn sound_rows(m: &Model) -> Vec<Row> {
             } else {
                 walpad_ui::components::Tone::Warning
             },
+        ),
+        Row::Toggle(
+            "Force headphone output",
+            jack.forced.is_some(),
+            Target::JackHeadphones,
+        ),
+        Row::Toggle(
+            "Use headset microphone",
+            jack.forced == Some(walpad_proto::JackKind::HeadsetWithMic),
+            Target::JackHeadsetMic,
         ),
     ]
 }

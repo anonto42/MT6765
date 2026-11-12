@@ -181,8 +181,8 @@ pub fn layout(frame: &Frame, st: &Option<Status>, net: &NetModel) -> NetLayout {
         y += CARD_H + SP_5;
         (card, btn)
     });
-    let avail_label = Rect::new(c.x, y, c.w - 220, LABEL_H);
-    let scan_btn = Rect::new(c.right() - 200, y - 16, 200, BUTTON_H);
+    let avail_label = Rect::new(c.x, y + (BUTTON_H - LABEL_H) / 2, c.w - 168, LABEL_H);
+    let scan_btn = Rect::new(c.right() - 152, y, 152, BUTTON_H);
     y += BUTTON_H + SP_2;
     let rows_h = net.results.len() as i32 * ROW_WIFI_H;
     let (avail_card, avail_rows, avail_empty);

@@ -1642,3 +1642,111 @@ fn power_menu_geometry_is_560_wide_centred_and_touchable_in_both_orientations() 
         assert!(hits.windows(2).all(|p| p[0].0.bottom() < p[1].0.y));
     }
 }
+
+#[test]
+fn settings_all_pages_configurable_controls_and_manual_network() {
+    let mut app = online();
+    // Sound page: jack routing toggles
+    go(&mut app, Tab::Settings);
+    tap(&mut app, Target::Page(Page::Sound));
+    assert_eq!(
+        tap(&mut app, Target::JackHeadphones).cmds,
+        vec![Cmd::JackForce(Some(walpad_proto::JackKind::Headphones))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::JackHeadsetMic).cmds,
+        vec![Cmd::JackForce(Some(walpad_proto::JackKind::HeadsetWithMic))]
+    );
+
+    // Input page: touch gestures, pinch zoom, and hardware key gesture slots
+    tap(&mut app, Target::Back);
+    tap(&mut app, Target::Page(Page::Input));
+    assert_eq!(
+        tap(&mut app, Target::TouchGesturesToggle).cmds,
+        vec![Cmd::Setting("touch_gestures", json!(false))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::MultitouchToggle).cmds,
+        vec![Cmd::Setting("multitouch", json!(false))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::KeyGesture(0)).cmds,
+        vec![Cmd::Setting("key.vol_up.single", json!("volume:-5"))]
+    );
+
+    // Power page: dim timeout, dimmed brightness, screen off, lid toggle, battery thresholds
+    tap(&mut app, Target::Back);
+    tap(&mut app, Target::Page(Page::Power));
+    assert_eq!(
+        tap(&mut app, Target::PowerDimCycle).cmds,
+        vec![Cmd::Setting("dim_after_s", json!(0))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::PowerDimLevelCycle).cmds,
+        vec![Cmd::Setting("dim_level", json!(40))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::PowerOffCycle).cmds,
+        vec![Cmd::Setting("off_after_s", json!(600))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::LowBattCycle).cmds,
+        vec![Cmd::Setting("low_batt_mv", json!(3600))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::CritBattCycle).cmds,
+        vec![Cmd::Setting("critical_batt_mv", json!(3400))]
+    );
+
+    // Network page: manual MAC mode/address, IPv4 mode/address, subnet mask, gateway, hostname, hidden SSID
+    tap(&mut app, Target::Back);
+    tap(&mut app, Target::Page(Page::Network));
+    assert_eq!(
+        tap(&mut app, Target::NetMacMode).cmds,
+        vec![Cmd::Setting("net_mac_mode", json!("random"))]
+    );
+    assert_eq!(
+        tap(&mut app, Target::NetIpMode).cmds,
+        vec![Cmd::Setting("net_ip_mode", json!("manual"))]
+    );
+    // Scroll down to reach lower network rows
+    app.on_gesture(&Gesture::Drag { dx: 0, dy: -400 }, 1000);
+    render(&mut app);
+    assert_eq!(
+        tap(&mut app, Target::NetMaskCycle).cmds,
+        vec![Cmd::Setting("net_mask", json!("255.255.0.0"))]
+    );
+    tap(&mut app, Target::NetMacEdit);
+    type_text(&mut app, "aabbccddeeff");
+    assert_eq!(
+        tap(&mut app, Target::SheetConnect).cmds,
+        vec![
+            Cmd::Setting("net_mac_mode", json!("custom")),
+            Cmd::Setting("net_mac", json!("AA:BB:CC:DD:EE:FF")),
+        ]
+    );
+    tap(&mut app, Target::NetIpEdit);
+    if let Some(Overlay::Password(s)) = &mut app.model.overlay {
+        s.secret.clear();
+    }
+    type_text(&mut app, "192.168.1.50");
+    assert_eq!(
+        tap(&mut app, Target::SheetConnect).cmds,
+        vec![
+            Cmd::Setting("net_ip_mode", json!("manual")),
+            Cmd::Setting("net_ip", json!("192.168.1.50")),
+        ]
+    );
+    tap(&mut app, Target::NetGatewayEdit);
+    type_text(&mut app, "192.168.1.1");
+    assert_eq!(
+        tap(&mut app, Target::SheetConnect).cmds,
+        vec![Cmd::Setting("net_gateway", json!("192.168.1.1"))]
+    );
+    tap(&mut app, Target::NetHostnameEdit);
+    type_text(&mut app, "walpadpro");
+    assert_eq!(
+        tap(&mut app, Target::SheetConnect).cmds,
+        vec![Cmd::Setting("net_hostname", json!("walpadpro"))]
+    );
+}

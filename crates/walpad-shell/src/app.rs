@@ -158,6 +158,8 @@ pub enum Target {
     VolumeSlider,
     MuteToggle,
     TestTone,
+    JackHeadphones,
+    JackHeadsetMic,
     Rotation,
     ScreenOff,
     // Home grid (index into `Model::apps`)
@@ -215,11 +217,28 @@ pub enum Target {
     Avail(usize),
     Saved(usize),
     Forget(usize),
+    WifiManualSsid,
+    NetMacMode,
+    NetMacEdit,
+    NetIpMode,
+    NetIpEdit,
+    NetMaskCycle,
+    NetGatewayEdit,
+    NetHostnameEdit,
     // Device
     Rot(usize),
+    RotateFlipToggle,
     Dim(usize),
     Off(usize),
     LidToggle,
+    PowerDimCycle,
+    PowerDimLevelCycle,
+    PowerOffCycle,
+    LowBattCycle,
+    CritBattCycle,
+    TouchGesturesToggle,
+    MultitouchToggle,
+    KeyGesture(usize),
     // Settings
     Page(Page),
     Back,
@@ -268,6 +287,7 @@ pub enum Cmd {
     SetVolume(u8),
     Mute(bool),
     TestTone,
+    JackForce(Option<walpad_proto::JackKind>),
     RotateToggle,
     /// Toggle / show / hide the shell's system keyboard. Handled by the shell loop itself; the
     /// resulting state is reported to the core as `keyboard show|hide`.
@@ -468,6 +488,7 @@ impl Cmd {
             Cmd::SetVolume(v) => ("volume_set", json!({"percent": v})),
             Cmd::Mute(on) => ("mute", json!({"on": on})),
             Cmd::TestTone => ("volume_test", Value::Null),
+            Cmd::JackForce(route) => ("jack_force", json!({"route": route})),
             Cmd::RotateToggle => ("rotate", json!({"mode": "toggle"})),
             Cmd::KeyboardToggle => ("keyboard", json!({"mode": "toggle"})),
             Cmd::KeyboardShow => ("keyboard", json!({"mode": "show"})),
@@ -2281,6 +2302,24 @@ impl App {
                 out.cmd(Cmd::Mute(!volume_ui::muted(&self.model)))
             }
             Target::TestTone if interactive => out.cmd(Cmd::TestTone),
+            Target::JackHeadphones if interactive => {
+                let forced = self.model.status.as_ref().and_then(|s| s.jack.forced);
+                let next = if forced.is_some() {
+                    None
+                } else {
+                    Some(walpad_proto::JackKind::Headphones)
+                };
+                out.cmd(Cmd::JackForce(next));
+            }
+            Target::JackHeadsetMic if interactive => {
+                let forced = self.model.status.as_ref().and_then(|s| s.jack.forced);
+                let next = if forced == Some(walpad_proto::JackKind::HeadsetWithMic) {
+                    Some(walpad_proto::JackKind::Headphones)
+                } else {
+                    Some(walpad_proto::JackKind::HeadsetWithMic)
+                };
+                out.cmd(Cmd::JackForce(next));
+            }
             Target::Rotation if interactive => out.cmd(Cmd::RotateToggle),
             Target::ScreenOff if interactive => out.cmd(Cmd::ScreenOff),
             Target::Scan
@@ -2315,6 +2354,86 @@ impl App {
                     });
                 }
             }
+            Target::WifiManualSsid if interactive => {
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::WifiManualSsid,
+                    "",
+                )));
+            }
+            Target::NetMacMode if interactive => {
+                let modes = crate::config::NET_MAC_MODES;
+                let idx = modes
+                    .iter()
+                    .position(|&m| m == self.model.devd.net_mac_mode)
+                    .unwrap_or(0);
+                let next = modes[(idx + 1) % modes.len()];
+                out.cmd(Cmd::Setting("net_mac_mode", json!(next)));
+            }
+            Target::NetMacEdit if interactive => {
+                let cur = if !self.model.devd.net_mac.is_empty() {
+                    self.model.devd.net_mac.clone()
+                } else {
+                    self.model.sys.mac.clone().unwrap_or_default()
+                };
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::NetMac,
+                    &cur,
+                )));
+            }
+            Target::NetIpMode if interactive => {
+                let next = if self.model.devd.net_ip_mode == "manual" {
+                    "dhcp"
+                } else {
+                    "manual"
+                };
+                out.cmd(Cmd::Setting("net_ip_mode", json!(next)));
+            }
+            Target::NetIpEdit if interactive => {
+                let cur = if !self.model.devd.net_ip.is_empty() {
+                    self.model.devd.net_ip.clone()
+                } else {
+                    self.model
+                        .status
+                        .as_ref()
+                        .and_then(|s| s.wifi.ip.clone())
+                        .unwrap_or_default()
+                };
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::NetIp,
+                    &cur,
+                )));
+            }
+            Target::NetMaskCycle if interactive => {
+                let opts = crate::config::NET_MASK_OPTIONS;
+                let idx = opts
+                    .iter()
+                    .position(|&m| m == self.model.devd.net_mask)
+                    .unwrap_or(0);
+                let next = opts[(idx + 1) % opts.len()];
+                out.cmd(Cmd::Setting("net_mask", json!(next)));
+            }
+            Target::NetGatewayEdit if interactive => {
+                let cur = if !self.model.devd.net_gateway.is_empty() {
+                    self.model.devd.net_gateway.clone()
+                } else {
+                    self.model.sys.gateway.clone().unwrap_or_default()
+                };
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::NetGateway,
+                    &cur,
+                )));
+            }
+            Target::NetHostnameEdit if interactive => {
+                let cur = if !self.model.devd.net_hostname.is_empty() {
+                    self.model.devd.net_hostname.clone()
+                } else {
+                    self.model.sys.hostname.clone().unwrap_or_default()
+                };
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::NetHostname,
+                    &cur,
+                )));
+            }
             // ---- Device
             Target::Rot(i) if interactive => {
                 if let Some((_, mode)) = device_screen::ROTATION_ROWS.get(i) {
@@ -2333,6 +2452,67 @@ impl App {
             }
             Target::LidToggle if interactive => {
                 out.cmd(Cmd::Setting("lid_off", json!(!self.model.devd.lid_off)))
+            }
+            Target::RotateFlipToggle if interactive => out.cmd(Cmd::Setting(
+                "rotate_flip",
+                json!(!self.model.devd.rotate_flip),
+            )),
+            Target::PowerDimCycle if interactive => {
+                let opts = device_screen::DIM_OPTIONS;
+                let idx =
+                    device_screen::selected_option(&opts, self.model.devd.dim_after_s).unwrap_or(0);
+                let next = opts[(idx + 1) % opts.len()].0;
+                out.cmd(Cmd::Setting("dim_after_s", json!(next)));
+            }
+            Target::PowerDimLevelCycle if interactive => {
+                let next = device_screen::next_u32(
+                    &device_screen::DIM_LEVEL_OPTIONS,
+                    self.model.devd.dim_level,
+                );
+                out.cmd(Cmd::Setting("dim_level", json!(next)));
+            }
+            Target::PowerOffCycle if interactive => {
+                let opts = device_screen::OFF_OPTIONS;
+                let idx =
+                    device_screen::selected_option(&opts, self.model.devd.off_after_s).unwrap_or(0);
+                let next = opts[(idx + 1) % opts.len()].0;
+                out.cmd(Cmd::Setting("off_after_s", json!(next)));
+            }
+            Target::LowBattCycle if interactive => {
+                let next = device_screen::next_u32(
+                    &device_screen::LOW_BATT_OPTIONS,
+                    self.model.devd.low_batt_mv,
+                );
+                out.cmd(Cmd::Setting("low_batt_mv", json!(next)));
+            }
+            Target::CritBattCycle if interactive => {
+                let next = device_screen::next_u32(
+                    &device_screen::CRIT_BATT_OPTIONS,
+                    self.model.devd.critical_batt_mv,
+                );
+                out.cmd(Cmd::Setting("critical_batt_mv", json!(next)));
+            }
+            Target::TouchGesturesToggle if interactive => out.cmd(Cmd::Setting(
+                "touch_gestures",
+                json!(!self.model.devd.touch_gestures),
+            )),
+            Target::MultitouchToggle if interactive => out.cmd(Cmd::Setting(
+                "multitouch",
+                json!(!self.model.devd.multitouch),
+            )),
+            Target::KeyGesture(i) if interactive => {
+                if let Some((key, label, def_act)) = crate::config::KEY_SLOTS.get(i) {
+                    let cur = self
+                        .model
+                        .sys
+                        .gestures
+                        .iter()
+                        .find(|(l, _)| l == label)
+                        .map(|(_, a)| a.as_str())
+                        .unwrap_or(def_act);
+                    let next = crate::config::next_key_action(cur);
+                    out.cmd(Cmd::Setting(key, json!(next)));
+                }
             }
             // ---- Settings
             Target::Page(Page::Display) => self.go(Tab::Device, out),
@@ -2690,6 +2870,44 @@ impl App {
         }
         if matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_phone()) {
             return self.phone_submit(out);
+        }
+        if matches!(&self.model.overlay, Some(Overlay::Password(s)) if s.is_net_config()) {
+            if let Some(Overlay::Password(s)) = &mut self.model.overlay {
+                if !s.valid() {
+                    s.error = Some("Invalid value".into());
+                    return;
+                }
+                let val = s.secret.clone();
+                match s.purpose {
+                    SheetPurpose::WifiManualSsid => {
+                        let hex: String = val.bytes().map(|b| format!("{b:02x}")).collect();
+                        self.model.overlay = Some(Overlay::Password(PasswordSheet::new(hex, val)));
+                    }
+                    SheetPurpose::NetIp => {
+                        let mode = if val.is_empty() { "dhcp" } else { "manual" };
+                        out.cmd(Cmd::Setting("net_ip_mode", json!(mode)));
+                        out.cmd(Cmd::Setting("net_ip", json!(val)));
+                        self.close_overlay();
+                    }
+                    SheetPurpose::NetGateway => {
+                        out.cmd(Cmd::Setting("net_gateway", json!(val)));
+                        self.close_overlay();
+                    }
+                    SheetPurpose::NetMac => {
+                        let up = overlay::normalize_mac(&val);
+                        let mode = if up.is_empty() { "hardware" } else { "custom" };
+                        out.cmd(Cmd::Setting("net_mac_mode", json!(mode)));
+                        out.cmd(Cmd::Setting("net_mac", json!(up)));
+                        self.close_overlay();
+                    }
+                    SheetPurpose::NetHostname => {
+                        out.cmd(Cmd::Setting("net_hostname", json!(val)));
+                        self.close_overlay();
+                    }
+                    _ => {}
+                }
+            }
+            return;
         }
         if let Some(Overlay::Password(s)) = &mut self.model.overlay {
             if s.is_vpn() {

@@ -379,29 +379,38 @@ impl Painter<'_> {
     ) {
         let disabled = state == ButtonState::Disabled;
         let pressed = state == ButtonState::Pressed;
-        let (fill, wash, line, line_h, fg) = match (kind, disabled) {
-            (_, true) => (SURFACE, None, DIVIDER, 1, TEXT_DISABLED),
+        let btn_primary = Tint::new(Color::hex(0x303642), 250);
+        let btn_secondary = Tint::new(Color::hex(0x272c36), 245);
+        let btn_disabled = Tint::new(Color::hex(0x1e2128), 200);
+        let (fill, wash, bar, bar_w, line, line_h, fg) = match (kind, disabled) {
+            (_, true) => (btn_disabled, None, DIVIDER, 0, DIVIDER, 1, TEXT_DISABLED),
             (ButtonKind::Primary, _) => (
-                SURFACE_STRONG,
+                btn_primary,
                 pressed.then_some(PRESSED_TINT),
+                TEXT,
+                3,
                 TEXT,
                 2,
                 TEXT,
             ),
             (ButtonKind::Danger, _) => (
-                SURFACE,
+                btn_secondary,
                 Some(if pressed {
                     DANGER_TINT_PRESSED
                 } else {
                     DANGER_TINT
                 }),
                 DANGER,
+                3,
+                DANGER,
                 2,
                 DANGER,
             ),
             (ButtonKind::Secondary, _) => (
-                SURFACE,
+                btn_secondary,
                 pressed.then_some(PRESSED_TINT),
+                if pressed { TEXT } else { TEXT_SECONDARY },
+                2,
                 if pressed { TEXT } else { DIVIDER },
                 if pressed { 2 } else { 1 },
                 TEXT,
@@ -410,6 +419,9 @@ impl Painter<'_> {
         self.cv.rect(r, fill);
         if let Some(f) = wash {
             self.cv.rect(r, f);
+        }
+        if bar_w > 0 {
+            self.cv.rect(Rect::new(r.x, r.y, bar_w, r.h), bar);
         }
         self.cv
             .rect(Rect::new(r.x, r.bottom() - line_h, r.w, line_h), line);

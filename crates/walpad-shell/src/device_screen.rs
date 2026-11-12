@@ -31,6 +31,14 @@ pub const ROTATION_ROWS: [(&str, &str); 5] = [
     ("Portrait flipped", "180"),
     ("Landscape flipped", "270"),
 ];
+pub const DIM_LEVEL_OPTIONS: [u32; 4] = [10, 20, 40, 60];
+pub const LOW_BATT_OPTIONS: [u32; 5] = [3450, 3500, 3550, 3600, 3650];
+pub const CRIT_BATT_OPTIONS: [u32; 4] = [3300, 3350, 3400, 3450];
+
+pub fn next_u32(opts: &[u32], cur: u32) -> u32 {
+    let idx = opts.iter().position(|&v| v == cur).unwrap_or(0);
+    opts[(idx + 1) % opts.len()]
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
@@ -38,6 +46,7 @@ pub enum Item {
     Label(&'static str),
     BrightnessCard,
     RotationRow(usize),
+    RotateFlipRow,
     SegLabel(&'static str),
     DimSeg,
     OffSeg,
@@ -51,7 +60,7 @@ pub fn height(item: &Item) -> i32 {
         Item::Title => 40 + SP_2,
         Item::Label(_) => 24 + SP_2,
         Item::BrightnessCard => 112 + SP_3,
-        Item::RotationRow(_) => ROW_H,
+        Item::RotationRow(_) | Item::RotateFlipRow => ROW_H,
         Item::SegLabel(_) => 28,
         Item::DimSeg | Item::OffSeg => 56 + SP_3,
         Item::LidRow => ROW_H,
@@ -82,6 +91,7 @@ pub fn items(st: &Option<Status>, d: &DevdSettings) -> Vec<Item> {
         Item::SegLabel("Rotation"),
     ];
     v.extend((0..ROTATION_ROWS.len()).map(Item::RotationRow));
+    v.push(Item::RotateFlipRow);
     v.extend([
         Item::Gap,
         Item::SegLabel("Dim after"),
@@ -264,7 +274,7 @@ pub fn render(
             pl.rect,
             matches!(
                 pl.item,
-                Item::RotationRow(_) | Item::LidRow | Item::Info(..)
+                Item::RotationRow(_) | Item::RotateFlipRow | Item::LidRow | Item::Info(..)
             ),
         )
     }));
@@ -336,6 +346,20 @@ pub fn render(
                 }
                 hits.push((r, Target::Rot(*i)));
             }
+            Item::RotateFlipRow => {
+                let toggle = p.list_row(
+                    r,
+                    None,
+                    "Allow upside-down rotation",
+                    None,
+                    &walpad_ui::components::Accessory::Toggle(d.rotate_flip),
+                    pr(Target::RotateFlipToggle),
+                    !online,
+                );
+                if toggle.is_some() {
+                    hits.push((r, Target::RotateFlipToggle));
+                }
+            }
             Item::DimSeg | Item::OffSeg => {
                 let is_dim = *item == Item::DimSeg;
                 let (opts, cur): (&[(u32, &str)], u32) = if is_dim {
@@ -372,7 +396,14 @@ pub fn render(
                     hits.push((r, Target::LidToggle));
                 }
             }
-            Item::Info(l, v, t) => info_row(p, r, l, v, *t),
+            Item::Info(l, v, t) => {
+                info_row(p, r, l, v, *t);
+                if l == "Low battery below" {
+                    hits.push((r, Target::LowBattCycle));
+                } else if l == "Shuts down below" {
+                    hits.push((r, Target::CritBattCycle));
+                }
+            }
         }
     }
     hits

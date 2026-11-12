@@ -920,15 +920,46 @@ impl Daemon {
             "clock_24h" | "pinned_apps" | "windows_mode" | "split_ratio" | "split_swap"
         ) {
             "/etc/walpad/shell.json"
+        } else if matches!(key, "touch_gestures" | "multitouch") {
+            "/etc/walpad/touch.json"
+        } else if key.starts_with("key.") {
+            "/etc/walpad/keys.json"
         } else {
             "/etc/walpad/devd.json"
         };
         let path = self.root.p(virt);
+        if let Some(d) = path.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
         let mut obj: serde_json::Map<String, Value> = std::fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
-        obj.insert(key.to_string(), value.clone());
+        if key == "touch_gestures" {
+            let mut g = obj
+                .remove("gestures")
+                .and_then(|v| match v {
+                    Value::Object(m) => Some(m),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            g.insert("enabled".to_string(), value.clone());
+            obj.insert("gestures".to_string(), Value::Object(g));
+        } else if let Some(rest) = key.strip_prefix("key.") {
+            if let Some((btn, gesture)) = rest.split_once('.') {
+                let mut b = obj
+                    .remove(btn)
+                    .and_then(|v| match v {
+                        Value::Object(m) => Some(m),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                b.insert(gesture.to_string(), value.clone());
+                obj.insert(btn.to_string(), Value::Object(b));
+            }
+        } else {
+            obj.insert(key.to_string(), value.clone());
+        }
         let bytes = serde_json::to_vec_pretty(&obj).map_err(internal)?;
         write_atomic(&path, &bytes)
             .map_err(|e| (ErrorCode::Internal, format!("cannot write {virt}: {e}")))?;
