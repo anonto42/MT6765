@@ -406,6 +406,7 @@ pub enum Cmd {
     /// Notification centre (owner request 2026-11-12, change `device-notifications`).
     Notifications,
     NotificationMarkRead(u64),
+    NotificationsMarkAllRead,
     NotificationsClearAll,
     /// `rotate` mode: auto, 0, 90, 180, 270.
     Rotate(&'static str),
@@ -650,6 +651,7 @@ impl Cmd {
             Cmd::CallLogClear => ("call_log_clear", Value::Null),
             Cmd::Notifications => ("notifications", Value::Null),
             Cmd::NotificationMarkRead(id) => ("notification_mark_read", json!({"id": id})),
+            Cmd::NotificationsMarkAllRead => ("notifications_mark_all_read", Value::Null),
             Cmd::NotificationsClearAll => ("notifications_clear_all", Value::Null),
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Stats(i, on) => ("stats_config", json!({ i.key(): on })),
@@ -1051,6 +1053,23 @@ impl App {
         }
         if tab == Tab::Notifications && self.model.connected {
             out.cmd(Cmd::Notifications);
+            // owner request 2026-11-12b: opening the screen clears the header badge, not just
+            // reading each row one at a time - optimistic (the core answer confirms it) so the
+            // badge updates at once instead of waiting for the next status poll
+            if self
+                .model
+                .status
+                .as_ref()
+                .is_some_and(|s| s.notifications.unread_count > 0)
+            {
+                out.cmd(Cmd::NotificationsMarkAllRead);
+                if let Some(s) = &mut self.model.status {
+                    s.notifications.unread_count = 0;
+                }
+                for n in &mut self.model.notifications {
+                    n.read = true;
+                }
+            }
         }
         out.dirty = true;
     }
@@ -1100,6 +1119,17 @@ impl App {
                         a.gps = s.gps.clone();
                         o.gps.state == s.gps.state && a == **s
                     });
+                // owner request 2026-11-12: a low-battery alert is a toast, not a persistent
+                // full-width block - fire once on the transition into low, not every status poll
+                let was_low = self.model.status.as_ref().is_some_and(|o| o.battery.low);
+                let charging = s
+                    .battery
+                    .state
+                    .as_deref()
+                    .is_some_and(|st| st.to_ascii_lowercase().starts_with("charg"));
+                if s.battery.low && !was_low && !charging {
+                    self.toast("Battery low - connect the charger", Tone::Warning);
+                }
                 self.model.status = Some((**s).clone());
                 self.model.connected = true;
                 self.rebuild_tiles();
@@ -1714,19 +1744,11 @@ impl App {
         self.model.armed_until()
     }
 
-    /// Persistent banner under the status bar (core down has priority over low battery).
+    /// Persistent banner under the status bar. Low battery is a toast now (owner request
+    /// 2026-11-12), not a block here - only the core being unreachable still blocks the screen,
+    /// since nothing else in the shell can be trusted while that is true.
     pub fn banner(&self) -> Option<(&'static str, Tone)> {
-        if !self.model.connected {
-            return Some(("System service not responding", Tone::Danger));
-        }
-        let st = self.model.status.as_ref()?;
-        let charging = st
-            .battery
-            .state
-            .as_deref()
-            .is_some_and(|s| s.to_ascii_lowercase().starts_with("charg"));
-        (st.battery.low && !charging)
-            .then_some(("Battery low - connect the charger", Tone::Warning))
+        (!self.model.connected).then_some(("System service not responding", Tone::Danger))
     }
 
     fn banner_h(&self) -> i32 {

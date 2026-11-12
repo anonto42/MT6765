@@ -40,7 +40,7 @@ impl Daemon {
 
     /// The app (id, instance number) a window belongs to: our child by pid, else the first app
     /// whose wm_class matches.
-    fn app_of_window(&self, w: &XWindow) -> (Option<String>, Option<u32>) {
+    pub(super) fn app_of_window(&self, w: &XWindow) -> (Option<String>, Option<u32>) {
         if let Some((id, n)) = w.pid.and_then(|p| self.apps.instance_of_pid(p)) {
             return (Some(id), Some(n));
         }

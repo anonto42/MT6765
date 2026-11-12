@@ -605,11 +605,22 @@ impl Daemon {
                 return Ok("replacing");
             }
         } else if def.single_instance || def.max_instances > 1 {
-            // one window of the app is enough: bring it to the front (`new_instance` adds more)
-            if !def.wm_class.is_empty()
-                && self.x_try(|b| b.focus_class(&def.wm_class)) == Some(true)
-            {
-                return Ok("focused");
+            // one window of the app is enough: bring it to the front (`new_instance` adds more).
+            // By pid, the same lookup `windows_cmd` already uses - not `focus_class`'s plain
+            // WM_CLASS search, which cannot tell two apps sharing one class apart (terminal and
+            // Kali are both `st`) and, reported by the owner 2026-11-12, failed outright to
+            // re-raise a window that had already lost focus once (going Home, then tapping the
+            // app again did nothing).
+            if let Some(wins) = self.x_try(|b| b.app_windows()) {
+                let win = wins
+                    .iter()
+                    .find(|w| self.app_of_window(&w.win).0.as_deref() == Some(id))
+                    .map(|w| w.win.id);
+                if let Some(wid) = win {
+                    if self.x_try(|b| b.focus_window(wid)).is_some() {
+                        return Ok("focused");
+                    }
+                }
             }
             if self.apps.running(id) {
                 return Ok("already_running");

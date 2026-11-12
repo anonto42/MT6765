@@ -225,7 +225,9 @@ impl Painter<'_> {
         self.surface_box(r, radius, SURFACE, pressed, active, disabled);
     }
 
-    /// `outline_box` with an explicit surface fill (`SURFACE_ICON` for icon boxes).
+    /// `outline_box` with an explicit surface fill (`SURFACE_ICON` for icon boxes). Fill only, no
+    /// stroke (owner request 2026-11-12: no borders on app icons, dropdowns or other controls);
+    /// `active`/`pressed` read through a stronger fill instead of a brighter outline.
     pub fn surface_box(
         &mut self,
         r: Rect,
@@ -236,17 +238,12 @@ impl Painter<'_> {
         disabled: bool,
     ) {
         self.cv.rrect(r, radius, fill);
+        if active && !disabled {
+            self.cv.rrect(r, radius, SURFACE_STRONG);
+        }
         if pressed && !disabled {
             self.cv.rrect(r, radius, PRESSED_TINT);
         }
-        let c = if disabled {
-            DIVIDER
-        } else if pressed || active {
-            TEXT
-        } else {
-            OUTLINE
-        };
-        self.cv.rrect_stroke(r, radius, OUTLINE_W, c);
     }
 
     /// Rounded-square icon button (sidebar 56, Home grid 64, Apps panel 48).
@@ -264,21 +261,21 @@ impl Painter<'_> {
             .icon(icon, r.x + (r.w - s) / 2, r.y + (r.h - s) / 2, s, TEXT);
     }
 
-    /// Round outlined button with an icon (the sidebar's Apps toggle). Every state is a circle:
-    /// circle fill, circle pressed tint, circle outline; nothing is drawn outside the circle
-    /// inscribed in `r` (its bounding-box corners stay untouched).
+    /// Round button with an icon (the sidebar's Apps toggle). Fill only, no outline (owner
+    /// request 2026-11-12): circle fill, a brighter fill for pressed/active; nothing is drawn
+    /// outside the circle inscribed in `r` (its bounding-box corners stay untouched).
     pub fn round_button(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
         let d = r.w.min(r.h);
         let (cx, cy) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
         let rad = d as f32 / 2.0;
         // it sits on the wallpaper art (bottom of the sidebar): the strong fill keeps the chevron clear
         self.cv.circle(cx, cy, rad, SURFACE_STRONG);
+        if active {
+            self.cv.circle(cx, cy, rad, SURFACE_STRONG);
+        }
         if pressed {
             self.cv.circle(cx, cy, rad, PRESSED_TINT);
         }
-        let c = if pressed || active { TEXT } else { OUTLINE };
-        let sq = Rect::new(r.x + (r.w - d) / 2, r.y + (r.h - d) / 2, d, d);
-        self.cv.rrect_stroke(sq, d / 2, OUTLINE_W, c);
         self.cv.icon(
             icon,
             r.x + (r.w - ICON) / 2,
@@ -358,10 +355,11 @@ impl Painter<'_> {
             self.card(r, false);
         }
     }
-    /// Popover / dropdown / dialog / sheet body: `SURFACE_STRONG` fill and a 1 px border.
+    /// Popover / dropdown / dialog / sheet body: `SURFACE_STRONG` fill only, no border (owner
+    /// request 2026-11-12: no borders on dropdowns/pages); the stronger fill carries the edge
+    /// against whatever floats under it.
     pub fn popover(&mut self, r: Rect) {
         self.cv.rrect(r, RADIUS_CARD, SURFACE_STRONG);
-        self.cv.rrect_stroke(r, RADIUS_CARD, 1.0, CARD_BORDER);
     }
     /// 1 px horizontal divider.
     pub fn divider(&mut self, x: i32, y: i32, w: i32) {

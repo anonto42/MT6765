@@ -559,18 +559,35 @@ fn offline_shows_the_banner_and_ignores_commands() {
 }
 
 #[test]
-fn low_battery_banner_until_charging() {
+fn low_battery_is_a_toast_once_not_a_persistent_banner() {
+    // owner request 2026-11-12: low battery must not block the screen like the offline banner
     let mut app = online();
+    assert_eq!(app.model.toast, None);
     let mut s = status(120, &[]);
     s.battery.low = true;
     app.on_core(&CoreEvent::Status(Box::new(s.clone())), 0);
-    assert_eq!(
-        app.banner(),
-        Some(("Battery low - connect the charger", Tone::Warning))
-    );
+    assert_eq!(app.banner(), None, "low battery never blocks the screen");
+    let t = app
+        .model
+        .toast
+        .take()
+        .expect("a toast fired on the transition into low");
+    assert_eq!(t.text, "Battery low - connect the charger");
+    assert_eq!(t.tone, Tone::Warning);
+    // staying low does not re-fire the toast every poll
+    app.on_core(&CoreEvent::Status(Box::new(s.clone())), 0);
+    assert_eq!(app.model.toast, None);
+    // charging while still "low" (not yet recovered) stays quiet too
     s.battery.state = Some("Charging".into());
+    app.on_core(&CoreEvent::Status(Box::new(s.clone())), 0);
+    assert_eq!(app.model.toast, None);
+    // back to discharging and low again: fires once more
+    s.battery.state = Some("Discharging".into());
+    s.battery.low = false;
+    app.on_core(&CoreEvent::Status(Box::new(s.clone())), 0);
+    s.battery.low = true;
     app.on_core(&CoreEvent::Status(Box::new(s)), 0);
-    assert_eq!(app.banner(), None);
+    assert!(app.model.toast.is_some());
 }
 
 #[test]

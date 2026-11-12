@@ -1,17 +1,19 @@
 //! Notification centre screen (owner request 2026-11-12, change `device-notifications`). Kept
 //! intentionally minimal per the owner's "fast as possible" instruction: a plain list, newest
 //! first (the core already answers `notifications` that way), tap a row to mark it read, one
-//! Clear all button. No day-grouping, no swipe-to-clear. Follows the list pattern in
+//! Clear all link. No day-grouping, no swipe-to-clear. Follows the list pattern in
 //! `phone_ui.rs` (recents/messages) and the translucent surface tokens the rest of the shell uses.
+//! "Clear all" (owner request 2026-11-12b) sits on the title row, right-aligned, as plain text —
+//! no button background, like a text link — not its own row.
 use crate::app::Target;
 use walpad_proto::Notification;
-use walpad_ui::components::{Accessory, ButtonKind, ButtonState, Painter};
+use walpad_ui::components::{Accessory, Painter};
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
 use walpad_ui::{Align, Face, Rect, Style};
 
 const TITLE_H: i32 = 40;
-const CLEAR_H: i32 = BUTTON_H;
+const CLEAR_W: i32 = 92;
 const ROW_H: i32 = 76;
 const EMPTY_H: i32 = 96;
 
@@ -27,13 +29,11 @@ pub struct NotifLayout {
 pub fn layout(frame: &Frame, count: usize) -> NotifLayout {
     let c = frame.padded();
     let mut y = SP_4;
-    let title = Rect::new(c.x, y, c.w, TITLE_H);
-    y += TITLE_H + SP_3;
-    let clear_all = (count > 0).then(|| {
-        let r = Rect::new(c.x, y, c.w, CLEAR_H);
-        y += CLEAR_H + SP_4;
-        r
-    });
+    let has_clear = count > 0;
+    let title_w = c.w - if has_clear { CLEAR_W + SP_3 } else { 0 };
+    let title = Rect::new(c.x, y, title_w, TITLE_H);
+    let clear_all = has_clear.then(|| Rect::new(c.right() - CLEAR_W, y, CLEAR_W, TITLE_H));
+    y += TITLE_H + SP_4;
     let mut rows = Vec::new();
     let mut empty = None;
     if count == 0 {
@@ -64,12 +64,18 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     let mut hits = Vec::new();
     p.screen_title("Notifications", l.title);
     if let Some(r) = l.clear_all {
-        let state = if v.pressed == Some(Target::NotificationsClearAll) {
-            ButtonState::Pressed
-        } else {
-            ButtonState::Default
-        };
-        p.button(r, "Clear all", ButtonKind::Secondary, state, None);
+        let pressed = v.pressed == Some(Target::NotificationsClearAll);
+        // a plain text link, no button background: dims on press like an anchor tag's active state
+        p.text(
+            "Clear all",
+            Style::new(
+                Face::Regular,
+                SIZE_SECONDARY,
+                if pressed { TEXT_SECONDARY } else { TEXT },
+            ),
+            r,
+            Align::Right,
+        );
         hits.push((r, Target::NotificationsClearAll));
     }
     if let Some(r) = l.empty {

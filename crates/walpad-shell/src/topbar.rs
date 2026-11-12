@@ -262,8 +262,8 @@ pub fn layout(
 /// Draw the pill and its chips.
 pub fn paint(p: &mut Painter, l: &Layout) {
     let Some(pill) = l.pill else { return };
+    // fill only, no border (owner request 2026-11-12: no borders on header pills)
     p.cv.rrect(pill, PILL_H / 2, SURFACE);
-    p.cv.rrect_stroke(pill, PILL_H / 2, 1.0, DIVIDER);
     let cy = pill.y + pill.h / 2;
     for c in &l.chips {
         p.text(

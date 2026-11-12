@@ -164,16 +164,11 @@ fn px(img: &[u8], w: usize, x: usize, y: usize) -> (u8, u8, u8) {
 }
 /// White pixels on the top edge of a sidebar button: only the active (or pressed) one has a
 /// full-white outline; the resting outline is 60 % white and the icon sits lower.
-fn active_edge(img: &[u8], w: usize, r: walpad_ui::Rect) -> usize {
-    count(
-        img,
-        w,
-        (r.x + 16) as usize,
-        (r.right() - 16) as usize,
-        r.y as usize,
-        (r.y + 2) as usize,
-        TEXT,
-    )
+/// How dark the fill inside an icon box is, sampled near a corner away from the centred icon
+/// glyph (owner request 2026-11-12: active reads through a stronger fill now, there is no border
+/// to sample any more). Higher = darker = more black-tint overlays stacked on top of each other.
+fn active_fill(img: &[u8], w: usize, r: walpad_ui::Rect) -> i32 {
+    255 - px(img, w, (r.x + 6) as usize, (r.y + 6) as usize).0 as i32
 }
 /// The frame is drawn and the core is connected: sidebar edge present, no banner.
 fn drawn_without_banner(img: &[u8]) -> bool {
@@ -238,12 +233,13 @@ fn shell_runs_on_a_real_x_server() {
         (DIVIDER.r, DIVIDER.g, DIVIDER.b),
         "sidebar edge"
     );
-    let home_edge = active_edge(&img, w, home_p);
-    assert!(home_edge > 10, "Home is the active button ({home_edge})");
-    assert_eq!(
-        active_edge(&img, w, settings_p),
-        0,
-        "Settings is not active yet"
+    let (home_fill, settings_fill) = (
+        active_fill(&img, w, home_p),
+        active_fill(&img, w, settings_p),
+    );
+    assert!(
+        home_fill > settings_fill,
+        "Home is the active button (home={home_fill} settings={settings_fill})"
     );
 
     // 4. a real click on the Settings button switches the destination
@@ -251,7 +247,7 @@ fn shell_runs_on_a_real_x_server() {
     probe.click(c.0 as i16, c.1 as i16);
     wait_for("Settings active", || {
         let img = probe.image(win, 800, 1280);
-        active_edge(&img, w, settings_p) > 10 && active_edge(&img, w, home_p) == 0
+        active_fill(&img, w, settings_p) > active_fill(&img, w, home_p)
     });
 
     // 5. rotation: the window manager resizes the window; the shell re-lays-out for 1280x800
@@ -271,14 +267,14 @@ fn shell_runs_on_a_real_x_server() {
         px(&img, 1280, 95, 400) == (DIVIDER.r, DIVIDER.g, DIVIDER.b)
             // middle of the header: plain BG (the wallpaper art fills the bottom)
             && px(&img, 1280, 700, 40) == (BG.r, BG.g, BG.b)
-            && active_edge(&img, 1280, settings_l) > 10
+            && active_fill(&img, 1280, settings_l) > active_fill(&img, 1280, home_l)
     });
     // Settings is still active after the resize, and a tap lands on the new layout
     let c = home_l.center();
     probe.click(c.0 as i16, c.1 as i16);
     wait_for("Home active in landscape", || {
         let img = probe.image(win, 1280, 800);
-        active_edge(&img, 1280, home_l) > 10 && active_edge(&img, 1280, settings_l) == 0
+        active_fill(&img, 1280, home_l) > active_fill(&img, 1280, settings_l)
     });
 }
 
@@ -346,8 +342,7 @@ fn shell_drives_the_core_and_shows_when_it_is_gone() {
     let q = qs_geom(&frame);
     wait_for("quick settings open", || {
         let img = probe.image(win, 800, 1280);
-        px(&img, 800, (q.panel.right() - 1) as usize, 300)
-            == (CARD_BORDER.r, CARD_BORDER.g, CARD_BORDER.b)
+        near(px(&img, 800, (q.panel.right() - 6) as usize, 300), STRIP)
     });
     let c = q.rotation.center();
     probe.click(c.0 as i16, c.1 as i16);
@@ -437,8 +432,7 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     click(frame.w - SP_4 - 20, frame.header.h / 2);
     wait_for("quick settings", || {
         let img = probe.image(win, 800, 1280);
-        px(&img, 800, (q.panel.right() - 1) as usize, 300)
-            == (CARD_BORDER.r, CARD_BORDER.g, CARD_BORDER.b)
+        near(px(&img, 800, (q.panel.right() - 6) as usize, 300), STRIP)
     });
     click(q.wifi.center().0, q.wifi.center().1);
     // the status has an address but no SSID yet, so there is no "connected" card
@@ -451,7 +445,7 @@ fn wifi_scan_and_secured_connect_clicked_through_the_real_stack() {
     wait_for("network tab", || {
         let img = probe.image(win, 800, 1280);
         // the dropdown is gone: the page surface (over the plain BG) shows there
-        near(px(&img, 800, (q.panel.right() - 1) as usize, 300), pg)
+        near(px(&img, 800, (q.panel.right() - 6) as usize, 300), pg)
             && px(&img, 800, 700, (view_y + l.scan_btn.y) as usize) != (BG.r, BG.g, BG.b)
     });
     click(scan.0, view_y + scan.1);
@@ -575,8 +569,7 @@ fn device_setting_round_trips_through_the_core_and_back_to_the_screen() {
     probe.click((frame.w - SP_4 - 20) as i16, (frame.header.h / 2) as i16);
     wait_for("quick settings", || {
         let img = probe.image(win, 800, 1280);
-        px(&img, 800, (q.panel.right() - 1) as usize, 300)
-            == (CARD_BORDER.r, CARD_BORDER.g, CARD_BORDER.b)
+        near(px(&img, 800, (q.panel.right() - 6) as usize, 300), STRIP)
     });
     probe.click(q.battery.center().0 as i16, q.battery.center().1 as i16);
     wait_for("Device tab with 90 s selected", || {
