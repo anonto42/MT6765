@@ -283,8 +283,7 @@ impl Painter<'_> {
         let b = Rect::new(cell.x + (cell.w - box_px) / 2, cell.y, box_px, box_px);
         self.icon_box(b, icon, pressed, false);
         if running {
-            self.cv
-                .rect(Rect::new(b.right() - 10, b.y + 4, 6, 6), TEXT);
+            self.cv.rect(Rect::new(b.right() - 10, b.y + 4, 6, 6), TEXT);
         }
         let px = if box_px >= BOX_GRID {
             SIZE_LABEL
