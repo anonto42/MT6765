@@ -87,9 +87,12 @@ pub enum Tab {
     Phone,
     /// GPS switch, position and satellites (owner request 2026-11-11; Quick Settings, Settings).
     Gps,
+    /// Notification centre (owner request 2026-11-12, change `device-notifications`; reached from
+    /// the bell icon in the header, not a sidebar destination).
+    Notifications,
 }
 impl Tab {
-    pub const ALL: [Tab; 11] = [
+    pub const ALL: [Tab; 12] = [
         Tab::Home,
         Tab::Apps,
         Tab::Network,
@@ -101,6 +104,7 @@ impl Tab {
         Tab::Media,
         Tab::Phone,
         Tab::Gps,
+        Tab::Notifications,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -115,6 +119,7 @@ impl Tab {
             Tab::Media => "Media",
             Tab::Phone => "Phone",
             Tab::Gps => "GPS",
+            Tab::Notifications => "Notifications",
         }
     }
     pub fn icon(self) -> Icon {
@@ -130,6 +135,7 @@ impl Tab {
             Tab::Media => Icon::Media,
             Tab::Phone => Icon::Phone,
             Tab::Gps => Icon::Location,
+            Tab::Notifications => Icon::Bell,
         }
     }
 }
@@ -1793,6 +1799,7 @@ mod tests {
                 "Media",
                 "Phone",
                 "GPS",
+                "Notifications",
             ]
         );
     }

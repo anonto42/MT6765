@@ -58,10 +58,12 @@ pub enum Icon {
     Location,
     /// Lightning bolt: shown next to the battery percent while charging (owner request 2026-11-11).
     Bolt,
+    /// Notification centre bell (owner request 2026-11-12, change `device-notifications`).
+    Bell,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 44] = [
+    pub const ALL: [Icon; 45] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -106,6 +108,7 @@ impl Icon {
         Icon::Keypad,
         Icon::Location,
         Icon::Bolt,
+        Icon::Bell,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -127,6 +130,7 @@ impl Icon {
             "clipboard" => Icon::Clipboard,
             "location" | "gps" => Icon::Location,
             "bolt" | "charging" => Icon::Bolt,
+            "bell" | "notifications" => Icon::Bell,
             "media" | "video" => Icon::Media,
             "image" | "photos" => Icon::Image,
             "music" => Icon::Music,
@@ -488,6 +492,15 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
                 true,
             );
         }
+        Icon::Bell => {
+            // dome, flared sides to a base line, a top knob and a clapper dot
+            p.arc(12.0, 11.0, 6.0, 200.0, 340.0);
+            p.line((6.36, 8.95), (4.5, 16.0));
+            p.line((17.64, 8.95), (19.5, 16.0));
+            p.line((4.5, 16.0), (19.5, 16.0));
+            p.line((12.0, 5.0), (12.0, 3.0));
+            p.dot(12.0, 19.3, 1.6);
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -597,7 +610,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 44);
+        assert_eq!(Icon::ALL.len(), 45);
         assert_eq!(Icon::from_name("phone"), Some(Icon::Phone));
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
     }
