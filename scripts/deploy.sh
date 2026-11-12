@@ -40,7 +40,7 @@ rput() { # rput local remote
 do_restart() {
   case $RESTART in
     core)  rsh "pkill -x walpad-core || true" ;;   # init loop restarts it
-    shell) rsh "$BIN/walpad-ctl restart_shell" ;;
+    shell) rsh "$BIN/walpad-ctl restart-shell" ;;
     none)  ;;
   esac
 }

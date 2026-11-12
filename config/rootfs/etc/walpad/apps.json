@@ -4,5 +4,5 @@
   {"id": "files", "name": "Files", "icon": "folder", "exec": ["pcmanfm", "/"], "env": {}, "single_instance": true, "wm_class": "pcmanfm", "touch": "scroll"},
   {"id": "gpicview", "name": "Photo viewer", "icon": "image", "exec": ["gpicview"], "env": {}, "single_instance": true, "wm_class": "gpicview", "touch": "scroll", "open": true, "open_args": ["--", "{path}"]},
   {"id": "kali", "name": "Kali", "icon": "terminal", "exec": ["st", "-f", "DejaVu Sans Mono:size=13", "-e", "/usr/local/sbin/walpad-kali", "shell"], "env": {}, "single_instance": false, "wm_class": "st", "touch": "mouse", "max_instances": 3},
-  {"id": "code", "name": "Code", "icon": "code", "exec": ["lite-xl"], "env": {"SDL_VIDEO_X11_WMCLASS": "lite-xl"}, "single_instance": true, "wm_class": "lite-xl", "touch": "scroll", "open": true, "open_args": ["{path}"]}
+  {"id": "code", "name": "Code", "icon": "code", "exec": ["lite-xl"], "env": {"SDL_VIDEO_X11_WMCLASS": "lite-xl"}, "single_instance": true, "wm_class": "com.lite_xl.LiteXL", "touch": "scroll", "open": true, "open_args": ["{path}"]}
 ]
