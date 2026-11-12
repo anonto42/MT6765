@@ -455,13 +455,7 @@ pub fn render(
 ) -> Vec<(Rect, Target)> {
     let l = layout(frame, m);
     let mut hits = Vec::new();
-    p.outline_box(
-        l.back.inset(4),
-        RADIUS,
-        pressed == Some(Target::Back),
-        false,
-        false,
-    );
+    p.outline_box(l.back, 0, pressed == Some(Target::Back), false, false);
     p.cv.icon(
         Icon::Back,
         l.back.x + (l.back.w - ICON) / 2,
@@ -534,10 +528,10 @@ pub fn render(
                     Align::Right,
                 );
                 let bar = Rect::new(r.x + SP_4, r.y + 42, r.w - 2 * SP_4, 8);
-                p.cv.rrect(bar, 4, DIVIDER);
+                p.cv.rect(bar, DIVIDER);
                 let fw = (bar.w * *percent as i32 / 100).max(if *percent > 0 { 8 } else { 0 });
                 if fw > 0 {
-                    p.cv.rrect(Rect::new(bar.x, bar.y, fw, bar.h), 4, ACCENT);
+                    p.cv.rect(Rect::new(bar.x, bar.y, fw, bar.h), ACCENT);
                 }
                 p.text(
                     text,

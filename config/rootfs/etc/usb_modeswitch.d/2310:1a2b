@@ -1,0 +1,3 @@
+# SciIncX / Speedlink 802.11n NIC (Realtek-style driver-CD dongle)
+# Eject the fake CD-ROM so the dongle re-enumerates as a Wi-Fi adapter.
+StandardEject=1

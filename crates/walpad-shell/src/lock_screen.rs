@@ -577,19 +577,19 @@ impl LockScreen {
         let slots = n.max(PIN_MIN);
         let step = 30;
         let x0 = l.entry.x + (l.entry.w - (slots as i32 - 1) * step) / 2;
-        let cy = (l.entry.y + l.entry.h / 2) as f32;
+        let cy = l.entry.y + l.entry.h / 2;
         for i in 0..slots {
-            let cx = (x0 + i as i32 * step) as f32;
+            let cx = x0 + i as i32 * step;
             if i < n {
-                p.cv.circle(cx, cy, 9.0, TEXT);
+                p.cv.rect(Rect::new(cx - 8, cy - 8, 16, 16), TEXT);
             } else {
-                p.cv.circle(cx, cy, 9.0, DIVIDER);
-                p.cv.circle(cx, cy, 7.5, BG);
+                p.cv.rect(Rect::new(cx - 8, cy - 8, 16, 16), SURFACE_STRONG);
+                p.cv.rect(Rect::new(cx - 8, cy + 6, 16, 2), DIVIDER);
             }
         }
         for (r, h) in &l.pad {
             let pressed = self.pressed == Some(*h);
-            p.outline_box(*r, RADIUS_CARD, pressed, false, dis);
+            p.outline_box(*r, 0, pressed, false, dis);
             let fg = if dis { TEXT_DISABLED } else { TEXT };
             match h {
                 Hit::Digit(c) => p.text(
@@ -666,11 +666,13 @@ impl LockScreen {
             p.cv.line(c(last), (fx as f32, fy as f32), 5.0, OUTLINE);
         }
         for i in 0..9u8 {
-            let (x, y) = c(i);
+            let (x, y) = l.dots[i as usize];
             if sel.contains(&i) {
-                p.cv.circle(x, y, 20.0, TEXT);
+                p.cv.rect(Rect::new(x - 20, y - 20, 40, 40), TEXT);
+                p.cv.rect(Rect::new(x - 6, y - 6, 12, 12), BG);
             } else {
-                p.cv.circle(x, y, 12.0, OUTLINE);
+                p.cv.rect(Rect::new(x - 12, y - 12, 24, 24), SURFACE_STRONG);
+                p.cv.rect(Rect::new(x - 12, y + 10, 24, 2), OUTLINE);
             }
         }
     }

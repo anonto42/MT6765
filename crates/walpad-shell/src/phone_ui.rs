@@ -577,9 +577,9 @@ fn pt(t: PhoneTarget) -> Target {
     Target::Phone(t)
 }
 
-/// A key of the dial pad: outlined box, big digit.
+/// A key of the dial pad: sharp box, big digit.
 fn key_box(p: &mut Painter, r: Rect, label: &str, pressed: bool, disabled: bool) {
-    p.outline_box(r, RADIUS, pressed, false, disabled);
+    p.outline_box(r, 0, pressed, false, disabled);
     p.text(
         label,
         Style::new(
@@ -628,7 +628,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     match m.view {
         PhoneView::Keypad => {
             let g = keypad_geom(frame, y0);
-            p.outline_box(g.display, RADIUS, false, false, false);
+            p.outline_box(g.display, 0, false, false, false);
             let shown = if m.dial.is_empty() {
                 "Enter a number".to_string()
             } else {
@@ -736,7 +736,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                         false,
                     );
                     if e.kind == CallKind::Missed {
-                        p.cv.circle((r.x + SP_4 + ICON) as f32, (r.y + 14) as f32, 4.0, DANGER);
+                        p.cv.rect(Rect::new(r.x + SP_4 + ICON - 4, r.y + 10, 8, 8), DANGER);
                     }
                     hits.push((r, pt(t)));
                 }
@@ -759,7 +759,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         PhoneView::Contacts => {
             let search = Rect::new(c.x, y0, c.w - 120 - SP_3, SEG_H);
             let add = Rect::new(c.right() - 120, y0, 120, SEG_H);
-            p.outline_box(search, RADIUS, pr(PhoneTarget::Search), false, false);
+            p.outline_box(search, 0, pr(PhoneTarget::Search), false, false);
             let (txt, col) = if m.search.is_empty() {
                 ("Search contacts".to_string(), TEXT_DISABLED)
             } else {
@@ -884,7 +884,7 @@ fn render_conversations(
             false,
         );
         if cv.unread > 0 {
-            p.cv.circle((r.x + SP_4 + ICON) as f32, (r.y + 14) as f32, 5.0, TEXT);
+            p.cv.rect(Rect::new(r.x + SP_4 + ICON - 5, r.y + 9, 10, 10), TEXT);
         }
         hits.push((r, pt(t)));
     }
@@ -967,12 +967,22 @@ fn render_thread(
     let now = m.clock_ms();
     for (i, ((r, lines), msg)) in geom.iter().zip(&msgs).enumerate() {
         let t = PhoneTarget::Bubble(i);
-        p.cv.rrect(*r, RADIUS_CARD, SURFACE);
+        p.cv.rect(
+            *r,
+            if msg.incoming {
+                SURFACE
+            } else {
+                SURFACE_STRONG
+            },
+        );
         if pr(t) {
-            p.cv.rrect(*r, RADIUS_CARD, PRESSED_TINT);
+            p.cv.rect(*r, PRESSED_TINT);
         }
-        let outline = if msg.incoming { OUTLINE } else { TEXT };
-        p.cv.rrect_stroke(*r, RADIUS_CARD, OUTLINE_W, outline);
+        if msg.incoming {
+            p.cv.rect(Rect::new(r.x, r.y, 3, r.h), OUTLINE);
+        } else {
+            p.cv.rect(Rect::new(r.right() - 3, r.y, 3, r.h), TEXT);
+        }
         for (k, l) in lines.iter().enumerate() {
             p.text(
                 l,

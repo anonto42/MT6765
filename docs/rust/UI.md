@@ -15,11 +15,11 @@ No gradients or shadows.
 | Translucent token | Value | Use |
 |---|---|---|
 | SURFACE | black 55 % | cards, row groups (Settings, Device), buttons, fields, segmented controls, header pill, dock buttons, pad surface/buttons, keyboard keys |
-| SURFACE_STRONG | black 65 % | popovers (Apps panel, Quick Settings), sheets, dialogs, power menu, toasts, banners (+ tone 14 %), the sidebar's round Apps toggle; flattened over BG (opaque) for the dock / keyboard / mouse-pad strips |
+| SURFACE_STRONG | black 65 % | popovers (Apps panel, Quick Settings), sheets, dialogs, power menu, toasts, banners (+ tone 14 %), the sidebar's Apps toggle; flattened over BG (opaque) for popovers, the dock / keyboard / mouse-pad strips |
 | SURFACE_ICON | black 30 % | icon boxes (Home grid, sidebar, Apps panel), password-sheet keys |
-| PAGE_SURFACE | black 45 % | page surface behind every full-screen page (Settings and subpages, Network, Device, Mobile, Bluetooth, VPN, Apps store, Sound ...): `Painter::page_surface`, rect `page_rect(frame.content)` (8 px side/bottom margin, flush under the header), radius 16, no outline (owner request 2026-11-12, `ui-polish`: the shade difference from the wallpaper is enough; an outline here plus each card's own outline read as a box inside a box). Drawn once into the cached background layer (`ChromeKey.page`, set for every scrolling screen), never per row; rows/cards keep their own SURFACE on top, the wallpaper art shows at the bottom and between cards |
-| PRESSED_TINT | white 12 % | pressed state, drawn over the surface fill (outline turns white) |
-| close badge | black 70 % | the Apps panel's close badge (it overlaps the icon box outline) |
+| PAGE_SURFACE | black 45 % | page surface behind every full-screen page (Settings and subpages, Network, Device, Mobile, Bluetooth, VPN, Apps store, Sound ...): `Painter::page_surface`, rect `page_rect(frame.content)` (flush edge-to-edge `PAGE_MARGIN = 0` under the header), radius 0, no outline (owner request 2026-11-12, `ui-polish` + boxy restyle). Drawn once into the cached background layer (`ChromeKey.page`, set for every scrolling screen), never per row; rows/cards keep their own SURFACE on top |
+| PRESSED_TINT | white 12 % | pressed state, drawn over the surface fill |
+| close badge | black 70 % | the Apps panel's sharp square close badge |
 
 Tuning (2026-11-10): the brief's 35 / 50 / 25 % left grey (55 %) text unreadable where cards and
 panels cross the white cup art at the bottom of the screen (checked in the goldens), so cards went to
@@ -45,10 +45,8 @@ Header clock Regular 20 | Screen title Regular 26 | Section label Bold 13 upperc
 Secondary 14 | Caption 13 | App label 12 (90 %) | Tiny caption Bold 11 uppercase ("ACTIVE APPS") |
 Logs/IPs DejaVu Sans Mono 15.
 
-## Shape
-Spacing 4 8 12 16 24 32 48. Outline 1.5 px (cards and popovers 1 px). Radius 12 buttons/fields/rows,
-16 icon boxes, cards, popovers, sheets; pills fully round. Touch target >= 56x56; rows 64 (Wi-Fi 72);
-buttons 56 high. Icons: 24 px grid, round 2 px strokes (28 px in 64 boxes).
+## Shape (2026-11-12 boxy restyle)
+Spacing 4 8 12 16 24 32 48. Zero border radius (`RADIUS = 0`, `RADIUS_CARD = 0`, `RADIUS_ICON = 0`) and zero 4-sided box outlines (`rrect_stroke`) across all components: app icons, dropdowns/popovers, cards, buttons, toggles, sliders, segmented controls, keyboard keys, tabs, pills, chips, and badges are sharp `0 px` rectangular boxes. Visual hierarchy and state separation use surface contrast (`SURFACE` vs `SURFACE_STRONG`), `1 px` full-width hairline `DIVIDER` lines, and `2–3 px` accent/tone indicator bars (left bar for active sidebar/status chips/toasts/banners, bottom bar for buttons/text fields/selected segments/tabs). No unnecessary UI gaps (`PAGE_MARGIN = 0`, popovers dock flush against header/sidebar/screen edges with opaque `SURFACE_STRONG.over(BG)` fill, and dock/wmbar/segmented controls use full-height flush cells separated by `1 px` dividers). Touch target >= 56x56; rows 64 (Wi-Fi 72); buttons 56 high. Icons: 24 px grid, 2 px strokes (28 px in 64 boxes).
 
 ## Frame (crates/walpad-ui/src/layout.rs)
 | Region | Portrait 800x1280 | Landscape 1280x800 |

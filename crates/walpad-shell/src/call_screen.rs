@@ -400,7 +400,7 @@ impl CallScreen {
                     self.round(p, *r, Icon::Keypad, 0.0, TEXT, false, pressed, "Keypad")
                 }
                 CallTarget::Digit(c) => {
-                    p.outline_box(*r, RADIUS, pressed, false, false);
+                    p.outline_box(*r, 0, pressed, false, false);
                     p.text(
                         &c.to_string(),
                         Style::new(Face::Regular, 32.0, TEXT),
@@ -409,7 +409,7 @@ impl CallScreen {
                     );
                 }
                 CallTarget::HideKeypad => {
-                    p.outline_box(*r, RADIUS, pressed, false, false);
+                    p.outline_box(*r, 0, pressed, false, false);
                     p.text(
                         "Hide keypad",
                         Style::new(Face::Regular, SIZE_BODY, TEXT),
@@ -421,7 +421,7 @@ impl CallScreen {
         }
     }
 
-    /// A round button: translucent fill, outline (filled tint when `on` or coloured), icon, label.
+    /// Action button: sharp box fill, bottom indicator bar, icon, label.
     #[allow(clippy::too_many_arguments)]
     fn round(
         &self,
@@ -435,15 +435,17 @@ impl CallScreen {
         label: &str,
     ) {
         let (cx, cy) = r.center();
-        let rad = r.w as f32 / 2.0;
-        p.cv.circle(cx as f32, cy as f32, rad, SURFACE_STRONG);
+        p.cv.rect(r, SURFACE_STRONG);
         if on {
-            p.cv.circle(cx as f32, cy as f32, rad, Tint::new(color, 22));
+            p.cv.rect(r, Tint::new(color, 22));
         }
         if pressed {
-            p.cv.circle(cx as f32, cy as f32, rad, PRESSED_TINT);
+            p.cv.rect(r, PRESSED_TINT);
         }
-        p.cv.rrect_stroke(r, r.w / 2, 2.0, if on || pressed { color } else { OUTLINE });
+        p.cv.rect(
+            Rect::new(r.x, r.bottom() - 3, r.w, 3),
+            if on || pressed { color } else { DIVIDER },
+        );
         let s = r.w * 2 / 5;
         p.cv.icon_rotated(icon, cx - s / 2, cy - s / 2, s, color, angle);
         p.text(

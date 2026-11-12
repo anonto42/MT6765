@@ -439,13 +439,7 @@ pub fn render(
     match (page, l.back) {
         (Some(pg), Some(b)) => {
             let back_rect = Rect::new(b.x, b.y, TOUCH_MIN, b.h);
-            p.outline_box(
-                back_rect.inset(4),
-                RADIUS,
-                pressed == Some(Target::Back),
-                false,
-                false,
-            );
+            p.outline_box(back_rect, 0, pressed == Some(Target::Back), false, false);
             p.cv.icon(
                 Icon::Back,
                 back_rect.x + (back_rect.w - ICON) / 2,

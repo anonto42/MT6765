@@ -16,7 +16,7 @@ use walpad_ui::{Align, Canvas, Color, Face, Icon, Rect, Style};
 pub const TILE: i32 = 152;
 pub const GAP: i32 = 12;
 const NAME_H: i32 = 22;
-const TILE_RADIUS: i32 = 6;
+const TILE_RADIUS: i32 = 0;
 pub const LIST_ROW_H: i32 = 72;
 const TITLE_H: i32 = 40;
 const SEG_H: i32 = 52;
@@ -538,7 +538,7 @@ fn blit_at(p: &mut Painter, src: &Canvas, x: i32, y: i32) {
 }
 
 fn placeholder(p: &mut Painter, r: Rect, kind: Kind) {
-    p.cv.rrect(r, TILE_RADIUS, SURFACE);
+    p.cv.rect(r, SURFACE);
     let (cx, cy) = r.center();
     p.cv.icon(kind.icon(), cx - 20, cy - 20, 40, TEXT_DISABLED);
 }
@@ -547,7 +547,7 @@ fn duration_badge(p: &mut Painter, tile: Rect, secs: u32) {
     let s = fmt_duration(secs);
     let w = 12 + 8 * s.len() as i32;
     let b = Rect::new(tile.right() - w - SP_2, tile.bottom() - 26 - SP_2, w, 26);
-    p.cv.rrect(b, 6, Tint::new(Color::hex(0x000000), 75));
+    p.cv.rect(b, Tint::new(Color::hex(0x000000), 82));
     p.text(
         &s,
         Style::new(Face::Regular, SIZE_CAPTION, TEXT),
@@ -612,12 +612,13 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 Some(Thumb::Ready(c)) => blit_at(p, c, tile.x, tile.y),
                 _ => placeholder(p, tile, it.kind),
             }
-            p.cv.rrect_stroke(
-                tile,
-                TILE_RADIUS,
-                if pr(t) { 3.0 } else { 1.0 },
-                if pr(t) { TEXT } else { OUTLINE },
-            );
+            let _ = TILE_RADIUS;
+            if pr(t) {
+                p.cv.rect(tile, PRESSED_TINT);
+                p.cv.rect(Rect::new(tile.x, tile.bottom() - 3, tile.w, 3), TEXT);
+            } else {
+                p.cv.rect(Rect::new(tile.x, tile.bottom() - 1, tile.w, 1), DIVIDER);
+            }
             if it.kind == Kind::Video {
                 let (cx, cy) = tile.center();
                 if !matches!(v.m.thumbs.get(&it.path), Some(Thumb::Ready(_))) {
@@ -653,7 +654,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                     }
                 }
                 _ => {
-                    p.cv.rrect(icon_box, RADIUS - 4, SURFACE);
+                    p.cv.rect(icon_box, SURFACE_STRONG);
                     p.cv.icon(
                         it.kind.icon(),
                         icon_box.x + 12,
@@ -697,7 +698,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 Rect::new(tx, r.y + 38, tw, 22),
                 Align::Left,
             );
-            p.divider(r.x + SP_2, r.bottom() - 1, r.w - 2 * SP_2);
+            p.divider(r.x, r.bottom() - 1, r.w);
         }
         hits.push((*r, t));
     }

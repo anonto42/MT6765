@@ -329,7 +329,7 @@ impl Recents {
         match &self.scaled[i] {
             Some(t) => p.cv.blit(t, thumb.x, thumb.y),
             None => {
-                p.cv.rrect(thumb, RADIUS, SURFACE_ICON.over(BG));
+                p.cv.rect(thumb, SURFACE_ICON.over(BG));
                 let big = (g.thumb_w / 3).min(96);
                 let c = thumb.center();
                 p.cv.icon(
@@ -341,8 +341,8 @@ impl Recents {
                 );
             }
         }
-        p.cv.rrect_stroke(thumb, 2, 1.0, DIVIDER);
         let ly = r.y + PAD + g.thumb_h;
+        p.divider(r.x, ly, r.w);
         p.cv.icon(
             self.cards[i].icon,
             r.x + PAD + SP_1,
