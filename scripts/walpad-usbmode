@@ -1,0 +1,172 @@
+#!/bin/sh
+# walpad-usbmode: short commands for a USB Wi-Fi dongle used for monitor mode / injection.
+# Lives on the tablet at /usr/local/sbin/walpad-usbmode. Run as root.
+#
+# Usage:
+#   walpad-usbmode status              # what's attached, what mode, what's loaded
+#   walpad-usbmode up                  # switch mode + load driver + bring the interface up (station)
+#   walpad-usbmode connect <ssid>      # up, then wpa_supplicant + DHCP against /etc/wpa_<ifname>.conf
+#   walpad-usbmode monitor [channel]   # switch the interface to monitor mode (default: its current channel)
+#   walpad-usbmode scan                # quick iw scan, shows BSSID/channel/SSID (needs station mode)
+#   walpad-usbmode deauth <ap_bssid> <client_mac> [count]   # runs aireplay-ng inside walpad-kali
+#   walpad-usbmode down                # unload everything cleanly
+#
+# Adding a new adapter: add one block to the `profile_for` case below (pre-switch and/or direct
+# VID:PID, a mode-switch config name if it needs one, the built .ko path, cfg file, ifname). Every
+# other command here is adapter-agnostic once PROFILE_* is set.
+set -eu
+
+KALI=/usr/local/sbin/walpad-kali
+
+usbdev_with() {
+  # prints the sysfs path (e.g. /sys/bus/usb/devices/1-1) of the first device matching VID:PID
+  want="$1"
+  for d in /sys/bus/usb/devices/*; do
+    [ -f "$d/idVendor" ] || continue
+    v=$(cat "$d/idVendor" 2>/dev/null) || continue
+    p=$(cat "$d/idProduct" 2>/dev/null) || continue
+    [ "$v:$p" = "$want" ] && { echo "$d"; return 0; }
+  done
+  return 1
+}
+
+# --- adapter profiles -------------------------------------------------------
+# PROFILE_NAME, PROFILE_PRESWITCH (vid:pid before mode-switch, or "" if none needed),
+# PROFILE_TARGET (vid:pid in Wi-Fi mode), PROFILE_MSCONFIG (usb_modeswitch -c file, or ""),
+# PROFILE_KO, PROFILE_CFG, PROFILE_IFNAME
+detect_profile() {
+  if usbdev_with 2310:9086 >/dev/null 2>&1 || usbdev_with 2310:1a2b >/dev/null 2>&1; then
+    PROFILE_NAME="ZT9101 (Speedlink 300Mbps)"
+    PROFILE_PRESWITCH="2310:1a2b"
+    PROFILE_TARGET="2310:9086"
+    PROFILE_MSCONFIG="/etc/usb_modeswitch.d/2310:1a2b"
+    PROFILE_KO="/root/zt9101_ztopmac_usb.ko"
+    PROFILE_CFG="/root/zt9101/wifi.cfg"
+    PROFILE_IFNAME="wlan1"
+    return 0
+  fi
+  return 1
+  # Add a new adapter here, same shape, once it has its own built-and-verified .ko for this
+  # kernel -- see memory/known-issues.md for what that build needs. Nothing below this function
+  # assumes ZT9101 specifically; it only reads PROFILE_*.
+}
+
+need_profile() {
+  if ! detect_profile; then
+    echo "no supported dongle detected (nothing at a known VID:PID on the USB bus)" >&2
+    echo "plug it in, or this chipset has no driver built for this tablet yet" >&2
+    exit 1
+  fi
+}
+
+cmd_status() {
+  if detect_profile; then
+    echo "adapter   : $PROFILE_NAME"
+    d=$(usbdev_with "$PROFILE_TARGET" 2>/dev/null) || d=$(usbdev_with "$PROFILE_PRESWITCH" 2>/dev/null) || d=""
+    if [ -n "$d" ]; then
+      echo "usb mode  : $(cat "$d/idVendor"):$(cat "$d/idProduct")"
+    fi
+    if lsmod 2>/dev/null | grep -q "^${PROFILE_KO##*/}" 2>/dev/null; then :; fi
+    modname=$(basename "$PROFILE_KO" .ko)
+    if lsmod | awk '{print $1}' | grep -qx "$modname"; then
+      echo "driver    : loaded"
+      echo "interface : $(iw dev "$PROFILE_IFNAME" info 2>/dev/null | grep -E 'type|channel' || echo 'not present')"
+    else
+      echo "driver    : not loaded"
+    fi
+  else
+    echo "no supported dongle detected"
+  fi
+}
+
+cmd_up() {
+  need_profile
+  d=$(usbdev_with "$PROFILE_TARGET" 2>/dev/null || true)
+  if [ -z "$d" ]; then
+    d=$(usbdev_with "$PROFILE_PRESWITCH" 2>/dev/null) || { echo "dongle not on the USB bus" >&2; exit 1; }
+    iface=$(basename "$d"):1.0
+    if [ -e "/sys/bus/usb/devices/$iface/driver" ]; then
+      echo -n "$iface" > /sys/bus/usb/drivers/usb-storage/unbind 2>/dev/null || true
+    fi
+    if [ -n "$PROFILE_MSCONFIG" ]; then
+      vid=${PROFILE_PRESWITCH%%:*}; pid=${PROFILE_PRESWITCH##*:}
+      usb_modeswitch -c "$PROFILE_MSCONFIG" -v "$vid" -p "$pid" || true
+    fi
+    sleep 2
+    d=$(usbdev_with "$PROFILE_TARGET" 2>/dev/null) || { echo "mode-switch did not reach $PROFILE_TARGET" >&2; exit 1; }
+  fi
+  modname=$(basename "$PROFILE_KO" .ko)
+  if ! lsmod | awk '{print $1}' | grep -qx "$modname"; then
+    insmod "$PROFILE_KO" cfg="$PROFILE_CFG"
+  fi
+  ip link set "$PROFILE_IFNAME" up
+  echo "up: $PROFILE_IFNAME ($PROFILE_NAME)"
+}
+
+cmd_connect() {
+  need_profile
+  ssid="${1:?usage: walpad-usbmode connect <ssid>}"
+  cmd_up
+  conf="/etc/wpa_${PROFILE_IFNAME}.conf"
+  [ -f "$conf" ] || { echo "missing $conf (see docs/rust or ask for the setup command)" >&2; exit 1; }
+  pidfile="/run/wpa_supplicant_${PROFILE_IFNAME}.pid"
+  wpa_supplicant -B -i "$PROFILE_IFNAME" -c "$conf" -Dnl80211 -P "$pidfile"
+  udhcpc -i "$PROFILE_IFNAME" -n -q
+  echo "connecting to $ssid on $PROFILE_IFNAME done; check: iw dev $PROFILE_IFNAME link"
+}
+
+cmd_monitor() {
+  need_profile
+  cmd_up
+  chan="${1:-}"
+  ip link set "$PROFILE_IFNAME" down
+  iw dev "$PROFILE_IFNAME" set type monitor
+  ip link set "$PROFILE_IFNAME" up
+  [ -n "$chan" ] && iw dev "$PROFILE_IFNAME" set channel "$chan"
+  echo "monitor: $PROFILE_IFNAME${chan:+ channel $chan}"
+}
+
+cmd_scan() {
+  need_profile
+  ip link set "$PROFILE_IFNAME" down
+  iw dev "$PROFILE_IFNAME" set type managed
+  ip link set "$PROFILE_IFNAME" up
+  sleep 1
+  iw "$PROFILE_IFNAME" scan 2>&1 | grep -E "^BSS|freq:|SSID:"
+}
+
+cmd_deauth() {
+  need_profile
+  ap="${1:?usage: walpad-usbmode deauth <ap_bssid> <client_mac> [count]}"
+  client="${2:?usage: walpad-usbmode deauth <ap_bssid> <client_mac> [count]}"
+  count="${3:-2}"
+  "$KALI" status >/dev/null 2>&1 | grep -q "mounted: yes" || "$KALI" mount
+  "$KALI" run aireplay-ng --ignore-negative-one --deauth "$count" -a "$ap" -c "$client" "$PROFILE_IFNAME"
+}
+
+cmd_down() {
+  if detect_profile; then
+    ip link set "$PROFILE_IFNAME" down 2>/dev/null || true
+    pidfile="/run/wpa_supplicant_${PROFILE_IFNAME}.pid"
+    [ -f "$pidfile" ] && kill "$(cat "$pidfile")" 2>/dev/null || true
+    modname=$(basename "$PROFILE_KO" .ko)
+    lsmod | awk '{print $1}' | grep -qx "$modname" && rmmod "$modname" || true
+    echo "down"
+  else
+    echo "nothing to do"
+  fi
+}
+
+case "${1:-}" in
+  status)  cmd_status ;;
+  up)      cmd_up ;;
+  connect) shift; cmd_connect "$@" ;;
+  monitor) shift; cmd_monitor "$@" ;;
+  scan)    cmd_scan ;;
+  deauth)  shift; cmd_deauth "$@" ;;
+  down)    cmd_down ;;
+  *)
+    echo "usage: walpad-usbmode status|up|connect <ssid>|monitor [channel]|scan|deauth <ap> <client> [count]|down" >&2
+    exit 1
+    ;;
+esac
