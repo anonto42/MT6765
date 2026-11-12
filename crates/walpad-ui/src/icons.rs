@@ -60,10 +60,13 @@ pub enum Icon {
     Bolt,
     /// Notification centre bell (owner request 2026-11-12, change `device-notifications`).
     Bell,
+    /// Code editor (owner request 2026-11-12, "an ide ... geany or lite xl"): angle brackets
+    /// with a slash, `</>`.
+    Code,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 45] = [
+    pub const ALL: [Icon; 46] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -109,6 +112,7 @@ impl Icon {
         Icon::Location,
         Icon::Bolt,
         Icon::Bell,
+        Icon::Code,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -136,6 +140,7 @@ impl Icon {
             "music" => Icon::Music,
             "phone" => Icon::Phone,
             "message" | "messages" => Icon::Message,
+            "code" | "editor" => Icon::Code,
             _ => return None,
         })
     }
@@ -501,6 +506,11 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.line((12.0, 5.0), (12.0, 3.0));
             p.dot(12.0, 19.3, 1.6);
         }
+        Icon::Code => {
+            p.poly(&[(9.0, 5.0), (3.0, 12.0), (9.0, 19.0)], false);
+            p.poly(&[(15.0, 5.0), (21.0, 12.0), (15.0, 19.0)], false);
+            p.line((13.5, 4.0), (10.5, 20.0));
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -610,8 +620,10 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 45);
+        assert_eq!(Icon::ALL.len(), 46);
         assert_eq!(Icon::from_name("phone"), Some(Icon::Phone));
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
+        assert_eq!(Icon::from_name("code"), Some(Icon::Code));
+        assert_eq!(Icon::from_name("editor"), Some(Icon::Code));
     }
 }
