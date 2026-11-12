@@ -87,9 +87,58 @@ chmod +x /run/walpad/udhcpc.script
 # held off (wlan0 stays up for the AP) and resumes when the flag goes away.
 ENABLED_FILE=/var/lib/walpad/wifi-enabled
 EXCL=/run/walpad/hotspot-exclusive
+DEVD_JSON=/etc/walpad/devd.json
+json_str() {
+  sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DEVD_JSON" 2>/dev/null | head -n 1
+}
+mask_to_prefix() {
+  case "$1" in
+    255.255.255.255) echo 32 ;;
+    255.255.255.128) echo 25 ;;
+    255.255.255.0)   echo 24 ;;
+    255.255.0.0)     echo 16 ;;
+    255.0.0.0)       echo 8 ;;
+    *)               echo 24 ;;
+  esac
+}
+apply_hostname() {
+  hn=$(json_str net_hostname)
+  [ -n "$hn" ] || return 0
+  cur_hn=$(cat /proc/sys/kernel/hostname 2>/dev/null)
+  if [ "$cur_hn" != "$hn" ]; then
+    printf '%s\n' "$hn" > /etc/hostname 2>/dev/null
+    printf '%s\n' "$hn" > /proc/sys/kernel/hostname 2>/dev/null
+    say "hostname set to $hn"
+  fi
+}
+want_mac() {
+  [ -s /run/walpad/wlan0.hwmac ] || tr 'A-F' 'a-f' < /sys/class/net/$IFACE/address > /run/walpad/wlan0.hwmac 2>/dev/null
+  mode=$(json_str net_mac_mode)
+  case "$mode" in
+    custom)
+      cm=$(json_str net_mac | tr 'A-F' 'a-f')
+      [ -n "$cm" ] && { echo "$cm"; return; } ;;
+    random)
+      if [ ! -s /run/walpad/wlan0.randmac ]; then
+        printf '02:%s\n' "$(od -An -N5 -tx1 /dev/urandom 2>/dev/null | tr -s ' ' ':' | sed 's/^://;s/:$//')" > /run/walpad/wlan0.randmac
+      fi
+      cat /run/walpad/wlan0.randmac 2>/dev/null; return ;;
+  esac
+  cat /run/walpad/wlan0.hwmac 2>/dev/null
+}
+apply_mac() {
+  wm=$(want_mac)
+  cm=$(tr 'A-F' 'a-f' < /sys/class/net/$IFACE/address 2>/dev/null)
+  if [ -n "$wm" ] && [ -n "$cm" ] && [ "$wm" != "$cm" ]; then
+    ip link set $IFACE down 2>/dev/null
+    ip link set $IFACE address "$wm" 2>/dev/null && say "MAC set to $wm"
+  fi
+}
 want_client() { [ "$(cat $ENABLED_FILE 2>/dev/null)" != 0 ] && [ ! -e $EXCL ]; }
 sup_start() {
   pkill wpa_supplicant 2>/dev/null; sleep 1
+  apply_hostname
+  apply_mac
   ip link set $IFACE up 2>/dev/null
   # (no -f: Alpine's build has no debug-file support, so -f made it print its usage and exit)
   wpa_supplicant -B -i $IFACE -c $CONF -Dnl80211 -P /run/wpa_supplicant.pid >> /var/log/wpa_supplicant.log 2>&1
@@ -112,15 +161,45 @@ while true; do
     i=0; while [ $i -lt 4 ] && ! want_client; do sleep 1; i=$((i+1)); done
     continue
   fi
+  if [ -e /run/walpad/wifi-reapply ]; then
+    rm -f /run/walpad/wifi-reapply
+    apply_hostname
+    wm=$(want_mac)
+    cm=$(tr 'A-F' 'a-f' < /sys/class/net/$IFACE/address 2>/dev/null)
+    if [ -n "$wm" ] && [ -n "$cm" ] && [ "$wm" != "$cm" ]; then
+      CLIENT=restarting
+    else
+      pkill -f "udhcpc -i $IFACE" 2>/dev/null
+      ip -4 addr flush dev $IFACE 2>/dev/null
+    fi
+  fi
   [ "$CLIENT" = on ] || { sup_start; CLIENT=on; }
   state=$(wpa_cli -p /run/wpa_supplicant -i $IFACE status 2>/dev/null | sed -n 's/^wpa_state=//p')
   ip=$(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
-  if [ "$state" = "COMPLETED" ] && [ -z "$ip" ]; then
-    say "associated, requesting DHCP"
-    if udhcpc -i $IFACE -n -q -t 6 -s /run/walpad/udhcpc.script > /dev/null 2>&1; then
-      say "DHCP ok: $(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)"
-    else
-      say "DHCP got no answer (will retry)"
+  ip_mode=$(json_str net_ip_mode)
+  cfg_ip=$(json_str net_ip)
+  if [ "$state" = "COMPLETED" ]; then
+    if [ "$ip_mode" = "manual" ] && [ -n "$cfg_ip" ]; then
+      if [ "$ip" != "$cfg_ip" ]; then
+        pkill -f "udhcpc -i $IFACE" 2>/dev/null
+        pfx=$(mask_to_prefix "$(json_str net_mask)")
+        gw=$(json_str net_gateway)
+        ip -4 addr flush dev $IFACE 2>/dev/null
+        ip addr add "$cfg_ip/$pfx" dev $IFACE 2>/dev/null
+        ip link set $IFACE up 2>/dev/null
+        [ -n "$gw" ] && ip route replace default via "$gw" dev $IFACE 2>/dev/null
+        ip="$cfg_ip"
+        say "static IP ok: $cfg_ip/$pfx${gw:+ via $gw}"
+      fi
+    elif [ -z "$ip" ]; then
+      say "associated, requesting DHCP"
+      hn=$(json_str net_hostname)
+      if udhcpc -i $IFACE -n -q -t 6 ${hn:+-x hostname:$hn} -s /run/walpad/udhcpc.script > /dev/null 2>&1; then
+        ip=$(ip -4 addr show $IFACE 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
+        say "DHCP ok: $ip"
+      else
+        say "DHCP got no answer (will retry)"
+      fi
     fi
   fi
   echo "${state:-none} ${ip:-}" > /run/walpad/wifi-state
@@ -135,5 +214,5 @@ while true; do
     fi
   fi
   # the switch is checked every second, the rest every 4 s
-  i=0; while [ $i -lt 4 ] && want_client; do sleep 1; i=$((i+1)); done
+  i=0; while [ $i -lt 4 ] && want_client && [ ! -e /run/walpad/wifi-reapply ]; do sleep 1; i=$((i+1)); done
 done

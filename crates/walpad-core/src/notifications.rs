@@ -70,6 +70,12 @@ impl Notifications {
         self.every = d;
     }
 
+    /// True when the next 2 s sampling window has arrived (avoids building the sysfs snapshot on
+    /// every event-loop turn).
+    pub fn is_due(&self, now: Instant) -> bool {
+        now >= self.next
+    }
+
     pub fn status(&self) -> NotificationsStatus {
         NotificationsStatus {
             unread_count: self.store.items.iter().filter(|n| !n.read).count() as u32,

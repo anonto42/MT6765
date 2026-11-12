@@ -3277,6 +3277,17 @@ impl App {
             Tab::Home | Tab::Apps => Vec::new(),
         };
         p.cv.set_origin(0, 0);
+        if self.content_h > self.view.h && self.view.h > 0 {
+            let track = Rect::new(self.view.right() - 3, self.view.y, 2, self.view.h);
+            p.cv.rect(track, DIVIDER);
+            let thumb_h = ((self.view.h as i64 * self.view.h as i64) / self.content_h as i64)
+                .clamp(24, self.view.h as i64) as i32;
+            let max_scroll = (self.content_h - self.view.h).max(1);
+            let thumb_y = self.view.y
+                + ((self.scroll as i64 * (self.view.h - thumb_h) as i64) / max_scroll as i64)
+                    as i32;
+            p.cv.rect(Rect::new(track.x, thumb_y, 2, thumb_h), ACCENT);
+        }
     }
 }
 

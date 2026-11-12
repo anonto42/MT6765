@@ -963,6 +963,18 @@ impl Daemon {
         let bytes = serde_json::to_vec_pretty(&obj).map_err(internal)?;
         write_atomic(&path, &bytes)
             .map_err(|e| (ErrorCode::Internal, format!("cannot write {virt}: {e}")))?;
+        if key == "net_hostname" {
+            if let Some(hn) = value.as_str().filter(|s| !s.is_empty()) {
+                let line = format!("{hn}\n");
+                let _ = write_atomic(&self.root.p("/etc/hostname"), line.as_bytes());
+                let _ = std::fs::write(self.root.p("/proc/sys/kernel/hostname"), line.as_bytes());
+            }
+        }
+        if key.starts_with("net_") {
+            let run_dir = self.root.p("/run/walpad");
+            let _ = std::fs::create_dir_all(&run_dir);
+            let _ = std::fs::write(run_dir.join("wifi-reapply"), b"1\n");
+        }
         self.reload_cfg();
         Ok(json!({"key": key, "value": value}))
     }
@@ -1888,8 +1900,9 @@ impl Daemon {
         }
         // notification centre (owner request 2026-11-12, change device-notifications): watches
         // status transitions already tracked above, plus the new USB/OTG and removable-storage
-        // sysfs reads (walpad_hw::usb). Rate-limited to ~2 s inside `Notifications::tick`.
-        {
+        // sysfs reads (walpad_hw::usb). Rate-limited to ~2 s via `Notifications::is_due`.
+        let notif_now = Instant::now();
+        if self.notifications.is_due(notif_now) {
             let raw = read_battery(&self.root);
             let charging = battery::effective_status(&raw)
                 .as_deref()
@@ -1922,7 +1935,7 @@ impl Daemon {
                 hotspot_clients: hotspot.clients.unwrap_or(0),
                 gps_fix: gps.state == walpad_proto::GpsState::Fix,
             };
-            let fired = self.notifications.tick(Instant::now(), wall_ms(), snap);
+            let fired = self.notifications.tick(notif_now, wall_ms(), snap);
             if !fired.is_empty() {
                 for n in fired {
                     if let Ok(v) = serde_json::to_value(&n) {
