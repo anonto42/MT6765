@@ -253,6 +253,62 @@ fn stats_config_command_and_status() {
 }
 
 #[test]
+fn notification_commands_parse_and_status_defaults() {
+    assert_eq!(
+        req(r#"{"v":1,"id":1,"cmd":"notifications"}"#).unwrap().1,
+        Command::Notifications
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":2,"cmd":"notification_mark_read","args":{"id":7}}"#)
+            .unwrap()
+            .1,
+        Command::NotificationMarkRead { id: 7 }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":3,"cmd":"notifications_mark_all_read"}"#)
+            .unwrap()
+            .1,
+        Command::NotificationsMarkAllRead
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":4,"cmd":"notification_clear","args":{"id":3}}"#)
+            .unwrap()
+            .1,
+        Command::NotificationClear { id: 3 }
+    );
+    assert_eq!(
+        req(r#"{"v":1,"id":5,"cmd":"notifications_clear_all"}"#)
+            .unwrap()
+            .1,
+        Command::NotificationsClearAll
+    );
+    // a stray args object on a no-arg command is ignored, a missing id on the others is invalid
+    assert_eq!(
+        code(req(r#"{"v":1,"id":1,"cmd":"notification_mark_read"}"#)),
+        ErrorCode::InvalidArgs
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"notification_clear","args":{}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+    let n = Notification {
+        id: 1,
+        ts_ms: 1000,
+        category: NotificationCategory::Charging,
+        title: "Charger connected".into(),
+        body: "Now charging.".into(),
+        read: false,
+    };
+    let v = serde_json::to_value(&n).unwrap();
+    assert_eq!(v["category"], "charging");
+    let back: Notification = serde_json::from_value(v).unwrap();
+    assert_eq!(back, n);
+    assert_eq!(NotificationsStatus::default().unread_count, 0);
+}
+
+#[test]
 fn hotspot_config_is_validated_and_redacted() {
     let (_, c) = req(
         r#"{"v":1,"id":1,"cmd":"hotspot_config","args":{"ssid":"WalPad Café","secret":"hunter2hunter2"}}"#,
@@ -461,6 +517,7 @@ fn sample_status() -> Status {
             bluetooth: "unavailable".into(),
             sd_card: "unavailable".into(),
         },
+        notifications: NotificationsStatus::default(),
     }
 }
 

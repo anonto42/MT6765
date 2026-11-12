@@ -26,8 +26,9 @@ pub use status::{
     AppState, AudioStatus, Battery, BatterySource, BluetoothController, BluetoothDevice,
     BluetoothStatus, CallState, GpsState, GpsStatus, Hardware, HotspotInternet, HotspotState,
     HotspotStatus, JackKind, JackStatus, LegacyStatus, LockKind, LockStatus, MobileData, MobileReg,
-    MobileStatus, ModemState, PhoneStatus, ScreenState, SimState, StatsItems, StatsStatus, Status,
-    VpnKind, VpnProfile, VpnState, VpnStatus, WifiRadio, WifiStatus,
+    MobileStatus, ModemState, Notification, NotificationCategory, NotificationsStatus, PhoneStatus,
+    ScreenState, SimState, StatsItems, StatsStatus, Status, VpnKind, VpnProfile, VpnState,
+    VpnStatus, WifiRadio, WifiStatus,
 };
 
 use serde::{Deserialize, Serialize};

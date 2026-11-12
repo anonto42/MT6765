@@ -86,6 +86,7 @@ fn status(st: StatsStatus) -> Status {
             bluetooth: "unavailable".into(),
             sd_card: "unavailable".into(),
         },
+        notifications: walpad_proto::NotificationsStatus::default(),
     }
 }
 

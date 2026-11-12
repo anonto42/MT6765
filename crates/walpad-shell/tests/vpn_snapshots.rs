@@ -64,6 +64,7 @@ fn status(vpn: VpnStatus) -> Status {
             bluetooth: "unavailable".into(),
             sd_card: "unavailable".into(),
         },
+        notifications: walpad_proto::NotificationsStatus::default(),
     }
 }
 

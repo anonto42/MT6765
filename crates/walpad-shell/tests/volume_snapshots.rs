@@ -69,6 +69,7 @@ fn status(volume: u8, muted: bool, available: bool) -> Status {
             bluetooth: "unavailable".into(),
             sd_card: "unavailable".into(),
         },
+        notifications: walpad_proto::NotificationsStatus::default(),
     }
 }
 fn app(w: i32, h: i32, tab: Tab, st: Status) -> App {

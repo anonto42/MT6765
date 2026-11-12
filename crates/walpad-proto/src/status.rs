@@ -491,6 +491,41 @@ pub struct LockStatus {
     pub auto_lock_s: u32,
 }
 
+/// What generated a notification (owner request 2026-11-12, change `device-notifications`: "notify
+/// every event like charging, any OTG or other things was connected"). `Storage` is the SD card /
+/// USB mass-storage mount-remove signal `walpad-storage` already handles; `UsbDevice` is a generic
+/// OTG peripheral attach-detach (new minimal sysfs detection: nothing tracked this before).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationCategory {
+    Charging,
+    Storage,
+    UsbDevice,
+    MobileData,
+    Bluetooth,
+    Gps,
+    Hotspot,
+}
+
+/// One entry in the notification centre's bounded history.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Notification {
+    pub id: u64,
+    /// Unix milliseconds.
+    pub ts_ms: u64,
+    pub category: NotificationCategory,
+    pub title: String,
+    pub body: String,
+    pub read: bool,
+}
+
+/// Badge on the bell icon (owner request 2026-11-12).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationsStatus {
+    pub unread_count: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Status {
     pub battery: Battery,
@@ -525,6 +560,9 @@ pub struct Status {
     pub vpn: VpnStatus,
     pub apps: Vec<AppState>,
     pub hardware: Hardware,
+    /// Badge for the notification centre (owner request 2026-11-12).
+    #[serde(default)]
+    pub notifications: NotificationsStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

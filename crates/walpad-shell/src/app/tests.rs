@@ -68,6 +68,7 @@ pub fn status(brightness: u32, apps: &[(&str, bool)]) -> Status {
             bluetooth: "unavailable".into(),
             sd_card: "unavailable".into(),
         },
+        notifications: walpad_proto::NotificationsStatus::default(),
     }
 }
 

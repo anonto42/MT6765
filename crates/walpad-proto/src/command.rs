@@ -84,6 +84,11 @@ pub const COMMAND_NAMES: &[&str] = &[
     "contact_import",
     "call_log",
     "call_log_clear",
+    "notifications",
+    "notification_mark_read",
+    "notifications_mark_all_read",
+    "notification_clear",
+    "notifications_clear_all",
 ];
 
 /// Commands without arguments.
@@ -109,6 +114,9 @@ const NO_ARG_COMMANDS: &[&str] = &[
     "contact_list",
     "call_log",
     "call_log_clear",
+    "notifications",
+    "notifications_mark_all_read",
+    "notifications_clear_all",
 ];
 
 /// Roles of the default apps (`default_app`; /etc/walpad/defaults.json).
@@ -532,6 +540,17 @@ pub enum Command {
     /// The call log (oldest first).
     CallLog,
     CallLogClear,
+    /// Notification centre (owner request 2026-11-12, change `device-notifications`): the bounded
+    /// history, newest first.
+    Notifications,
+    NotificationMarkRead {
+        id: u64,
+    },
+    NotificationsMarkAllRead,
+    NotificationClear {
+        id: u64,
+    },
+    NotificationsClearAll,
 }
 
 /// Hardware-key events published on the `input` topic for the shell (never touch).

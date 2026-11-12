@@ -85,6 +85,7 @@ fn status() -> Status {
             bluetooth: "unavailable".into(),
             sd_card: "unavailable".into(),
         },
+        notifications: walpad_proto::NotificationsStatus::default(),
     }
 }
 fn shot(name: &str, w: i32, h: i32, status: Option<Status>, clock_24h: bool) {
