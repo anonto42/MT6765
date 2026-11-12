@@ -82,7 +82,6 @@ rsh "set -e; cd '$REL'; for n in *.new; do chmod 755 \"\$n\"; mv \"\$n\" \"\${n%
      if [ -L current ] && [ \"\$(readlink current)\" != '$REL' ]; then ln -sfn \"\$(readlink current)\" previous; fi
      ln -sfn '$REL' current
      for n in \$(ls '$REL'); do ln -sfn '$BASE/current/'\"\$n\" '$BIN/'\"\$n\"; done
-     [ -x '$BIN/walpad-ctl' ] && ln -sfn '$BIN/walpad-ctl' '$BIN/timeout'
      echo deployed $SHA"
 # final check: what is live now must be exactly what was sent
 while read -r h n; do
