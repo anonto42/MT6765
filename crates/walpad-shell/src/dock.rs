@@ -834,6 +834,15 @@ impl Dock {
                             // going Home puts the system keyboard and the mouse pad away
                             cmds.push(Cmd::KeyboardHide);
                             cmds.push(Cmd::MousePadHide);
+                        } else if b == DockButton::CloseApp {
+                            // by window id, not by guessing the app from WM_CLASS (owner
+                            // report, 2026-11-12: the dock's close button did nothing while in
+                            // a terminal - terminal and Kali share one class, "st", so
+                            // `app_for_class` could pick the wrong app, or an app that was not
+                            // even running, and silently close nothing)
+                            if self.active != 0 {
+                                cmds.push(Cmd::CloseWindow(self.active));
+                            }
                         } else {
                             let class = self.class_of(self.active);
                             cmds.extend(command_for(b, &self.apps, &class));

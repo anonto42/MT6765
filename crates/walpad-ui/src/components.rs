@@ -210,10 +210,10 @@ impl Painter<'_> {
         self.text(s, Style::new(Face::Regular, SIZE_CAPTION, color), r, align);
     }
 
-    // ------------------------------------------------------------------ outlines
-    /// The basic line-art control: a translucent `SURFACE` fill (blended over the wallpaper) and
-    /// a rounded outline; pressed adds `PRESSED_TINT`. `active` marks the current destination
-    /// (full-white outline).
+    // ------------------------------------------------------------------ surfaces & boxes
+    /// The basic boxy control: a translucent `SURFACE` fill (blended over the wallpaper) with sharp
+    /// 0 px corners and no box outline; pressed adds `PRESSED_TINT`. `active` marks the current
+    /// destination with a stronger fill and a 2 px left indicator bar.
     pub fn outline_box(
         &mut self,
         r: Rect,
@@ -226,56 +226,39 @@ impl Painter<'_> {
     }
 
     /// `outline_box` with an explicit surface fill (`SURFACE_ICON` for icon boxes). Fill only, no
-    /// stroke (owner request 2026-11-12: no borders on app icons, dropdowns or other controls);
-    /// `active`/`pressed` read through a stronger fill instead of a brighter outline.
+    /// box outline (owner request 2026-11-12: 0 px radius, no borders on app icons, dropdowns or
+    /// other controls); `active` reads through a stronger fill + 2 px indicator bar.
     pub fn surface_box(
         &mut self,
         r: Rect,
-        radius: i32,
+        _radius: i32,
         fill: Tint,
         pressed: bool,
         active: bool,
         disabled: bool,
     ) {
-        self.cv.rrect(r, radius, fill);
+        self.cv.rect(r, fill);
         if active && !disabled {
-            self.cv.rrect(r, radius, SURFACE_STRONG);
+            self.cv.rect(r, SURFACE_STRONG);
+            self.cv.rect(Rect::new(r.x, r.y, 2, r.h), TEXT);
         }
         if pressed && !disabled {
-            self.cv.rrect(r, radius, PRESSED_TINT);
+            self.cv.rect(r, PRESSED_TINT);
         }
     }
 
-    /// Rounded-square icon button (sidebar 56, Home grid 64, Apps panel 48).
+    /// Sharp square icon button (sidebar 56, Home grid 64, Apps panel 48).
     pub fn icon_box(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
-        self.surface_box(
-            r,
-            RADIUS_ICON.min(r.w / 3),
-            SURFACE_ICON,
-            pressed,
-            active,
-            false,
-        );
+        self.surface_box(r, 0, SURFACE_ICON, pressed, active, false);
         let s = icon_for_box(r.w);
         self.cv
             .icon(icon, r.x + (r.w - s) / 2, r.y + (r.h - s) / 2, s, TEXT);
     }
 
-    /// Round button with an icon (the sidebar's Apps toggle). Fill only, no outline (owner
-    /// request 2026-11-12): circle fill, a brighter fill for pressed/active; nothing is drawn
-    /// outside the circle inscribed in `r` (its bounding-box corners stay untouched).
+    /// Square icon button with strong backing (the sidebar's Apps toggle). Sharp 0 px corners, fill
+    /// only, no outline (owner request 2026-11-12).
     pub fn round_button(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
-        let d = r.w.min(r.h);
-        let (cx, cy) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
-        let rad = d as f32 / 2.0;
-        // it sits on the wallpaper art (bottom of the sidebar): the strong fill keeps the chevron clear
-        self.cv.circle(cx, cy, rad, SURFACE_STRONG);
-        if active {
-            self.cv.circle(cx, cy, rad, SURFACE_STRONG);
-        }
-        if pressed {
-            self.cv.circle(cx, cy, rad, PRESSED_TINT);
-        }
+        self.surface_box(r, 0, SURFACE_STRONG, pressed, active, false);
         self.cv.icon(
             icon,
             r.x + (r.w - ICON) / 2,
@@ -286,7 +269,7 @@ impl Painter<'_> {
     }
 
     /// An app in a grid cell: `box_px` icon box centred at the top of `cell`, the name under it.
-    /// A running app has a small dot in the box's top-right corner.
+    /// A running app has a small square indicator in the box's top-right corner.
     #[allow(clippy::too_many_arguments)]
     pub fn app_icon(
         &mut self,
@@ -301,7 +284,7 @@ impl Painter<'_> {
         self.icon_box(b, icon, pressed, false);
         if running {
             self.cv
-                .circle((b.right() - 9) as f32, (b.y + 9) as f32, 3.0, TEXT);
+                .rect(Rect::new(b.right() - 10, b.y + 4, 6, 6), TEXT);
         }
         let px = if box_px >= BOX_GRID {
             SIZE_LABEL
@@ -329,24 +312,19 @@ impl Painter<'_> {
         );
     }
 
-    /// Card container: translucent `SURFACE` fill only (pressed: + `PRESSED_TINT`). No outline
-    /// (owner request 2026-11-12, `ui-polish`): a card/row-group reads apart from the page purely
-    /// through the shade difference between `SURFACE` and `PAGE_SURFACE`/the wallpaper, the same
-    /// grouped-section language as iOS/Material settings (background colour, not a box outline).
+    /// Card container: translucent `SURFACE` fill only (pressed: + `PRESSED_TINT`), 0 px radius, no
+    /// outline.
     pub fn card(&mut self, r: Rect, pressed: bool) {
-        self.cv.rrect(r, RADIUS_CARD, SURFACE);
+        self.cv.rect(r, SURFACE);
         if pressed {
-            self.cv.rrect(r, RADIUS_CARD, PRESSED_TINT);
+            self.cv.rect(r, PRESSED_TINT);
         }
     }
-    /// The page surface of a full-screen page: `PAGE_SURFACE` over the wallpaper, no outline
-    /// (owner request 2026-11-12, `ui-polish`: the scrollable content area read as a box inside a
-    /// box next to every card/row-group it holds; the shade difference from the wallpaper and from
-    /// the cards on top of it is enough). Drawn once, into the cached background layer (never per
-    /// row).
+    /// The page surface of a full-screen page: `PAGE_SURFACE` over the wallpaper, flush to the
+    /// content area with 0 px radius and no outline.
     pub fn page_surface(&mut self, content: Rect) {
         let r = page_rect(content);
-        self.cv.rrect(r, RADIUS_CARD, PAGE_SURFACE);
+        self.cv.rect(r, PAGE_SURFACE);
     }
     /// The backing of a run of list rows (Settings, Device): a card around them, so rows over the
     /// wallpaper art stay readable. The rows themselves add no fill (only the pressed tint).
@@ -355,11 +333,10 @@ impl Painter<'_> {
             self.card(r, false);
         }
     }
-    /// Popover / dropdown / dialog / sheet body: `SURFACE_STRONG` fill only, no border (owner
-    /// request 2026-11-12: no borders on dropdowns/pages); the stronger fill carries the edge
-    /// against whatever floats under it.
+    /// Popover / dropdown / dialog / sheet body: opaque `SURFACE_STRONG.over(BG)` fill with 0 px
+    /// radius and no box outline, preventing underlying icons or text from bleeding through.
     pub fn popover(&mut self, r: Rect) {
-        self.cv.rrect(r, RADIUS_CARD, SURFACE_STRONG);
+        self.cv.rect(r, SURFACE_STRONG.over(BG));
     }
     /// 1 px horizontal divider.
     pub fn divider(&mut self, x: i32, y: i32, w: i32) {

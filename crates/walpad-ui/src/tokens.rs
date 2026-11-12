@@ -122,7 +122,7 @@ pub const SURFACE_STRONG: Tint = Tint::new(BLACK, 65);
 /// the gaps between cards; rows and cards add their own `SURFACE` on top.
 pub const PAGE_SURFACE: Tint = Tint::new(BLACK, 45);
 /// Margin between the page surface and the content area edge / screen bottom (px).
-pub const PAGE_MARGIN: i32 = 8;
+pub const PAGE_MARGIN: i32 = 0;
 /// small icon boxes (Home grid, sidebar, panel icons, keys) (30 %).
 pub const SURFACE_ICON: Tint = Tint::new(BLACK, 30);
 /// Pressed state: drawn over the surface fill (white 12 %); the outline turns full white too.
@@ -145,10 +145,10 @@ pub const SP_5: i32 = 24;
 pub const SP_6: i32 = 32;
 pub const SP_7: i32 = 48;
 
-/// Corner radius: 12 for buttons and fields, 16 for icon boxes, cards, popovers and sheets.
-pub const RADIUS: i32 = 12;
-pub const RADIUS_CARD: i32 = 16;
-pub const RADIUS_ICON: i32 = 16;
+/// Corner radius: 0 px everywhere for the boxy geometric UI.
+pub const RADIUS: i32 = 0;
+pub const RADIUS_CARD: i32 = 0;
+pub const RADIUS_ICON: i32 = 0;
 /// Stroke width of outlines (px).
 pub const OUTLINE_W: f32 = 1.5;
 
