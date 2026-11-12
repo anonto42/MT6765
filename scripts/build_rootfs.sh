@@ -39,8 +39,13 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
 # rule; usb-modeswitch-udev pulls in tcl, which the no-Python build must not have.
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
-      openbox matchbox-keyboard st xterm mesa-dri-gallium font-dejavu font-noto-emoji font-noto font-noto-bengali font-noto-devanagari font-noto-arabic font-noto-naskh-arabic font-noto-nastaliq-urdu font-noto-tamil font-noto-telugu font-noto-gujarati font-noto-gurmukhi font-noto-kannada font-noto-malayalam font-noto-oriya font-noto-sinhala font-noto-thai font-noto-hebrew font-noto-khmer font-noto-myanmar font-noto-lao font-noto-georgian font-noto-armenian font-noto-ethiopic font-noto-cjk font-noto-symbols font-noto-math \
+      openbox matchbox-keyboard st xterm fish mesa-dri-gallium font-dejavu font-noto-emoji font-noto font-noto-bengali font-noto-devanagari font-noto-arabic font-noto-naskh-arabic font-noto-nastaliq-urdu font-noto-tamil font-noto-telugu font-noto-gujarati font-noto-gurmukhi font-noto-kannada font-noto-malayalam font-noto-oriya font-noto-sinhala font-noto-thai font-noto-hebrew font-noto-khmer font-noto-myanmar font-noto-lao font-noto-georgian font-noto-armenian font-noto-ethiopic font-noto-cjk font-noto-symbols font-noto-math \
       python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme"
+# fish (owner request 2026-11-12, change terminal-autocomplete-shell): autosuggestions + tab
+# completion out of the box, no plugin wiring needed (unlike zsh+zsh-autosuggestions); only the
+# "terminal" app's st runs it (-e fish in apps.json), kept out of the NO_PY trim list below so
+# both images get it. The "kali" app keeps its chroot's own shell untouched (separate Debian
+# rootfs, not built by this script).
 # No-Python image: python3 (+tkinter/tk/xlib) only served the .py runtime.  xdotool was used only by
 # walpad-keys.py/walpad-devd.py (the Rust core injects keys itself over XTEST).  Kept on purpose:
 # matchbox-keyboard and alsa-utils (amixer), which walpad-core spawns; xset/xsetroot (session);
