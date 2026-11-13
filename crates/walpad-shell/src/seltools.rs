@@ -2,9 +2,11 @@
 //! anything"): two small windows the shell owns, over the apps.
 //!
 //! - `walpad-seltools`: Cut, Copy, Paste, Select all, Undo (a terminal in front gets only Copy and
-//!   Paste: Ctrl+C there is an interrupt). Shown while a text input has the XIM focus (just above
-//!   the keyboard, or at the bottom edge) and for a while after something was selected
-//!   (PRIMARY changed owner: a long-press selection, a text selection in a browser).
+//!   Paste: Ctrl+C there is an interrupt). Shown for a while after something was selected (PRIMARY
+//!   changed owner: a long-press selection, a text selection in a browser), just above the
+//!   keyboard or at the bottom edge - NOT just because a text input has the focus (owner report
+//!   2026-11-13: "i don't need [it on top of the keyboard] becose our latest sytem of copy will
+//!   cover thows" - merely focusing a field used to show it with nothing to act on yet).
 //! - `walpad-clipboard`: the clipboard history (Apps panel > Tools > Clipboard); a tap on an entry
 //!   pastes it.
 //!
@@ -137,8 +139,6 @@ pub fn list_rect(area: (i32, i32), bottom_h: i32, entries: usize) -> Rect {
 /// When the toolbar is shown (pure).
 #[derive(Debug, Default, Clone)]
 pub struct BarState {
-    /// A text input has the XIM focus.
-    pub text_focus: bool,
     selection_until: Option<u64>,
     /// The shell's own screen is in front: no toolbar over it.
     pub home: bool,
@@ -156,9 +156,7 @@ impl BarState {
         self.selection_until = None;
     }
     pub fn visible(&self, now: u64) -> bool {
-        !self.home
-            && !self.dock_out
-            && (self.text_focus || self.selection_until.is_some_and(|t| now < t))
+        !self.home && !self.dock_out && self.selection_until.is_some_and(|t| now < t)
     }
     /// When the visibility may change by itself.
     pub fn deadline(&self) -> Option<u64> {
@@ -752,15 +750,17 @@ mod tests {
     fn toolbar_visibility_rule() {
         let mut s = BarState::default();
         assert!(!s.visible(0));
-        s.text_focus = true;
-        assert!(s.visible(0), "a focused text input shows it");
+        // owner report 2026-11-13, "i don't need [it on top of the keyboard] becose our latest
+        // sytem of copy will cover thows": merely focusing a text input no longer shows it -
+        // only a real selection does.
         s.home = true;
+        s.selection(0);
         assert!(!s.visible(0), "never over the shell's own screen");
         s.home = false;
         s.dock_out = true;
         assert!(!s.visible(0), "the expanded dock covers its place");
         s.dock_out = false;
-        s.text_focus = false;
+        s.clear_selection();
         s.selection(1000);
         assert!(s.visible(1000 + SELECTION_MS - 1));
         assert!(

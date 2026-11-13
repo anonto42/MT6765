@@ -674,7 +674,6 @@ impl Shell {
                     .unwrap_or_default();
                 ok = e.update_list(&entries, &mut self.fonts).is_ok();
             }
-            self.bar.text_focus = self.focus.has_focus();
             self.bar.home = e.home();
             self.bar.dock_out = self.dock.as_ref().is_some_and(|d| d.expanded());
             let want = self.bar.visible(now);
