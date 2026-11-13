@@ -114,6 +114,15 @@ fi
 
 fi  # SAFE
 
+# Kernel/VM/CPU/eMMC tuning for smoother UI, browser, and audio stability
+[ -w /sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us ] && echo 500 > /sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us 2>/dev/null
+[ -w /sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us ] && echo 20000 > /sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us 2>/dev/null
+[ -w /sys/block/mmcblk0/queue/scheduler ] && echo none > /sys/block/mmcblk0/queue/scheduler 2>/dev/null
+[ -w /proc/sys/vm/vfs_cache_pressure ] && echo 50 > /proc/sys/vm/vfs_cache_pressure 2>/dev/null
+[ -w /proc/sys/vm/dirty_background_ratio ] && echo 5 > /proc/sys/vm/dirty_background_ratio 2>/dev/null
+[ -w /proc/sys/vm/dirty_ratio ] && echo 15 > /proc/sys/vm/dirty_ratio 2>/dev/null
+[ -w /proc/sys/vm/swappiness ] && echo 10 > /proc/sys/vm/swappiness 2>/dev/null
+
 klog "walpad-init finished starting services"
 # main loop: log size caps (card M9.1).  Init itself is the keeper, no extra daemon.
 while true; do sleep "${WALPAD_LOGCAP_INTERVAL:-300}"; walpad-logcap; done
