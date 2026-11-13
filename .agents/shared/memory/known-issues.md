@@ -134,3 +134,26 @@
     `run`), not via `apk add` into the base Alpine rootfs -- the chroot shares the host kernel so it
     sees the dongle's netdev directly, and this keeps the security-testing tool stack out of the base
     image.
+- Headphone impedance always reads 0 (2026-11-13, `openspec/changes/headphone-impedance-muffled-audio/`):
+  do NOT assume `set_hp_impedance_ctl` is NULL just because `Audio HP ImpeDance Setting` (numid 20)
+  reads 0 -- in `mtk-soc-codec-6357.c`, registration (`init_afe_ops`/`set_codec_ops` in
+  `mt6765-sound.c`) is unconditional and matches this board's `r1_defconfig` exactly. The real cause:
+  `walpad-audio` turns `Audio_Amp_L_Switch`/`Audio_Amp_R_Switch` On at boot and never back off, which
+  keeps `mAudio_Ana_DevicePower[HEADSETL/R]` (so `GetDLStatus()`) permanently true, which trips
+  `OpenHeadPhoneImpedanceSetting()`'s very first guard (`if (GetDLStatus()) return false;`) on every
+  read, so `detect_impedance()` never runs. `hp_impedance` also has zero downstream consumers in this
+  driver -- fixing the readback alone changes nothing audible. `Apply_N12DB_Gain` (numid 22, a real
+  `-12dB` de-gain on the headset IVBUF path inside `Headset_Speaker_Amp_Change()`) is the one real,
+  wired, currently-Off-by-default gain-compensation knob that actually affects headphone playback;
+  worth trying by ear (bounce `Headset_Speaker_Amp_Switch` after setting it, see the OpenSpec
+  proposal) before any kernel work on this path.
+- Compile-checking one in-tree (obj-y) kernel source file with `make path/to/file.o` does NOT pick up
+  the parent directory's `subdir-ccflags-y` (e.g. `sound/soc/mediatek/Makefile`'s `-I.../common_int`,
+  `-I.../codec/$(MTK_CODEC)`) the way a full `make modules`/`make vmlinux` build would -- pass the
+  same `-I` paths explicitly via `KCFLAGS` (see `scripts/build_codec_check.sh`). Also: Debian's
+  packaged clang-11.0.1-2 splits function-pointer-signature mismatches into
+  `-Wincompatible-function-pointer-types`, separate from `-Wincompatible-pointer-types` (which this
+  kernel tree already disables treewide) -- the real vendor clang-11.0.1 r383902 toolchain does not
+  make this split, so a pre-existing, harmless `int`-vs-`void` `.remove` mismatch (present identically
+  in both `mt6357` and `mt6358` codec drivers) only errors under the stand-in toolchain; suppress it
+  in the build script's flags, don't "fix" source that builds fine on the real toolchain.
