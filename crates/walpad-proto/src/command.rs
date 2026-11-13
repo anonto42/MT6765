@@ -54,6 +54,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "screenshot",
     "set_setting",
     "set_time",
+    "open_map",
     "power_menu",
     "volume_set",
     "volume_delta",
@@ -473,6 +474,11 @@ pub enum Command {
     SetTime {
         datetime: String,
     },
+    /// Open OpenStreetMap in the browser at the given WGS84 coordinates.
+    OpenMap {
+        lat: f64,
+        lon: f64,
+    },
     /// The shell tells the core its power menu opened or closed (the core routes the volume and
     /// power keys to the shell while it is open). `open: true` from a client also opens it.
     PowerMenu {
@@ -858,6 +864,14 @@ impl Command {
             Command::SetSetting { key, value } => validate_setting(key, value),
             Command::SetTime { datetime } if !valid_datetime(datetime) => {
                 Err("datetime must be YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS".into())
+            }
+            Command::OpenMap { lat, lon }
+                if !lat.is_finite()
+                    || !(-90.0..=90.0).contains(lat)
+                    || !lon.is_finite()
+                    || !(-180.0..=180.0).contains(lon) =>
+            {
+                Err("lat must be -90..90 and lon -180..180".into())
             }
             Command::StatsConfig {
                 cpu: None,

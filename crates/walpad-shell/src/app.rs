@@ -216,6 +216,7 @@ pub enum Target {
     GpsSwitch,
     GpsCopyCoords,
     GpsCopyLink,
+    GpsOpenMap,
     MobileCard,
     MobileRadio,
     MobileDataSwitch,
@@ -308,7 +309,7 @@ pub enum Target {
     NotificationsClearAll,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
     SetBrightness(u8),
     /// `volume_set` percent 0-100, `mute`, `volume_test` (owner request 2026-11-10).
@@ -464,6 +465,8 @@ pub enum Cmd {
     Setting(&'static str, Value),
     /// `set_time`: set the system clock manually (`YYYY-MM-DD HH:MM`).
     SetTime(String),
+    /// `open_map`: open OpenStreetMap in the browser at `(lat, lon)`.
+    OpenMap(f64, f64),
     RestartShell,
     Power {
         poweroff: bool,
@@ -708,6 +711,7 @@ impl Cmd {
             Cmd::Stats(i, on) => ("stats_config", json!({ i.key(): on })),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::SetTime(dt) => ("set_time", json!({"datetime": dt})),
+            Cmd::OpenMap(lat, lon) => ("open_map", json!({"lat": lat, "lon": lon})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
             Cmd::PowerMenuState(open) => ("power_menu", json!({"open": open})),
             Cmd::Power { poweroff } => (
@@ -820,6 +824,8 @@ pub struct Model {
     /// Notification centre list (owner request 2026-11-12, change `device-notifications`),
     /// fetched when the screen opens; the unread badge comes from `status.notifications` instead.
     pub notifications: Vec<walpad_proto::Notification>,
+    /// Quick Settings "Screen off" requires two taps within 3 s so accidental taps don't sleep.
+    pub screen_off_armed_until: Option<Ms>,
 }
 
 impl Model {
@@ -858,6 +864,7 @@ impl Model {
             media: media::MediaModel::default(),
             phone: PhoneModel::default(),
             notifications: Vec::new(),
+            screen_off_armed_until: None,
         }
     }
 
@@ -1807,6 +1814,10 @@ impl App {
             }
             dirty = true;
         }
+        if self.model.screen_off_armed_until.is_some_and(|t| now >= t) {
+            self.model.screen_off_armed_until = None;
+            dirty = true;
+        }
         if matches!(&self.model.overlay, Some(Overlay::PowerMenu { until, .. }) if now >= *until) {
             self.close_power_menu();
             dirty = true;
@@ -1891,6 +1902,7 @@ impl App {
             toast,
             osd,
             self.armed_until(),
+            self.model.screen_off_armed_until,
             menu,
             live,
             fling,
@@ -2310,6 +2322,17 @@ impl App {
                     self.toast("Map link copied: paste it in the browser", Tone::Info);
                 }
             }
+            Target::GpsOpenMap if interactive => {
+                if let Some((la, lo)) = self
+                    .model
+                    .status
+                    .as_ref()
+                    .and_then(|s| Some((s.gps.lat?, s.gps.lon?)))
+                {
+                    out.cmd(Cmd::OpenMap(la, lo));
+                    self.toast("Opening OpenStreetMap...", Tone::Info);
+                }
+            }
             Target::NotificationsCard => self.go(Tab::Notifications, out),
             Target::NotificationRow(i) if interactive => {
                 if let Some(it) = self.model.notifications.get(i) {
@@ -2492,7 +2515,20 @@ impl App {
                 out.cmd(Cmd::JackForce(next));
             }
             Target::Rotation if interactive => out.cmd(Cmd::RotateToggle),
-            Target::ScreenOff if interactive => out.cmd(Cmd::ScreenOff),
+            Target::ScreenOff if interactive => {
+                if self
+                    .model
+                    .screen_off_armed_until
+                    .is_some_and(|u| self.now < u)
+                {
+                    self.model.screen_off_armed_until = None;
+                    self.close_overlay();
+                    out.cmd(Cmd::ScreenOff);
+                } else {
+                    self.model.screen_off_armed_until = Some(self.now + POWER_ARM_MS);
+                    self.toast("Tap again to turn screen off", Tone::Warning);
+                }
+            }
             Target::Scan
                 if interactive
                     && !self.model.net.scanning
@@ -2756,6 +2792,10 @@ impl App {
             }
             Target::Store(t) if interactive => self.on_store_tap(t, out),
             Target::Phone(t) => self.on_phone_tap(t, out),
+            Target::Back if self.active == Tab::Gps => {
+                self.model.settings_page = None;
+                self.go(Tab::Settings, out);
+            }
             Target::Back => {
                 self.model.settings_page = match self.model.settings_page {
                     Some(Page::Logs) => Some(Page::Maintenance),

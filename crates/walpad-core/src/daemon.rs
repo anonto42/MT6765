@@ -930,6 +930,24 @@ impl Daemon {
         self.apply_charger_policy(&raw);
     }
 
+    fn open_map(&self, lat: f64, lon: f64) -> CmdResult {
+        if !lat.is_finite()
+            || !(-90.0..=90.0).contains(&lat)
+            || !lon.is_finite()
+            || !(-180.0..=180.0).contains(&lon)
+        {
+            return Err((
+                ErrorCode::InvalidArgs,
+                "lat must be -90..90 and lon -180..180".into(),
+            ));
+        }
+        let url = format!(
+            "https://www.openstreetmap.org/?mlat={lat:.5}&mlon={lon:.5}#map=17/{lat:.5}/{lon:.5}"
+        );
+        self.spawn_simple("firefox-esr", &[&url]);
+        Ok(json!({"url": url}))
+    }
+
     fn set_time(&self, datetime: &str) -> CmdResult {
         if !walpad_proto::valid_datetime(datetime) {
             return Err((
@@ -1434,6 +1452,7 @@ impl Daemon {
             Command::Screenshot => self.screenshot(),
             Command::SetSetting { key, value } => self.set_setting(&key, value),
             Command::SetTime { datetime } => self.set_time(&datetime),
+            Command::OpenMap { lat, lon } => self.open_map(lat, lon),
             Command::Power {
                 confirmed: false, ..
             } => Err((ErrorCode::Refused, "power requires confirmed: true".into())),

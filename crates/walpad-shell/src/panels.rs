@@ -437,10 +437,15 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     } else {
         "Theme: Light"
     };
+    let screen_lbl = if m.screen_off_armed_until.is_some() {
+        "Tap again: Screen off"
+    } else {
+        "Screen off"
+    };
     for (r, icon, label, t) in [
         (g.rotation, Icon::Rotate, rot, Target::Rotation),
         (g.theme, Icon::Sun, theme_lbl, Target::ThemeToggle),
-        (g.screen_off, Icon::Screen, "Screen off", Target::ScreenOff),
+        (g.screen_off, Icon::Screen, screen_lbl, Target::ScreenOff),
     ] {
         qs_row(p, r, icon, label, None, false, pr(t), !online);
         hits.push((r, t));

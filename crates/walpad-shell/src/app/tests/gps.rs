@@ -89,24 +89,25 @@ fn settings_has_a_gps_entry() {
 fn copy_buttons_put_the_position_and_the_map_link_on_the_clipboard() {
     let mut app = online();
     open_screen(&mut app);
-    // no position: no Copy buttons
+    // no position: no Copy / Map buttons, but Back arrow is present
+    assert!(app.content_hits.iter().any(|(_, t)| *t == Target::Back));
     assert!(app
         .content_hits
         .iter()
-        .all(|(_, t)| !matches!(t, Target::GpsCopyCoords | Target::GpsCopyLink)));
+        .all(|(_, t)| !matches!(t, Target::GpsCopyCoords | Target::GpsOpenMap)));
     set_gps(&mut app, fix);
     let out = tap(&mut app, Target::GpsCopyCoords);
     assert_eq!(out.cmds, vec![Cmd::CopyText("23.75123, 90.40988".into())]);
     assert_eq!(toast_text(&app).as_deref(), Some("Position copied"));
-    let out = tap(&mut app, Target::GpsCopyLink);
+    let out = tap(&mut app, Target::GpsOpenMap);
+    assert_eq!(out.cmds, vec![Cmd::OpenMap(23.75123, 90.40988)]);
     assert_eq!(
-        out.cmds,
-        vec![Cmd::CopyText(
-            "https://www.openstreetmap.org/?mlat=23.75123&mlon=90.40988#map=17/23.75123/90.40988"
-                .into()
-        )]
+        toast_text(&app).as_deref(),
+        Some("Opening OpenStreetMap...")
     );
-    assert!(toast_text(&app).unwrap().starts_with("Map link copied"));
+    // Back arrow returns to Settings
+    tap(&mut app, Target::Back);
+    assert_eq!(app.active, Tab::Settings);
 }
 
 #[test]

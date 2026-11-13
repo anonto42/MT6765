@@ -321,7 +321,12 @@ fn home_taps_launch_apps_or_navigate() {
         tap(&mut app, Target::Rotation).cmds,
         vec![Cmd::RotateToggle]
     );
+    // Screen off requires two taps within 3 s
+    assert!(tap(&mut app, Target::ScreenOff).cmds.is_empty());
+    assert!(app.model.screen_off_armed_until.is_some());
     assert_eq!(tap(&mut app, Target::ScreenOff).cmds, vec![Cmd::ScreenOff]);
+    assert!(app.model.screen_off_armed_until.is_none());
+    quick(&mut app);
     // no Keyboard row any more: the keyboard opens where it is needed (terminal, dock)
     let qs: Vec<Target> = app.overlay_hits.iter().map(|(_, t)| *t).collect();
     assert_eq!(

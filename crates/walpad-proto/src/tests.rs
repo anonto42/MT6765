@@ -1061,3 +1061,22 @@ fn set_time_validates_datetime() {
         ErrorCode::InvalidArgs
     );
 }
+
+#[test]
+fn open_map_validates_coordinates() {
+    let (_, c) =
+        req(r#"{"v":1,"id":1,"cmd":"open_map","args":{"lat":23.75123,"lon":90.40988}}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::OpenMap {
+            lat: 23.75123,
+            lon: 90.40988
+        }
+    );
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"open_map","args":{"lat":95.0,"lon":0.0}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+}

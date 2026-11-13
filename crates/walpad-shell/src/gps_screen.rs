@@ -159,6 +159,7 @@ pub fn state_lines(st: &Option<Status>) -> (String, String, Color) {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpsLayout {
+    pub back: Rect,
     pub title: Rect,
     pub chip: Rect,
     pub state_card: Rect,
@@ -178,9 +179,16 @@ pub fn layout(frame: &Frame, st: &Option<Status>) -> GpsLayout {
     let c = frame.padded();
     let has_pos = gps(st).is_some_and(|g| g.lat.is_some() && g.lon.is_some());
     let mut y = SP_4;
-    let chip = Rect::new(c.right() - 140, y + 4, 140, 32);
-    let title = Rect::new(c.x, y, chip.x - SP_3 - c.x, TITLE_H);
-    y += TITLE_H + SP_4;
+    let back = Rect::new(c.x, y, TOUCH_MIN, BUTTON_H);
+    let chip = Rect::new(c.right() - 140, y + (BUTTON_H - 32) / 2, 140, 32);
+    let tx = back.right() + SP_2;
+    let title = Rect::new(
+        tx,
+        y + (BUTTON_H - TITLE_H) / 2,
+        (chip.x - SP_3 - tx).max(80),
+        TITLE_H,
+    );
+    y += BUTTON_H + SP_3;
     let state_card = Rect::new(c.x, y, c.w, STATE_CARD_H);
     y += STATE_CARD_H + SP_3;
     let switch_row = Rect::new(c.x, y, c.w, ROW_H);
@@ -205,6 +213,7 @@ pub fn layout(frame: &Frame, st: &Option<Status>) -> GpsLayout {
     let note = Rect::new(c.x + SP_1, y, c.w - SP_1, NOTE_H);
     y += NOTE_H;
     GpsLayout {
+        back,
         title,
         chip,
         state_card,
@@ -238,6 +247,15 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     let mut hits = Vec::new();
     let pr = |t: Target| v.pressed == Some(t);
     let g = gps(v.st);
+    p.outline_box(l.back, 0, pr(Target::Back), false, false);
+    p.cv.icon(
+        Icon::Back,
+        l.back.x + (l.back.w - ICON) / 2,
+        l.back.y + (l.back.h - ICON) / 2,
+        ICON,
+        text(),
+    );
+    hits.push((l.back, Target::Back));
     p.screen_title("GPS", l.title);
     let (chip, chip_col) = chip(v.st);
     p.outline_box(l.chip, 0, false, false, false);
@@ -336,13 +354,13 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             hits.push((b, Target::GpsCopyCoords));
         }
         if let Some(b) = l.copy_link {
-            let state = if pr(Target::GpsCopyLink) {
+            let state = if pr(Target::GpsOpenMap) {
                 ButtonState::Pressed
             } else {
                 ButtonState::Default
             };
-            p.button(b, "Copy map link", ButtonKind::Secondary, state, None);
-            hits.push((b, Target::GpsCopyLink));
+            p.button(b, "OpenStreetMap", ButtonKind::Primary, state, None);
+            hits.push((b, Target::GpsOpenMap));
         }
     }
 
