@@ -256,7 +256,7 @@ fn drag_in_a_scroll_app_is_wheel_events_and_never_a_button_1() {
 }
 
 #[test]
-fn tap_clicks_button_1_and_a_long_press_clicks_button_3() {
+fn tap_clicks_button_1_and_a_long_press_double_clicks() {
     let Some(r) = Rig::new("tap", APPS) else {
         eprintln!("Xvfb not available: skipping");
         return;
@@ -266,12 +266,14 @@ fn tap_clicks_button_1_and_a_long_press_clicks_button_3() {
     assert_eq!(presses(&seen, "scrollapp", 1), 1, "{seen:?}");
     assert!(seen.contains(&("scrollapp", Seen::Release(1))));
 
-    // hold 650 ms in place, then lift
+    // hold 650 ms in place, then lift: a double click (word select), like Android's own
+    // long-press-to-select (owner report 2026-11-13, change long-press-selects-text) - not a
+    // right click any more
     let hold: Vec<(i32, i32)> = (0..22).map(|i| (150 + i % 2, 300)).collect();
     r.drag(&hold, 30);
     let seen = r.collect(500);
-    assert_eq!(presses(&seen, "scrollapp", 3), 1, "{seen:?}");
-    assert_eq!(presses(&seen, "scrollapp", 1), 0);
+    assert_eq!(presses(&seen, "scrollapp", 3), 0, "{seen:?}");
+    assert_eq!(presses(&seen, "scrollapp", 1), 2, "{seen:?}");
 }
 
 #[test]

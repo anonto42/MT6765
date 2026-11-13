@@ -1299,7 +1299,9 @@ fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
     assert_eq!(presses, [(1, 490, 418)], "one click at the cursor");
     assert_eq!(releases, 1);
     assert_eq!(pointer(), (490, 418));
-    // a long press: right click
+    // a long press: right click (the mouse pad tool's own gesture detector, gesture.rs in this
+    // crate, not core's app-touch logic/gesture.rs - a deliberate, explicit trackpad convention,
+    // untouched by change long-press-selects-text)
     step(mv, 0, 300, 1000);
     step(xproto::BUTTON_PRESS_EVENT, 1, 0, 0);
     std::thread::sleep(Duration::from_millis(750));

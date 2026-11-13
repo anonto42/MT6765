@@ -5,7 +5,10 @@
 //!   touch ends; the bridge's 150 ms lift delay is the only wait);
 //! - one-finger drag = scroll: wheel buttons 4/5 (vertical) and 6/7 (horizontal), one click per
 //!   `px_per_click` of finger travel, then a fling that decays over `fling_ms`;
-//! - hold 500 ms without moving, then lift = right click (context menu);
+//! - hold 500 ms without moving, then lift = a double click (word select), like Android's own
+//!   long-press-to-select (owner report 2026-11-13: "on android if i want to copy any think i
+//!   have to pres a text ... after that we abale get all thows copy, paste, cut"; traded away the
+//!   right-click context menu this used to open, by the owner's own choice);
 //! - hold 500 ms, then drag = a mouse drag (button 1 pressed at the touch point): text selection;
 //! - taps close together in time and place = double (triple) click: the second click is snapped
 //!   to the first one's position, the X toolkits do the counting;
@@ -417,9 +420,14 @@ impl Gestures {
                     }
                 }
                 Phase::Held => {
+                    // a double click at the same point: most text widgets select the word under
+                    // it on their own (standard X11/GTK/Qt behaviour), which raises the
+                    // selection toolbar the same way any other selection does - no new wiring.
                     out.push(Out::Move(t.start.0, t.start.1));
-                    out.push(Out::Button(BTN_RIGHT, true));
-                    out.push(Out::Button(BTN_RIGHT, false));
+                    out.push(Out::Button(BTN_LEFT, true));
+                    out.push(Out::Button(BTN_LEFT, false));
+                    out.push(Out::Button(BTN_LEFT, true));
+                    out.push(Out::Button(BTN_LEFT, false));
                 }
                 Phase::Select => out.push(Out::Button(BTN_LEFT, false)),
                 Phase::Scrolling { lock, .. } => {
@@ -778,7 +786,7 @@ mod tests {
     }
 
     #[test]
-    fn long_press_then_lift_is_a_right_click() {
+    fn long_press_then_lift_is_a_double_click() {
         let mut s = Sim::new();
         s.at(300, 400, 0);
         for i in 1..=30 {
@@ -790,11 +798,13 @@ mod tests {
         let o = s.outs();
         assert!(
             matches!(o[0], Out::Move(..))
-                && o[1] == Out::Button(3, true)
-                && o[2] == Out::Button(3, false),
+                && o[1] == Out::Button(BTN_LEFT, true)
+                && o[2] == Out::Button(BTN_LEFT, false)
+                && o[3] == Out::Button(BTN_LEFT, true)
+                && o[4] == Out::Button(BTN_LEFT, false),
             "{o:?}"
         );
-        assert_eq!(o.len(), 3);
+        assert_eq!(o.len(), 5);
     }
 
     #[test]
