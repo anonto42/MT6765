@@ -255,7 +255,15 @@ fn items(m: &StoreModel) -> Vec<(i32, Item)> {
         ));
         return v;
     }
-    let busy_id = m.busy.as_ref().map(|b| b.id.as_str());
+    let busy_label = |id: &str| {
+        m.busy.as_ref().filter(|b| b.id == id).map(|b| {
+            if b.percent > 0 {
+                format!("{}%", b.percent)
+            } else {
+                "Working...".into()
+            }
+        })
+    };
     match m.view {
         StoreView::Installed => {
             v.push((
@@ -272,8 +280,8 @@ fn items(m: &StoreModel) -> Vec<(i32, Item)> {
                         Accessory::Action("Tap to confirm".into()),
                         Some(StoreTarget::Remove(i)),
                     )
-                } else if busy_id == Some(e.id.as_str()) {
-                    (Accessory::Value("Working...".into()), None)
+                } else if let Some(lbl) = busy_label(&e.id) {
+                    (Accessory::Value(lbl), None)
                 } else {
                     (
                         Accessory::Action("Uninstall".into()),
@@ -330,8 +338,8 @@ fn items(m: &StoreModel) -> Vec<(i32, Item)> {
                     } else {
                         format!("{} · {}", e.summary, fmt_size(e.size_kb))
                     };
-                    let (acc, target) = if busy_id == Some(e.id.as_str()) {
-                        (Accessory::Value("Working...".into()), None)
+                    let (acc, target) = if let Some(lbl) = busy_label(&e.id) {
+                        (Accessory::Value(lbl), None)
                     } else if e.installed {
                         (Accessory::Value("Installed".into()), None)
                     } else {

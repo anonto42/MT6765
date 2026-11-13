@@ -83,7 +83,7 @@ classify() { # after a failed apk: say why
   if [ "$RC" = 124 ] || [ "$RC" = 137 ]; then
     fail timeout "Timed out after $((TMO / 60)) minutes" 7
   fi
-  if grep -qiE 'network|temporary error|unable to fetch|could not connect|resolve|offline|timed out|connection|no such file or directory.*index' "$TMP/out"; then
+  if grep -qiE 'network|temporary error|transient error|DNS:|stale|unable to fetch|could not connect|resolve|offline|timed out|connection|no such file or directory.*index' "$TMP/out"; then
     fail net "Could not reach the package repository: check the Wi-Fi connection" 5
   fi
   last=$(grep -v '^$' "$TMP/out" | tail -n 1 | tr -d '\000-\037' | cut -c1-160)
@@ -147,14 +147,28 @@ case $cmd in
       fail space "Not enough free space: $((NEED / 1024)) MB needed, $((free / 1024)) MB free, $((RESERVE / 1024)) MB must stay free" 4
     fi
     progress 8 "Updating the package index"
-    run_apk 0 0 120 "$APK" update
+    attempt=0
+    while [ "$attempt" -lt 3 ]; do
+      attempt=$((attempt + 1))
+      run_apk 0 0 120 "$APK" update
+      [ "$RC" = 0 ] && break
+      grep -qiE 'transient error|temporary error|DNS:|stale|timed out' "$TMP/out" || break
+      [ "$attempt" -lt 3 ] && sleep 1
+    done
     [ "$RC" = 0 ] || classify
     progress 20 "Downloading and installing"
-    if [ "$cmd" = upgrade ]; then
-      run_apk 20 70 "$TMO" "$APK" add -u "$@"
-    else
-      run_apk 20 70 "$TMO" "$APK" add "$@"
-    fi
+    attempt=0
+    while [ "$attempt" -lt 2 ]; do
+      attempt=$((attempt + 1))
+      if [ "$cmd" = upgrade ]; then
+        run_apk 20 70 "$TMO" "$APK" add -u "$@"
+      else
+        run_apk 20 70 "$TMO" "$APK" add "$@"
+      fi
+      [ "$RC" = 0 ] && break
+      grep -qiE 'transient error|temporary error|DNS:|unable to fetch|timed out' "$TMP/out" || break
+      [ "$attempt" -lt 2 ] && sleep 1
+    done
     [ "$RC" = 0 ] || classify
     progress 100 "Done"
     echo OK ;;
