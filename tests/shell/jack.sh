@@ -50,7 +50,8 @@ grep -q "name=Speaker_Amp_Switch On" "$T_CALLS" && ok "default: speaker amp on" 
 # --- jack headphone + headset mic: speaker off, headset amp on, ADC2/preamp2 path, mic source ADC2
 OUT=$(run jack headphone headset)
 echo "$OUT" | grep -q 'Speaker_Amp_Switch = Off' && ok "headphone: speaker off" || bad "headphone: speaker off" "$OUT" Off
-echo "$OUT" | grep -q 'Headset_Speaker_Amp_Switch = On' && ok "headphone: headset amp on" || bad "headphone: headset amp on" "$OUT" On
+echo "$OUT" | grep -q 'Audio_Amp_L_Switch = On' && ok "headphone: headset L amp on" || bad "headphone: headset L amp on" "$OUT" On
+echo "$OUT" | grep -q 'Audio_Amp_R_Switch = On' && ok "headphone: headset R amp on" || bad "headphone: headset R amp on" "$OUT" On
 echo "$OUT" | grep -q 'no control Headset_PGAL_GAIN (skipped)' && ok "headphone: missing control skipped, not guessed" || bad "headphone: missing control skipped" "$OUT" skipped
 ! grep -q "name=Headset_PGAL_GAIN" "$T_CALLS" && ok "headphone: never csets a control that does not exist" || bad "headphone: never csets a missing control" set skipped
 echo "$OUT" | grep -q 'Audio_ADC_2_Switch = On' && ok "headset mic: ADC2 on" || bad "headset mic: ADC2 on" "$OUT" On
@@ -61,7 +62,8 @@ echo "$OUT" | grep -q 'jack route=headphone mic=headset' && ok "headphone+headse
 
 # --- jack speaker + builtin mic: back to normal
 OUT=$(run jack speaker builtin)
-echo "$OUT" | grep -q 'Headset_Speaker_Amp_Switch = Off' && ok "speaker: headset amp off" || bad "speaker: headset amp off" "$OUT" Off
+echo "$OUT" | grep -q 'Audio_Amp_L_Switch = Off' && ok "speaker: headset L amp off" || bad "speaker: headset L amp off" "$OUT" Off
+echo "$OUT" | grep -q 'Headset_Speaker_Amp_Switch = Off' && ok "speaker: headset+speaker amp off" || bad "speaker: headset+speaker amp off" "$OUT" Off
 echo "$OUT" | grep -q 'Speaker_Amp_Switch = On' && ok "speaker: speaker amp on" || bad "speaker: speaker amp on" "$OUT" On
 echo "$OUT" | grep -q 'Audio_ADC_1_Switch = On' && ok "builtin mic: ADC1 on" || bad "builtin mic: ADC1 on" "$OUT" On
 echo "$OUT" | grep -q 'Audio_MicSource1_Setting = ADC1' && ok "builtin mic: MicSource1 -> ADC1" || bad "builtin mic: MicSource1" "$OUT" ADC1

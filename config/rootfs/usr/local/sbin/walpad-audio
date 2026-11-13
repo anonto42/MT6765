@@ -41,6 +41,8 @@ case "$cmd" in
     set_ctl Audio_Amp_R_Switch On
     set_ctl Lineout_PGAL_GAIN 8   # 0 dB
     set_ctl Lineout_PGAR_GAIN 8
+    set_ctl Headset_PGAL_GAIN 8
+    set_ctl Headset_PGAR_GAIN 8
     echo "walpad-audio: speaker on"
     ;;
   jack)
@@ -50,12 +52,16 @@ case "$cmd" in
       headphone)
         set_ctl Speaker_Amp_Switch Off
         set_ctl Ext_Speaker_Amp_Switch Off
-        set_ctl Headset_Speaker_Amp_Switch On
-        set_ctl Headset_PGAL_GAIN 8   # 0 dB (same index convention as Lineout_PGA*; unverified
-        set_ctl Headset_PGAR_GAIN 8   # live, see docs/45-headphone-mic.md)
+        set_ctl Headset_Speaker_Amp_Switch Off
+        set_ctl Audio_Amp_L_Switch On
+        set_ctl Audio_Amp_R_Switch On
+        set_ctl Headset_PGAL_GAIN 8   # 0 dB
+        set_ctl Headset_PGAR_GAIN 8
         ;;
       speaker)
         set_ctl Headset_Speaker_Amp_Switch Off
+        set_ctl Audio_Amp_L_Switch Off
+        set_ctl Audio_Amp_R_Switch Off
         set_ctl Speaker_Amp_Switch On
         set_ctl Ext_Speaker_Amp_Switch On
         set_ctl Lineout_PGAL_GAIN 8
