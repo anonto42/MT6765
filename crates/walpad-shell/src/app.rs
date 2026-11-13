@@ -899,6 +899,19 @@ impl Outcome {
 }
 
 const SLIDER_SEND_EVERY_MS: Ms = 80;
+const ANIM_STEP_MS: Ms = 16;
+const TAB_ANIM_MS: Ms = 160;
+const OVERLAY_ANIM_MS: Ms = 150;
+
+fn ease_out_offset(now: Ms, start: Ms, until: Ms, dist: i32) -> i32 {
+    if until <= start || now >= until {
+        return 0;
+    }
+    let dur = (until - start) as f32;
+    let t = (now.saturating_sub(start) as f32 / dur).clamp(0.0, 1.0);
+    let inv = 1.0 - t;
+    (dist as f32 * inv * inv * inv).round() as i32
+}
 
 pub struct App {
     pub frame: Frame,
@@ -913,10 +926,19 @@ pub struct App {
     content_hits: Vec<(Rect, Target)>,
     overlay_hits: Vec<(Rect, Target)>,
     pub scroll: i32,
+    scroll_vel: f32,
+    scroll_drag_ms: Ms,
+    scroll_fling_at: Ms,
     content_h: i32,
     view: Rect,
     last_slider_send: Ms,
     last_spin: Ms,
+    animate_transitions: bool,
+    tab_anim_start: Ms,
+    tab_anim_until: Ms,
+    overlay_anim_start: Ms,
+    overlay_anim_until: Ms,
+    anim_next: Ms,
     pending: HashMap<u64, Purpose>,
     now: Ms,
     /// Commands produced by time (tick), drained by the event loop with `take_cmds`.
@@ -951,10 +973,19 @@ impl App {
             content_hits: Vec::new(),
             overlay_hits: Vec::new(),
             scroll: 0,
+            scroll_vel: 0.0,
+            scroll_drag_ms: 0,
+            scroll_fling_at: 0,
             content_h: 0,
             view: frame.content,
             last_slider_send: 0,
             last_spin: 0,
+            animate_transitions: false,
+            tab_anim_start: 0,
+            tab_anim_until: 0,
+            overlay_anim_start: 0,
+            overlay_anim_until: 0,
+            anim_next: 0,
             pending: HashMap::new(),
             now: 0,
             queued: Vec::new(),
@@ -974,6 +1005,12 @@ impl App {
     pub fn with_pinned(mut self, pinned: Vec<String>) -> App {
         self.model.pinned = pinned;
         self.rebuild_tiles();
+        self
+    }
+
+    /// Enable smooth ease-out slide transitions on tab switches and overlays (tablet runtime).
+    pub fn with_transitions(mut self) -> App {
+        self.animate_transitions = true;
         self
     }
 
@@ -1770,7 +1807,7 @@ impl App {
         }
         if self.model.wallpaper.is_live() && !self.scrolls() && now >= self.model.next_live_tick {
             self.model.live_phase_ms = now;
-            self.model.next_live_tick = now.saturating_add(66);
+            self.model.next_live_tick = now.saturating_add(100);
             dirty = true;
         }
         if !self.model.media.want_thumbs.is_empty() {
@@ -1785,6 +1822,43 @@ impl App {
             self.last_spin = now;
             self.model.spinner_deg = (self.model.spinner_deg + 30) % 360;
             dirty = true;
+        }
+        if self.scroll_vel.abs() >= 0.5 && now >= self.scroll_fling_at {
+            if self.scrolls() && self.model.overlay.is_none() {
+                let max = (self.content_h - self.view.h).max(0);
+                let step = self.scroll_vel.round() as i32;
+                let s = (self.scroll - step).clamp(0, max);
+                if s != self.scroll {
+                    self.scroll = s;
+                    dirty = true;
+                }
+                if s == 0 || s == max {
+                    self.scroll_vel = 0.0;
+                } else {
+                    self.scroll_vel *= 0.88;
+                    self.scroll_fling_at = now.saturating_add(ANIM_STEP_MS);
+                }
+                if self.scroll_vel.abs() < 0.5 {
+                    self.scroll_vel = 0.0;
+                }
+            } else {
+                self.scroll_vel = 0.0;
+            }
+        }
+        let anim_active = self.tab_anim_until > 0 || self.overlay_anim_until > 0;
+        if anim_active && now >= self.anim_next {
+            dirty = true;
+            if now >= self.tab_anim_until {
+                self.tab_anim_until = 0;
+            }
+            if now >= self.overlay_anim_until {
+                self.overlay_anim_until = 0;
+            }
+            if self.tab_anim_until > 0 || self.overlay_anim_until > 0 {
+                self.anim_next = now.saturating_add(ANIM_STEP_MS);
+            } else {
+                self.anim_next = 0;
+            }
         }
         dirty
     }
@@ -1803,10 +1877,22 @@ impl App {
         let osd = self.model.osd.map(|o| o.until);
         let live = (self.model.wallpaper.is_live() && !self.scrolls())
             .then_some(self.model.next_live_tick);
-        [spin, toast, osd, self.armed_until(), menu, live]
-            .into_iter()
-            .flatten()
-            .min()
+        let fling = (self.scroll_vel.abs() >= 0.5).then_some(self.scroll_fling_at);
+        let anim =
+            (self.tab_anim_until > 0 || self.overlay_anim_until > 0).then_some(self.anim_next);
+        [
+            spin,
+            toast,
+            osd,
+            self.armed_until(),
+            menu,
+            live,
+            fling,
+            anim,
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     // ------------------------------------------------------------------ banners
@@ -1895,9 +1981,12 @@ impl App {
     // ------------------------------------------------------------------ gestures
     pub fn on_gesture(&mut self, g: &Gesture, now: Ms) -> Outcome {
         self.now = now;
+        let prev_active = self.active;
+        let prev_overlay = self.model.overlay.is_some();
         let mut out = Outcome::default();
         match *g {
             Gesture::Pressed { x, y } => {
+                self.scroll_vel = 0.0;
                 let t = self.hit(x, y);
                 self.model.pressed = t;
                 if let (Some(Target::Key(i)), Some(Overlay::Password(s))) =
@@ -1962,7 +2051,10 @@ impl App {
                     }
                 }
             }
-            Gesture::DragStart { .. } => {}
+            Gesture::DragStart { .. } => {
+                self.scroll_vel = 0.0;
+                self.scroll_drag_ms = now;
+            }
             Gesture::Drag { dx, dy } => {
                 if self.model.slider_active {
                     let w = self.slider_rect().map_or(1, |r| r.inset(SP_4).w.max(1));
@@ -1974,6 +2066,10 @@ impl App {
                         out.cmd(self.slider_cmd());
                     }
                 } else if self.scrolls() && self.model.overlay.is_none() {
+                    let dt = now.saturating_sub(self.scroll_drag_ms).clamp(8, 64) as f32;
+                    let inst = (dy as f32 / dt) * ANIM_STEP_MS as f32;
+                    self.scroll_vel = self.scroll_vel * 0.45 + inst * 0.55;
+                    self.scroll_drag_ms = now;
                     let max = (self.content_h - self.view.h).max(0);
                     let s = (self.scroll - dy).clamp(0, max);
                     if s != self.scroll {
@@ -1986,7 +2082,27 @@ impl App {
                 if std::mem::take(&mut self.model.slider_active) {
                     out.cmd(self.slider_cmd());
                     out.dirty = true;
+                } else if self.scrolls()
+                    && self.model.overlay.is_none()
+                    && self.scroll_vel.abs() >= 1.5
+                    && now.saturating_sub(self.scroll_drag_ms) <= 80
+                {
+                    self.scroll_fling_at = now.saturating_add(ANIM_STEP_MS);
+                } else {
+                    self.scroll_vel = 0.0;
                 }
+            }
+        }
+        if self.animate_transitions {
+            if self.active != prev_active {
+                self.tab_anim_start = now;
+                self.tab_anim_until = now.saturating_add(TAB_ANIM_MS);
+                self.anim_next = now.saturating_add(ANIM_STEP_MS);
+            }
+            if !prev_overlay && self.model.overlay.is_some() {
+                self.overlay_anim_start = now;
+                self.overlay_anim_until = now.saturating_add(OVERLAY_ANIM_MS);
+                self.anim_next = now.saturating_add(ANIM_STEP_MS);
             }
         }
         out
@@ -3187,15 +3303,18 @@ impl App {
             frame.content.w,
             frame.content.h - banner_h,
         );
+        let tab_dy = ease_out_offset(self.now, self.tab_anim_start, self.tab_anim_until, 28);
         if self.scrolls() {
-            self.render_scrolled(p);
+            self.render_scrolled(p, tab_dy);
             // scrolled rows may have run up under the header and banner: restore that strip
             self.chrome.restore(
                 p.cv,
                 Rect::new(frame.header.x, 0, frame.header.w, frame.header.h + banner_h),
             );
         } else {
+            p.cv.set_origin(0, tab_dy);
             let home = home::render(p, &frame, &self.model, banner_h);
+            p.cv.set_origin(0, 0);
             self.hits.extend(home);
         }
         let qs_open = matches!(self.model.overlay, Some(Overlay::QuickSettings));
@@ -3215,6 +3334,20 @@ impl App {
             );
         }
 
+        let ov_off = ease_out_offset(
+            self.now,
+            self.overlay_anim_start,
+            self.overlay_anim_until,
+            28,
+        );
+        if ov_off != 0 {
+            match &self.model.overlay {
+                Some(Overlay::QuickSettings) => p.cv.set_origin(0, -ov_off),
+                Some(Overlay::AppsPanel) => p.cv.set_origin(-ov_off, 0),
+                Some(_) => p.cv.set_origin(0, ov_off),
+                None => {}
+            }
+        }
         let deg = self.model.spinner_deg;
         self.overlay_hits = match &self.model.overlay {
             Some(Overlay::Password(s)) => overlay::render_password(p, &frame, s, deg),
@@ -3240,6 +3373,7 @@ impl App {
             }
             None => Vec::new(),
         };
+        p.cv.set_origin(0, 0);
         if let Some(t) = &self.model.toast {
             p.toast(frame.content, &t.text, t.tone);
         }
@@ -3250,7 +3384,7 @@ impl App {
 
     /// Scrolled screens: the whole layout is walked in content coordinates with the canvas origin
     /// at (0, view.y - scroll); primitives skip what falls outside the frame. No off-screen copy.
-    fn render_scrolled(&mut self, p: &mut Painter) {
+    fn render_scrolled(&mut self, p: &mut Painter, tab_dy: i32) {
         let frame = self.frame;
         let media_list = if self.active == Tab::Media {
             let list = self.model.media.list();
@@ -3288,7 +3422,7 @@ impl App {
         .max(self.view.h);
         self.content_h = total;
         self.scroll = self.scroll.clamp(0, (total - self.view.h).max(0));
-        p.cv.set_origin(0, self.view.y - self.scroll);
+        p.cv.set_origin(0, self.view.y - self.scroll + tab_dy);
         let m = &self.model;
         self.content_hits = match self.active {
             Tab::Network => network::render(

@@ -1805,12 +1805,12 @@ fn wallpaper_selection_live_and_custom_path() {
         app.model.wallpaper,
         walpad_ui::art::WallpaperKind::LiveAurora
     );
-    // Live wallpaper only animates when on Home (not scrolled pages), and ticks at ~15fps.
+    // Live wallpaper only animates when on Home (not scrolled pages), and ticks at ~10fps.
     assert!(!app.tick(200));
     go(&mut app, Tab::Home);
     assert!(app.tick(200));
     assert!(!app.tick(220));
-    assert!(app.tick(270));
+    assert!(app.tick(305));
 
     // Switch back to System default (index 0).
     go(&mut app, Tab::Device);
@@ -1839,4 +1839,31 @@ fn wallpaper_selection_live_and_custom_path() {
     );
     assert_eq!(app.model.wallpaper, walpad_ui::art::WallpaperKind::Custom);
     assert_eq!(app.model.wallpaper_path, "/root/my_wall.png");
+}
+
+#[test]
+fn smooth_transitions_and_inertial_fling() {
+    let mut app = App::new(800, 1280, catalog(), wall()).with_transitions();
+    render(&mut app);
+
+    // Tab switch schedules 16 ms animation frames until TAB_ANIM_MS (160 ms).
+    go(&mut app, Tab::Device);
+    render(&mut app);
+    let anim_t = app
+        .next_deadline()
+        .expect("expected tab animation deadline");
+    assert!(app.tick(anim_t));
+    assert!(app.tick(anim_t + 160));
+    assert_eq!(app.next_deadline(), None);
+
+    // Inertial fling continues scrolling after DragEnd and decays to rest.
+    let t0 = anim_t + 200;
+    app.on_gesture(&Gesture::DragStart { x: 400, y: 600 }, t0);
+    app.on_gesture(&Gesture::Drag { dx: 0, dy: -48 }, t0 + 16);
+    app.on_gesture(&Gesture::Drag { dx: 0, dy: -48 }, t0 + 32);
+    app.on_gesture(&Gesture::DragEnd, t0 + 36);
+    let before = app.scroll;
+    assert_eq!(app.next_deadline(), Some(t0 + 52));
+    assert!(app.tick(t0 + 52));
+    assert!(app.scroll > before);
 }

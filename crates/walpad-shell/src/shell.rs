@@ -262,7 +262,9 @@ impl Shell {
             media: crate::media_worker::Worker::start(opts.root.clone()),
             canvas,
             fonts,
-            app: App::new(w, h, catalog, wall).with_pinned(read_pinned(&opts.root)),
+            app: App::new(w, h, catalog, wall)
+                .with_pinned(read_pinned(&opts.root))
+                .with_transitions(),
             rec: Recogniser::new(),
             root: opts.root,
             clock_24h,

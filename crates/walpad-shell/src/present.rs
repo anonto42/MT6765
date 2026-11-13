@@ -70,7 +70,22 @@ pub fn present<C: Connection>(
         y = end;
     }
     conn.flush()?;
+    wake_fbmirror();
     Ok(())
+}
+
+/// Poke fbmirror's wake FIFO (non-blocking) so UI animations/scrolls present immediately
+/// instead of waiting for fbmirror's 100 ms idle sleep.
+fn wake_fbmirror() {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .write(true)
+        .custom_flags(0x800) // O_NONBLOCK
+        .open("/run/walpad/fbwake")
+    {
+        let _ = f.write(&[1]);
+    }
 }
 
 #[cfg(test)]
