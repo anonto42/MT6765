@@ -151,6 +151,19 @@ impl TouchMap {
                 self.last = now;
                 self.moved = true;
             }
+            (EV_KEY, BTN_TOUCH) if ev.value == 0 => {
+                if self.down {
+                    self.down = false;
+                    self.x = None;
+                    self.y = None;
+                    self.cx = None;
+                    self.cy = None;
+                    self.contacts.clear();
+                    self.multi_frames = 0;
+                    self.moved = false;
+                    out.push(Act::Release);
+                }
+            }
             (EV_SYN, SYN_REPORT) if self.moved => {
                 let contacts = std::mem::take(&mut self.contacts);
                 self.cx = None;
@@ -326,6 +339,23 @@ mod tests {
         // position forgotten: a lone SYN does nothing, next touch presses again
         assert!(t.on_event(&ev(EV_SYN, SYN_REPORT, 0), 1200, 0).is_empty());
         assert_eq!(touch(&mut t, 10, 10, 2000, 0).last(), Some(&Act::Press));
+    }
+
+    #[test]
+    fn btn_touch_zero_releases_immediately_for_fast_consecutive_taps() {
+        let mut t = TouchMap::new(Cfg::default());
+        touch(&mut t, 100, 1000, 1000, 0);
+        assert!(t.is_down());
+        assert_eq!(
+            t.on_event(&ev(EV_KEY, BTN_TOUCH, 0), 1020, 0),
+            vec![Act::Release]
+        );
+        assert!(!t.is_down());
+        // Next tap 10 ms later presses immediately instead of being swallowed as a Move
+        assert_eq!(
+            touch(&mut t, 200, 1000, 1030, 0),
+            vec![Act::Move(199, 999), Act::Press]
+        );
     }
 
     #[test]
