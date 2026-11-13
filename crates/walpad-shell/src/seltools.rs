@@ -41,10 +41,16 @@ pub const SELECTION_MS: u64 = 10_000;
 /// The clipboard list closes itself after this long (a tap outside cannot be seen).
 pub const LIST_MS: u64 = 15_000;
 
-/// Terminal emulators: Ctrl+C interrupts, paste is Ctrl+Shift+V.
+/// Terminal emulators: Ctrl+C interrupts, paste is Ctrl+Shift+V. "term-st"/"kali-st"/
+/// "scanner-st" are this project's own `st -c` class names (2026-11-12, change
+/// terminal-kali-wm-class; 2026-11-13, the Scanner app): st's default class ("st" or
+/// "st-256color" depending on build) is kept too in case a future app reuses it.
 const TERMINALS: &[&str] = &[
     "st",
     "st-256color",
+    "term-st",
+    "kali-st",
+    "scanner-st",
     "xterm",
     "uxterm",
     "urxvt",
@@ -682,6 +688,11 @@ mod tests {
         assert!(is_terminal(&cls("st", "St")));
         assert!(is_terminal(&cls("xterm", "XTerm")));
         assert!(is_terminal(&cls("st-256color", "st-256color")));
+        // regression (2026-11-13): the "terminal"/"kali" apps got their own real WM_CLASS
+        // (term-st/kali-st, not a shared "st") so a restart could tell them apart - this list
+        // must track that or Ctrl+C stops being an interrupt and paste stops using Ctrl+Shift+V.
+        assert!(is_terminal(&cls("term-st", "term-st")));
+        assert!(is_terminal(&cls("kali-st", "kali-st")));
         assert!(!is_terminal(&cls("Navigator", "firefox-esr")));
         assert!(!is_terminal(&cls("pcmanfm", "Pcmanfm")));
         assert!(!is_terminal(&[]));
