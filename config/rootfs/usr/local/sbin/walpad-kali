@@ -70,12 +70,14 @@ case ${1:-status} in
     ;;
   mount) do_mount && say "mounted" ;;
   umount) do_umount ;;
-  shell) shift; chroot_run /bin/bash -l ;;
+  shell) shift
+    if [ -x "$ROOTFS/usr/bin/fish" ]; then chroot_run /usr/bin/fish -l
+    else chroot_run /bin/bash -l; fi ;;
   run) shift; [ $# -gt 0 ] || { echo "usage: walpad-kali run CMD..." >&2; exit 2; }; chroot_run "$@" ;;
   setup)
     do_mount || exit 1
     chroot "$ROOTFS" /usr/bin/env -i HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin DEBIAN_FRONTEND=noninteractive \
-      /bin/sh -c 'apt-get update && apt-get install -y --no-install-recommends kali-defaults ca-certificates curl iproute2 iputils-ping nmap' ;;
+      /bin/sh -c 'apt-get update && apt-get install -y --no-install-recommends kali-defaults ca-certificates curl iproute2 iputils-ping nmap fish' ;;
   status)
     if [ -d "$ROOTFS/bin" ]; then
       printf 'installed: yes (%s)\n' "$(du -sh "$ROOTFS" 2>/dev/null | cut -f1)"
