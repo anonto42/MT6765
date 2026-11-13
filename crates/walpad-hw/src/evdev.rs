@@ -17,6 +17,9 @@ pub const ABS_X: u16 = 0;
 pub const ABS_Y: u16 = 1;
 pub const ABS_MT_POSITION_X: u16 = 53;
 pub const ABS_MT_POSITION_Y: u16 = 54;
+pub const SW_HEADPHONE_INSERT: u16 = 2;
+pub const SW_MICROPHONE_INSERT: u16 = 4;
+pub const SW_LINEOUT_INSERT: u16 = 6;
 
 /// aarch64 `struct input_event`: tv_sec i64, tv_usec i64, type u16, code u16, value i32.
 pub const EVENT_SIZE: usize = 24;
@@ -67,25 +70,29 @@ pub fn parse_events(data: &[u8]) -> Vec<InputEvent> {
 pub const EVIOCGKEY_96: u32 = 0x8060_4518;
 /// Bytes of the global key-state bitmap we ask for (768 keys; KEY_MAX is 0x2ff).
 pub const KEY_BITMAP_BYTES: usize = 96;
+/// EVIOCGSW(8): `_IOC(_IOC_READ, 'E', 0x1b, 8)`.  Same value on aarch64 and x86_64.
+pub const EVIOCGSW_8: u32 = 0x8008_451b;
+/// Bytes of the global switch-state bitmap we ask for (64 switches; SW_MAX is 0x0f).
+pub const SW_BITMAP_BYTES: usize = 8;
 
-/// Is `code` set in an EVIOCGKEY bitmap (bit `code % 8` of byte `code / 8`)?  A code beyond the
-/// buffer is "not held".
+/// Is `code` set in an EVIOCGKEY/EVIOCGSW bitmap (bit `code % 8` of byte `code / 8`)?  A code
+/// beyond the buffer is "not held".
 pub fn key_bit(bitmap: &[u8], code: u16) -> bool {
     bitmap
         .get(usize::from(code) / 8)
         .is_some_and(|b| b & (1u8 << (code % 8)) != 0)
 }
 
-struct GetKeys {
-    buf: [u8; KEY_BITMAP_BYTES],
+struct GetBitmap<const N: usize, const OPCODE: u32> {
+    buf: [u8; N],
 }
-// SAFETY: EVIOCGKEY(96) writes at most KEY_BITMAP_BYTES bytes at the pointer (the size is encoded
-// in the opcode), and the array is exactly that long.
-unsafe impl rustix::ioctl::Ioctl for GetKeys {
-    type Output = [u8; KEY_BITMAP_BYTES];
+// SAFETY: callers instantiate GetBitmap only with an EVIOCG* read opcode whose encoded byte
+// length equals N, so the kernel writes at most N bytes at `buf`.
+unsafe impl<const N: usize, const OPCODE: u32> rustix::ioctl::Ioctl for GetBitmap<N, OPCODE> {
+    type Output = [u8; N];
     const IS_MUTATING: bool = true;
     fn opcode(&self) -> rustix::ioctl::Opcode {
-        EVIOCGKEY_96 as _
+        OPCODE as _
     }
     fn as_ptr(&mut self) -> *mut std::ffi::c_void {
         self.buf.as_mut_ptr().cast()
@@ -94,8 +101,28 @@ unsafe impl rustix::ioctl::Ioctl for GetKeys {
         _: rustix::ioctl::IoctlOutput,
         p: *mut std::ffi::c_void,
     ) -> rustix::io::Result<Self::Output> {
-        // SAFETY: p points at our KEY_BITMAP_BYTES-byte array.
-        Ok(unsafe { *(p as *const [u8; KEY_BITMAP_BYTES]) })
+        // SAFETY: p points at our N-byte array.
+        Ok(unsafe { *(p as *const [u8; N]) })
+    }
+}
+
+/// SAFETY: `OPCODE` must be a valid `EVIOCG*` read ioctl whose encoded buffer size equals `N`.
+unsafe fn read_bitmap<const N: usize, const OPCODE: u32>(
+    path: &std::path::Path,
+) -> std::io::Result<[u8; N]> {
+    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+    let mut f = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+        .open(path)?;
+    if f.metadata()?.file_type().is_char_device() {
+        // SAFETY: caller guarantees OPCODE is an EVIOCG* read ioctl of size N.
+        unsafe { rustix::ioctl::ioctl(&f, GetBitmap::<N, OPCODE> { buf: [0; N] }) }
+            .map_err(std::io::Error::from)
+    } else {
+        let mut b = [0u8; N];
+        let _ = f.read(&mut b)?;
+        Ok(b)
     }
 }
 
@@ -103,27 +130,15 @@ unsafe impl rustix::ioctl::Ioctl for GetKeys {
 /// device this is EVIOCGKEY (CANNOT be exercised on the host: verified only on the tablet); on a
 /// plain file (tests) the first 96 bytes are the bitmap.
 pub fn read_key_bitmap(path: &std::path::Path) -> std::io::Result<[u8; KEY_BITMAP_BYTES]> {
-    use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
-    let mut f = std::fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
-        .open(path)?;
-    if f.metadata()?.file_type().is_char_device() {
-        // SAFETY: GetKeys matches the EVIOCGKEY(96) ABI (see above).
-        unsafe {
-            rustix::ioctl::ioctl(
-                &f,
-                GetKeys {
-                    buf: [0; KEY_BITMAP_BYTES],
-                },
-            )
-        }
-        .map_err(std::io::Error::from)
-    } else {
-        let mut b = [0u8; KEY_BITMAP_BYTES];
-        let _ = f.read(&mut b)?;
-        Ok(b)
-    }
+    // SAFETY: EVIOCGKEY_96 encodes a 96-byte read buffer, matching KEY_BITMAP_BYTES.
+    unsafe { read_bitmap::<KEY_BITMAP_BYTES, EVIOCGKEY_96>(path) }
+}
+
+/// Current switch (`EV_SW`) state of an evdev node.  Never blocks (O_NONBLOCK, ioctl only).
+/// On a plain file (tests) the first 8 bytes are the bitmap.
+pub fn read_sw_bitmap(path: &std::path::Path) -> std::io::Result<[u8; SW_BITMAP_BYTES]> {
+    // SAFETY: EVIOCGSW_8 encodes an 8-byte read buffer, matching SW_BITMAP_BYTES.
+    unsafe { read_bitmap::<SW_BITMAP_BYTES, EVIOCGSW_8>(path) }
 }
 
 /// Reads events from an evdev node (or a recorded .bin). Never grabs the device.

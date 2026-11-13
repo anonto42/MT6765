@@ -24,16 +24,117 @@ const PRESENCE_NODES: &[&str] = &[
     "/sys/class/extcon/extcon0/state",
 ];
 
-/// `Some(true)` = something is inserted, `Some(false)` = empty, `None` = no detector on this boot.
-pub fn read_jack(root: &Root) -> Option<bool> {
+const ACCDET_INPUT_NAME: &str = "mt63xx-accdet Headset";
+
+/// Hardware-level 3.5 mm jack state when a detector (`mt6357-accdet` evdev or switch/extcon)
+/// is present.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JackState {
+    Empty,
+    Headphones,
+    HeadsetWithMic,
+}
+
+fn read_accdet_evdev(root: &Root) -> Option<JackState> {
+    let entries = std::fs::read_dir(root.p("/sys/class/input")).ok()?;
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        let Ok(name) = std::fs::read_to_string(dir.join("name")) else {
+            continue;
+        };
+        if name.trim() != ACCDET_INPUT_NAME {
+            continue;
+        }
+        let Ok(sub) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        let Some(event_name) = sub.flatten().find_map(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            n.starts_with("event").then_some(n)
+        }) else {
+            continue;
+        };
+        let dev_path = root.p("/dev/input").join(event_name);
+        let Ok(bits) = crate::evdev::read_sw_bitmap(&dev_path) else {
+            continue;
+        };
+        if crate::evdev::key_bit(&bits, crate::evdev::SW_MICROPHONE_INSERT) {
+            return Some(JackState::HeadsetWithMic);
+        }
+        if crate::evdev::key_bit(&bits, crate::evdev::SW_HEADPHONE_INSERT)
+            || crate::evdev::key_bit(&bits, crate::evdev::SW_LINEOUT_INSERT)
+        {
+            return Some(JackState::Headphones);
+        }
+        return Some(JackState::Empty);
+    }
+    None
+}
+
+/// `Some(state)` when a hardware jack detector is present (`mt63xx-accdet Headset` evdev node or
+/// switch/extcon sysfs node); `None` when no detector is loaded on this boot.
+pub fn read_jack_state(root: &Root) -> Option<JackState> {
+    if let Some(st) = read_accdet_evdev(root) {
+        return Some(st);
+    }
     PRESENCE_NODES.iter().find_map(|n| {
         let s = std::fs::read_to_string(root.p(n)).ok()?;
         let s = s.trim();
         if s.is_empty() {
             return None;
         }
-        Some(s != "0")
+        Some(if s == "0" {
+            JackState::Empty
+        } else {
+            JackState::Headphones
+        })
     })
+}
+
+/// `Some(true)` = something is inserted, `Some(false)` = empty, `None` = no detector on this boot.
+pub fn read_jack(root: &Root) -> Option<bool> {
+    read_jack_state(root).map(|s| s != JackState::Empty)
+}
+
+#[cfg(test)]
+mod accdet_tests {
+    use super::*;
+
+    #[test]
+    fn reads_accdet_evdev_switch_states() {
+        let dir = std::env::temp_dir().join(format!("walpad-accdet-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let r = Root::new(&dir);
+        std::fs::create_dir_all(r.p("/sys/class/input/input5/event5")).unwrap();
+        std::fs::create_dir_all(r.p("/dev/input")).unwrap();
+        std::fs::write(
+            r.p("/sys/class/input/input5/name"),
+            "mt63xx-accdet Headset\n",
+        )
+        .unwrap();
+
+        // Empty
+        std::fs::write(r.p("/dev/input/event5"), [0u8; 8]).unwrap();
+        assert_eq!(read_jack_state(&r), Some(JackState::Empty));
+        assert_eq!(read_jack(&r), Some(false));
+
+        // SW_HEADPHONE_INSERT (bit 2 -> 0x04)
+        let mut hp = [0u8; 8];
+        hp[0] = 1 << crate::evdev::SW_HEADPHONE_INSERT;
+        std::fs::write(r.p("/dev/input/event5"), hp).unwrap();
+        assert_eq!(read_jack_state(&r), Some(JackState::Headphones));
+        assert_eq!(read_jack(&r), Some(true));
+
+        // SW_HEADPHONE_INSERT + SW_MICROPHONE_INSERT (bits 2 and 4 -> 0x14)
+        let mut hs = [0u8; 8];
+        hs[0] =
+            (1 << crate::evdev::SW_HEADPHONE_INSERT) | (1 << crate::evdev::SW_MICROPHONE_INSERT);
+        std::fs::write(r.p("/dev/input/event5"), hs).unwrap();
+        assert_eq!(read_jack_state(&r), Some(JackState::HeadsetWithMic));
+        assert_eq!(read_jack(&r), Some(true));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

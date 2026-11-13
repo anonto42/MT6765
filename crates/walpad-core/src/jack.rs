@@ -161,11 +161,11 @@ impl Jack {
         let before = self.st;
         if now >= self.next_detect {
             self.next_detect = now + DETECT_EVERY;
-            // A plain switch can only say "something is here"; it can never tell a mic-equipped
-            // headset apart from plain headphones (see walpad_hw::jack), so a bare `true` can
-            // only become `Headphones`, never `HeadsetWithMic`.
-            let detected = walpad_hw::jack::read_jack(&self.root)
-                .and_then(|present| present.then_some(JackKind::Headphones));
+            let detected = match walpad_hw::jack::read_jack_state(&self.root) {
+                Some(walpad_hw::jack::JackState::Empty) | None => None,
+                Some(walpad_hw::jack::JackState::Headphones) => Some(JackKind::Headphones),
+                Some(walpad_hw::jack::JackState::HeadsetWithMic) => Some(JackKind::HeadsetWithMic),
+            };
             if detected != self.st.detected {
                 self.st.detected = detected;
                 self.recompute();

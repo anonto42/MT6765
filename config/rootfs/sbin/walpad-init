@@ -91,6 +91,8 @@ if [ -x /usr/local/sbin/walpad-bluetooth ] && [ "$(cat /var/lib/walpad/bluetooth
 fi
 # SD card / USB disks -> /mnt/sd, /mnt/usb/* (own loop: insert and remove while running)
 ( walpad-storage >> /var/log/walpad-storage.log 2>&1 ) &
+# Load MediaTek accdet headset/jack driver if present so walpad-core detects plug/unplug.
+[ -f /vendor/lib/modules/mt6357-accdet.ko ] && ! grep -q "^mt6357_accdet " /proc/modules && insmod /vendor/lib/modules/mt6357-accdet.ko >> /var/log/walpad-audio.log 2>&1
 walpad-audio >> /var/log/walpad-audio.log 2>&1   # speaker amps on (sound plays via /etc/asound.conf)
 # sound server for Firefox and other apps (PulseAudio system daemon on the safe 44.1 kHz plug; never blocks boot)
 ( walpad-sound start >> /var/log/walpad-sound.log 2>&1 ) &
