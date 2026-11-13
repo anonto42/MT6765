@@ -763,39 +763,17 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
             ) > 10
     });
 
-    // a tap on the handle unfolds the strip at the bottom with its strut; the handle moves on top
+    // a tap on the handle unfolds the compact icon-only strip above the handle (no strut, so apps
+    // keep their size); the handle stays in place so a second tap folds it cleanly
     expand_dock(&probe, handle, dock);
-    assert_eq!(geom(p, dock), (0, 1224, 800, 56));
-    assert!(is_mapped(p, strut_win));
-    assert_eq!(
-        strut_of(p, strut_win),
-        [0, 0, 0, 56, 0, 0, 0, 0, 0, 0, 0, 799],
-        "bottom strut 56 px"
-    );
-    wait_for("handle on top of the strip", || {
-        geom(p, handle).1 == 1224 - 28
-    });
-    let ty = c
-        .get_property(
-            false,
-            strut_win,
-            atom(p, "_NET_WM_WINDOW_TYPE"),
-            AtomEnum::ATOM,
-            0,
-            4,
-        )
-        .unwrap()
-        .reply()
-        .unwrap()
-        .value32()
-        .unwrap()
-        .collect::<Vec<_>>();
-    assert_eq!(ty, [atom(p, "_NET_WM_WINDOW_TYPE_DOCK")]);
-    // it is drawn: the charcoal strip with white icons and labels
+    assert_eq!(geom(p, dock), (800 - 224 - 8, 1280 - 28 - 56, 224, 56));
+    assert!(!is_mapped(p, strut_win), "floating strip reserves no strut");
+    wait_for("handle stays in place", || geom(p, handle).1 == 1252);
+    // it is drawn: the charcoal strip with white icons only
     wait_for("dock painted", || {
-        let img = probe.image(dock, 800, 56);
-        px(&img, 800, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
-            && count(&img, 800, 0, 800, 0, 56, TEXT) > 100
+        let img = probe.image(dock, 224, 56);
+        px(&img, 224, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
+            && count(&img, 224, 0, 224, 0, 56, TEXT) > 100
     });
     // a second tap on the handle folds it again
     let (hx, hy, _, _) = geom(p, handle);
@@ -808,7 +786,8 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     // Home (second of four cells) raises the shell above the app and the dock, and folds the strip
     expand_dock(&probe, handle, dock);
     assert!(stack_pos(p, shell) < stack_pos(p, dock));
-    probe.click(300, 1250);
+    let (dx, dy, _, _) = geom(p, dock);
+    probe.click(dx + 56 + 28, dy + 28);
     wait_for("shell raised above the app", || {
         stack_pos(p, shell) > stack_pos(p, app)
     });
@@ -826,7 +805,7 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
         .unwrap();
     c.flush().unwrap();
     wait_for("dock moved for landscape", || {
-        geom(p, dock) == (0, 744, 1280, 56)
+        geom(p, dock) == (1280 - 224 - 8, 800 - 28 - 56, 224, 56)
     });
     let hl = handle_rect((1280, 800), 0, false);
     wait_for("handle moved for landscape", || {
@@ -835,11 +814,11 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     set_active(p, app);
     let t = Instant::now();
     expand_dock(&probe, handle, dock);
-    assert_eq!(strut_of(p, strut_win)[3], 536, "480 below the panel + 56");
+    assert!(!is_mapped(p, strut_win));
     wait_for("landscape dock painted", || {
-        let img = probe.image(dock, 1280, 56);
-        px(&img, 1280, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
-            && count(&img, 1280, 0, 1280, 0, 56, TEXT) > 100
+        let img = probe.image(dock, 224, 56);
+        px(&img, 224, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
+            && count(&img, 224, 0, 224, 0, 56, TEXT) > 100
     });
     // left alone, it folds back by itself after 5 s
     std::thread::sleep(Duration::from_millis(AUTO_COLLAPSE_MS - 1500));
@@ -955,9 +934,10 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     let handle = find_by_class(p, b"walpad-dock-handle\0").expect("dock handle");
 
     // the dock's Keyboard button (third of four cells) shows the keyboard: 30 % of 1280 at the bottom,
-    // the dock moves directly above it, struts cover both
+    // the dock moves directly above the handle
     expand_dock(&probe, handle, dock);
-    probe.click(500, 1250);
+    let (dx, dy, _, _) = geom(p, dock);
+    probe.click(dx + 2 * 56 + 28, dy + 28);
     wait_for("keyboard mapped", || is_mapped(p, kbd));
     // the action folded the strip: the handle sits directly on the keyboard
     wait_for("handle above the keyboard", || {
@@ -970,10 +950,9 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
         strut_of(p, kstrut),
         [0, 0, 0, 384, 0, 0, 0, 0, 0, 0, 0, 799]
     );
-    wait_for("dock above the keyboard", || {
-        geom(p, dock) == (0, 840, 800, 56)
+    wait_for("dock above the handle", || {
+        geom(p, dock) == (800 - 224 - 8, 896 - 28 - 56, 224, 56)
     });
-    assert_eq!(strut_of(p, dstrut)[3], 440, "dock + keyboard");
     wait_for("keyboard painted", || {
         let img = probe.image(kbd, 800, 384);
         px(&img, 800, 3, 200) == (STRIP.r, STRIP.g, STRIP.b)
@@ -1048,35 +1027,32 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     wait_for("keyboard unmapped", || !is_mapped(p, kbd));
     assert!(!is_mapped(p, kstrut));
     wait_for("dock back at the bottom", || {
-        geom(p, dock) == (0, 1224, 800, 56) && geom(p, handle).1 == 1280 - 28
+        geom(p, dock) == (800 - 224 - 8, 1280 - 28 - 56, 224, 56) && geom(p, handle).1 == 1280 - 28
     });
-    assert_eq!(strut_of(p, dstrut)[3], 56);
 
-    // rotation: landscape keyboard is 240 high (30 % of 800), the dock sits on top of it
+    // rotation: landscape keyboard is 240 high (30 % of 800), the dock sits above the handle
     c.configure_window(shell, &ConfigureWindowAux::new().width(1280).height(800))
         .unwrap();
     c.flush().unwrap();
     wait_for("dock moved for landscape", || {
-        geom(p, dock) == (0, 744, 1280, 56)
+        geom(p, dock) == (1280 - 224 - 8, 800 - 28 - 56, 224, 56)
     });
     expand_dock(&probe, handle, dock);
-    probe.click(800, 772);
+    let (dx, dy, _, _) = geom(p, dock);
+    probe.click(dx + 2 * 56 + 28, dy + 28);
     wait_for("landscape keyboard mapped", || is_mapped(p, kbd));
     let r = keyboard_rect((1280, 800));
     assert_eq!(geom(p, kbd), (0, 560, 1280, 240));
     assert_eq!((r.y, r.h), (560, 240));
     assert_eq!(strut_of(p, kstrut)[3], 720, "480 below the panel + 240");
-    wait_for("landscape dock above the keyboard", || {
-        geom(p, dock) == (0, 504, 1280, 56) && geom(p, handle).1 == 560 - 28
+    wait_for("landscape dock above the handle", || {
+        geom(p, dock) == (1280 - 224 - 8, 560 - 28 - 56, 224, 56) && geom(p, handle).1 == 560 - 28
     });
-    assert_eq!(strut_of(p, dstrut)[3], 776);
 
     // Home (dock) puts the keyboard away
     expand_dock(&probe, handle, dock);
-    wait_for("handle on the strip above the keyboard", || {
-        geom(p, handle).1 == 504 - 28
-    });
-    probe.click(400, 530);
+    let (dx, dy, _, _) = geom(p, dock);
+    probe.click(dx + 56 + 28, dy + 28);
     wait_for("keyboard hidden by Home", || !is_mapped(p, kbd));
 
     // shown again, then the shell comes to the front (the user went Home another way): hidden.
@@ -1087,10 +1063,11 @@ fn system_keyboard_types_into_the_focused_window_and_stacks_under_the_dock() {
     });
     set_active(p, app);
     wait_for("dock at the landscape bottom", || {
-        geom(p, dock) == (0, 744, 1280, 56)
+        geom(p, dock) == (1280 - 224 - 8, 800 - 28 - 56, 224, 56)
     });
     expand_dock(&probe, handle, dock);
-    probe.click(800, 772);
+    let (dx, dy, _, _) = geom(p, dock);
+    probe.click(dx + 2 * 56 + 28, dy + 28);
     wait_for("keyboard shown again", || is_mapped(p, kbd));
     set_active(p, shell);
     wait_for("keyboard hidden when the shell is active", || {
@@ -1327,8 +1304,9 @@ fn mouse_pad_moves_the_pointer_and_clicks_under_the_virtual_cursor() {
     });
     assert!(is_mapped(p, pad), "the pad stays for the app");
     expand_dock(&probe, handle, dock);
-    assert_eq!(geom(p, dock), (0, 840, 800, 56));
-    probe.click(400, 868);
+    assert_eq!(geom(p, dock), (800 - 224 - 8, 896 - 28 - 56, 224, 56));
+    let (dx, dy, _, _) = geom(p, dock);
+    probe.click(dx + 2 * 56 + 28, dy + 28);
     wait_for("keyboard replaces the pad", || {
         is_mapped(p, kbd) && !is_mapped(p, pad)
     });

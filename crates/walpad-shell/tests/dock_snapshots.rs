@@ -1,6 +1,6 @@
 //! M5.8 snapshots: the system dock strip in both orientations and with a pressed button.
 use std::path::{Path, PathBuf};
-use walpad_shell::dock::{render, DockButton, DOCK_H};
+use walpad_shell::dock::{render, DockButton, DOCK_H, DOCK_W};
 use walpad_ui::components::Painter;
 use walpad_ui::snapshot::assert_snapshot_in;
 use walpad_ui::tokens::BG;
@@ -27,12 +27,12 @@ fn shot(name: &str, w: i32, pressed: Option<DockButton>) {
 
 #[test]
 fn dock_portrait_and_landscape() {
-    shot("dock_portrait", 800, None);
-    shot("dock_landscape", 1280, None);
+    shot("dock_portrait", DOCK_W, None);
+    shot("dock_landscape", DOCK_W, None);
 }
 
 /// The bottom of the screen over an app (a plain blue stand-in): collapsed = only the handle at
-/// the right end of the edge; expanded = the strip with the handle (arrow down) on top of it.
+/// the right end of the edge; expanded = the compact icon-only strip above the handle.
 fn bottom_shot(name: &str, area: (i32, i32), expanded: bool, pressed: bool) {
     use walpad_shell::dock::{dock_rect, handle_rect, render_handle, HANDLE_H};
     use walpad_ui::tokens::Color;
@@ -43,7 +43,8 @@ fn bottom_shot(name: &str, area: (i32, i32), expanded: bool, pressed: bool) {
     let top = area.1 - h;
     let mut c = Canvas::new(area.0 as u32, h as u32, Color::hex(0x336699)).unwrap();
     if expanded {
-        let mut strip = Canvas::new(area.0 as u32, DOCK_H as u32, BG).unwrap();
+        let dr = dock_rect(area, 0);
+        let mut strip = Canvas::new(DOCK_W as u32, DOCK_H as u32, BG).unwrap();
         render(
             &mut Painter {
                 cv: &mut strip,
@@ -51,7 +52,7 @@ fn bottom_shot(name: &str, area: (i32, i32), expanded: bool, pressed: bool) {
             },
             None,
         );
-        c.blit(&strip, 0, dock_rect(area, 0).y - top);
+        c.blit(&strip, dr.x, dr.y - top);
     }
     let hr = handle_rect(area, 0, expanded);
     render_handle(
@@ -77,10 +78,10 @@ fn dock_handle_collapsed_and_expanded() {
 
 #[test]
 fn dock_pressed_buttons() {
-    shot("dock_portrait_home_pressed", 800, Some(DockButton::Home));
+    shot("dock_portrait_home_pressed", DOCK_W, Some(DockButton::Home));
     shot(
         "dock_landscape_close_pressed",
-        1280,
+        DOCK_W,
         Some(DockButton::CloseApp),
     );
 }
