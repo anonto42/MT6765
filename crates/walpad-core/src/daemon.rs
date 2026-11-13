@@ -930,20 +930,22 @@ impl Daemon {
         self.apply_charger_policy(&raw);
     }
 
-    fn open_map(&self, lat: f64, lon: f64) -> CmdResult {
-        if !lat.is_finite()
-            || !(-90.0..=90.0).contains(&lat)
-            || !lon.is_finite()
-            || !(-180.0..=180.0).contains(&lon)
+    fn open_map(&self, lat: Option<f64>, lon: Option<f64>) -> CmdResult {
+        if lat.is_some() != lon.is_some()
+            || lat.is_some_and(|v| !v.is_finite() || !(-90.0..=90.0).contains(&v))
+            || lon.is_some_and(|v| !v.is_finite() || !(-180.0..=180.0).contains(&v))
         {
             return Err((
                 ErrorCode::InvalidArgs,
                 "lat must be -90..90 and lon -180..180".into(),
             ));
         }
-        let url = format!(
-            "https://www.openstreetmap.org/?mlat={lat:.5}&mlon={lon:.5}#map=17/{lat:.5}/{lon:.5}"
-        );
+        let url = match (lat, lon) {
+            (Some(lat), Some(lon)) => format!(
+                "https://www.openstreetmap.org/?mlat={lat:.5}&mlon={lon:.5}#map=17/{lat:.5}/{lon:.5}"
+            ),
+            _ => "https://www.openstreetmap.org/".to_string(),
+        };
         self.spawn_simple("firefox-esr", &[&url]);
         Ok(json!({"url": url}))
     }

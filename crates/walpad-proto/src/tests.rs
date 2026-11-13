@@ -1069,8 +1069,16 @@ fn open_map_validates_coordinates() {
     assert_eq!(
         c,
         Command::OpenMap {
-            lat: 23.75123,
-            lon: 90.40988
+            lat: Some(23.75123),
+            lon: Some(90.40988)
+        }
+    );
+    let (_, c2) = req(r#"{"v":1,"id":1,"cmd":"open_map","args":{}}"#).unwrap();
+    assert_eq!(
+        c2,
+        Command::OpenMap {
+            lat: None,
+            lon: None
         }
     );
     assert_eq!(

@@ -193,8 +193,8 @@ pub fn layout(frame: &Frame, st: &Option<Status>) -> GpsLayout {
     y += STATE_CARD_H + SP_3;
     let switch_row = Rect::new(c.x, y, c.w, ROW_H);
     y += ROW_H + SP_4;
-    let (mut pos_label, mut pos_card, mut copy_coords, mut copy_link) = (None, None, None, None);
-    if has_pos {
+    let (mut pos_label, mut pos_card, mut copy_coords) = (None, None, None);
+    let copy_link = if has_pos {
         pos_label = Some(Rect::new(c.x, y, c.w, LABEL_H));
         y += LABEL_H + SP_2;
         let card = Rect::new(c.x, y, c.w, POS_CARD_H);
@@ -202,10 +202,15 @@ pub fn layout(frame: &Frame, st: &Option<Status>) -> GpsLayout {
         let bw = (card.w - 2 * SP_4 - SP_3) / 2;
         let by = card.bottom() - SP_4 - BUTTON_H;
         copy_coords = Some(Rect::new(card.x + SP_4, by, bw, BUTTON_H));
-        copy_link = Some(Rect::new(card.x + SP_4 + bw + SP_3, by, bw, BUTTON_H));
+        let osm = Some(Rect::new(card.x + SP_4 + bw + SP_3, by, bw, BUTTON_H));
         pos_card = Some(card);
         y += POS_CARD_H + SP_4;
-    }
+        osm
+    } else {
+        let osm = Some(Rect::new(c.x, y, c.w, BUTTON_H));
+        y += BUTTON_H + SP_4;
+        osm
+    };
     let sat_label = Rect::new(c.x, y, c.w, LABEL_H);
     y += LABEL_H + SP_2;
     let sat_card = Rect::new(c.x, y, c.w, SAT_CARD_H);
@@ -353,15 +358,15 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             p.button(b, "Copy position", ButtonKind::Secondary, state, None);
             hits.push((b, Target::GpsCopyCoords));
         }
-        if let Some(b) = l.copy_link {
-            let state = if pr(Target::GpsOpenMap) {
-                ButtonState::Pressed
-            } else {
-                ButtonState::Default
-            };
-            p.button(b, "OpenStreetMap", ButtonKind::Primary, state, None);
-            hits.push((b, Target::GpsOpenMap));
-        }
+    }
+    if let Some(b) = l.copy_link {
+        let state = if pr(Target::GpsOpenMap) {
+            ButtonState::Pressed
+        } else {
+            ButtonState::Default
+        };
+        p.button(b, "OpenStreetMap", ButtonKind::Primary, state, None);
+        hits.push((b, Target::GpsOpenMap));
     }
 
     // satellites

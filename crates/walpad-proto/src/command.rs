@@ -474,10 +474,12 @@ pub enum Command {
     SetTime {
         datetime: String,
     },
-    /// Open OpenStreetMap in the browser at the given WGS84 coordinates.
+    /// Open OpenStreetMap in the browser (at the given WGS84 coordinates, or the map home).
     OpenMap {
-        lat: f64,
-        lon: f64,
+        #[serde(default)]
+        lat: Option<f64>,
+        #[serde(default)]
+        lon: Option<f64>,
     },
     /// The shell tells the core its power menu opened or closed (the core routes the volume and
     /// power keys to the shell while it is open). `open: true` from a client also opens it.
@@ -866,10 +868,9 @@ impl Command {
                 Err("datetime must be YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS".into())
             }
             Command::OpenMap { lat, lon }
-                if !lat.is_finite()
-                    || !(-90.0..=90.0).contains(lat)
-                    || !lon.is_finite()
-                    || !(-180.0..=180.0).contains(lon) =>
+                if lat.is_some() != lon.is_some()
+                    || lat.is_some_and(|v| !v.is_finite() || !(-90.0..=90.0).contains(&v))
+                    || lon.is_some_and(|v| !v.is_finite() || !(-180.0..=180.0).contains(&v)) =>
             {
                 Err("lat must be -90..90 and lon -180..180".into())
             }

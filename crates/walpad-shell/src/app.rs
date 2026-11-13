@@ -465,8 +465,8 @@ pub enum Cmd {
     Setting(&'static str, Value),
     /// `set_time`: set the system clock manually (`YYYY-MM-DD HH:MM`).
     SetTime(String),
-    /// `open_map`: open OpenStreetMap in the browser at `(lat, lon)`.
-    OpenMap(f64, f64),
+    /// `open_map`: open OpenStreetMap in the browser at optional `(lat, lon)`.
+    OpenMap(Option<(f64, f64)>),
     RestartShell,
     Power {
         poweroff: bool,
@@ -711,7 +711,8 @@ impl Cmd {
             Cmd::Stats(i, on) => ("stats_config", json!({ i.key(): on })),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
             Cmd::SetTime(dt) => ("set_time", json!({"datetime": dt})),
-            Cmd::OpenMap(lat, lon) => ("open_map", json!({"lat": lat, "lon": lon})),
+            Cmd::OpenMap(Some((lat, lon))) => ("open_map", json!({"lat": lat, "lon": lon})),
+            Cmd::OpenMap(None) => ("open_map", json!({})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
             Cmd::PowerMenuState(open) => ("power_menu", json!({"open": open})),
             Cmd::Power { poweroff } => (
@@ -2323,15 +2324,13 @@ impl App {
                 }
             }
             Target::GpsOpenMap if interactive => {
-                if let Some((la, lo)) = self
+                let coords = self
                     .model
                     .status
                     .as_ref()
-                    .and_then(|s| Some((s.gps.lat?, s.gps.lon?)))
-                {
-                    out.cmd(Cmd::OpenMap(la, lo));
-                    self.toast("Opening OpenStreetMap...", Tone::Info);
-                }
+                    .and_then(|s| Some((s.gps.lat?, s.gps.lon?)));
+                out.cmd(Cmd::OpenMap(coords));
+                self.toast("Opening OpenStreetMap...", Tone::Info);
             }
             Target::NotificationsCard => self.go(Tab::Notifications, out),
             Target::NotificationRow(i) if interactive => {
