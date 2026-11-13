@@ -1,0 +1,36 @@
+#!/bin/sh
+# walpad-scan: ClamAV, strictly on demand (owner request 2026-11-13, "a virus scanner tha if i
+# need that then i will abal to use that") - nothing here runs unless you run this by hand; there
+# is no resident scanner or background service (only clamav-scanner + freshclam are installed,
+# not the clamav-daemon).
+#   walpad-scan update          download/refresh the virus signature database (needs network,
+#                                a few minutes the first time)
+#   walpad-scan run [PATH...]   scan PATH(s) recursively, report only what it finds (default:
+#                                /root /mnt /media - your files and any SD card/USB drive)
+#   walpad-scan status          whether a database is there yet, and how old
+DB=/var/lib/clamav
+say() { echo "[scan] $*"; }
+has_db() { [ -s "$DB/main.cvd" ] || [ -s "$DB/main.cld" ] || [ -s "$DB/daily.cvd" ] || [ -s "$DB/daily.cld" ]; }
+
+case ${1:-status} in
+  update)
+    mkdir -p "$DB"
+    freshclam --datadir="$DB"
+    ;;
+  run)
+    shift
+    has_db || { say "no virus database yet - run: walpad-scan update (needs network)"; exit 1; }
+    [ $# -eq 0 ] && set -- /root /mnt /media
+    say "scanning: $* (a full SD card can take a while)"
+    clamscan -r -i --database="$DB" "$@"
+    ;;
+  status)
+    if has_db; then
+      say "database present:"
+      ls -la "$DB"/*.c?d 2>/dev/null
+    else
+      say "no virus database yet - run: walpad-scan update"
+    fi
+    ;;
+  *) echo "usage: $0 update|run [PATH...]|status" >&2; exit 2 ;;
+esac

@@ -40,7 +40,7 @@ BASE_PKGS="alpine-baselayout alpine-keys apk-tools busybox busybox-extras musl-u
 GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xrdb xclip xkbcomp \
       xkeyboard-config fontconfig font-misc-misc font-cursor-misc \
       openbox matchbox-keyboard st xterm fish mesa-dri-gallium font-dejavu font-noto-emoji font-noto font-noto-bengali font-noto-devanagari font-noto-arabic font-noto-naskh-arabic font-noto-nastaliq-urdu font-noto-tamil font-noto-telugu font-noto-gujarati font-noto-gurmukhi font-noto-kannada font-noto-malayalam font-noto-oriya font-noto-sinhala font-noto-thai font-noto-hebrew font-noto-khmer font-noto-myanmar font-noto-lao font-noto-georgian font-noto-armenian font-noto-ethiopic font-noto-cjk font-noto-symbols font-noto-math \
-      python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme lite-xl"
+      python3 python3-tkinter tk alsa-utils alsa-lib firefox-esr pcmanfm gpicview adwaita-icon-theme lite-xl tmux clamav-scanner freshclam"
 # fish (owner request 2026-11-12, change terminal-autocomplete-shell): autosuggestions + tab
 # completion out of the box, no plugin wiring needed (unlike zsh+zsh-autosuggestions); only the
 # "terminal" app's st runs it (-e fish in apps.json), kept out of the NO_PY trim list below so
@@ -54,6 +54,20 @@ GUI_PKGS="xvfb libxtst py3-xlib xset xsetroot xrandr xinput setxkbmap xdotool xr
 # aarch64 package (2.1.8-r3, apk-verified, docs/46-ide.md), chosen over geany for CPU/RAM footprint
 # (SDL2 + Lua, no GTK/dbus/at-spi2 stack): it adds only itself + lua5.4-libs on top of this package
 # set (freetype/pcre2/zlib/libpng/brotli-libs/musl are already pulled in by fontconfig/firefox-esr).
+# tmux (owner report 2026-11-13, "normal terminal need scrollable feature"): st itself has no
+# scrollback at all (suckless philosophy); the "terminal" app's st now runs tmux instead of fish
+# directly (tmux's default-shell is fish, config/rootfs/etc/tmux.conf), giving real scrollback
+# and, with mouse mode on, touch-drag-to-scroll once apps.json also switches that app to
+# "touch": "scroll". Kept out of the NO_PY trim list below so both images get it.
+# clamav-scanner + freshclam (owner request 2026-11-13, "a virus scanner tha if i need that then
+# i will abal to use that"): only the scan engine and the signature-database updater, not
+# clamav-daemon/clamdscan - there is no resident/background scanner, nothing runs at boot or on a
+# timer. walpad-scan (apps.json "scanner") wraps both; signatures download on first real use
+# (walpad-scan update), not at image-build time (no network in the build container, and the
+# owner's own "if i need that" framing - don't ship ~300 MB of signatures nobody asked to fetch
+# yet). config/rootfs/etc/clamav/freshclam.conf overrides DatabaseOwner to root: this whole build
+# uses --no-scripts, so the apk post-install step that would normally create a "clamav" system
+# user never runs, and freshclam refuses to start as a user that doesn't exist.
 if [ "$NO_PY" = 1 ]; then
   KEEP=""; for p in $GUI_PKGS; do
     case $p in python3|python3-tkinter|tk|py3-xlib|xdotool) ;; *) KEEP="$KEEP $p" ;; esac
