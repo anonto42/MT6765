@@ -67,9 +67,13 @@ const MAP_MAX_H: i32 = 200;
 
 /// The pad window over other apps (no compositor, nothing to blend with): the strip is
 /// `SURFACE_STRONG` over BG flattened into one opaque colour; the touch surface adds `SURFACE`.
-pub const STRIP: Color = SURFACE_STRONG.over(BG);
+pub fn strip_color() -> Color {
+    surface_strong().over(bg())
+}
 /// The touch surface's (opaque) colour: what the mini-map is restored to.
-pub const SURFACE_BG: Color = SURFACE.over(STRIP);
+pub fn surface_bg() -> Color {
+    surface().over(strip_color())
+}
 
 /// X pointer buttons.
 pub const BUTTON_LEFT: u8 = 1;
@@ -396,21 +400,21 @@ impl PadState {
 /// The mini-map: the visible area in small, the pad's band greyed, a crosshair and a square marker
 /// where the cursor is.
 pub fn paint_map(p: &mut Painter, map: Rect, area: (i32, i32), cursor: (i32, i32)) {
-    p.cv.rect(map.inset(-2), SURFACE_BG);
-    p.cv.rect(map, PRESSED_TINT);
+    p.cv.rect(map.inset(-2), surface_bg());
+    p.cv.rect(map, pressed_tint());
     let pad = pad_rect(area);
     let band_y = map.y + pad.y * map.h / area.1.max(1);
     p.cv.rect(
         Rect::new(map.x, band_y, map.w, map.bottom() - band_y),
-        DIVIDER,
+        divider(),
     );
     let dx = map.x + cursor.0 * map.w / area.0.max(1);
     let dy = map.y + cursor.1 * map.h / area.1.max(1);
     // crosshair through the cursor (inside the map), then the square marker
-    p.cv.rect(Rect::new(map.x, dy, map.w, 1), DIVIDER);
-    p.cv.rect(Rect::new(dx, map.y, 1, map.h), DIVIDER);
+    p.cv.rect(Rect::new(map.x, dy, map.w, 1), divider());
+    p.cv.rect(Rect::new(dx, map.y, 1, map.h), divider());
     p.cv.rect(Rect::new(dx - 6, dy - 6, 13, 13), Color::hex(0x000000));
-    p.cv.rect(Rect::new(dx - 4, dy - 4, 9, 9), TEXT);
+    p.cv.rect(Rect::new(dx - 4, dy - 4, 9, 9), text());
 }
 
 /// Draws the whole pad over the canvas (pad-sized).
@@ -418,7 +422,7 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
     let area = st.area();
     let bounds = p.cv.bounds();
     let l = pad_layout(area);
-    p.cv.rect(bounds, STRIP);
+    p.cv.rect(bounds, strip_color());
     p.divider(0, 0, bounds.w);
     p.outline_box(l.surface, 0, false, false, false);
     let compact = l.surface.h < 200;
@@ -440,7 +444,7 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
     let mut y = hint.y + (hint.h - block) / 2;
     p.text(
         title,
-        Style::new(Face::Bold, SIZE_BODY, TEXT),
+        Style::new(Face::Bold, SIZE_BODY, text()),
         Rect::new(hint.x, y, hint.w, lh),
         Align::Left,
     );
@@ -448,7 +452,7 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
     for s in lines {
         p.text(
             s,
-            Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
             Rect::new(hint.x, y, hint.w, lh),
             Align::Left,
         );
@@ -461,7 +465,7 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
         let label = |s: &str, p: &mut Painter| {
             p.text(
                 s,
-                Style::new(Face::Bold, SIZE_SECONDARY, TEXT),
+                Style::new(Face::Bold, SIZE_SECONDARY, text()),
                 *r,
                 Align::Center,
             )
@@ -475,8 +479,8 @@ pub fn paint_pad(p: &mut Painter, st: &PadState) {
                 // mouse with a chevron down: "put the pad away" (the keyboard's minimise key)
                 let w = ICON + 2 + 16;
                 let (x, y) = (r.x + (r.w - w) / 2, r.y + (r.h - ICON) / 2);
-                p.cv.icon(Icon::Mouse, x, y, ICON, TEXT);
-                p.cv.icon(Icon::ChevronDown, x + ICON + 2, y + 4, 16, TEXT);
+                p.cv.icon(Icon::Mouse, x, y, ICON, text());
+                p.cv.icon(Icon::ChevronDown, x + ICON + 2, y + 4, 16, text());
             }
         }
     }
@@ -555,7 +559,7 @@ pub fn paint_marker(cv: &mut Canvas) {
                         MARKER_SCALE,
                         MARKER_SCALE,
                     ),
-                    TEXT,
+                    text(),
                 );
             }
         }
@@ -735,7 +739,7 @@ impl MousePad {
             mapped: false,
             active,
             st: PadState::new(area),
-            canvas: Canvas::new(r.w as u32, r.h as u32, BG).ok_or("mouse pad canvas")?,
+            canvas: Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("mouse pad canvas")?,
         })
     }
 
@@ -765,7 +769,7 @@ impl MousePad {
         }
         self.st.set_area(area);
         let r = pad_rect(area);
-        self.canvas = Canvas::new(r.w as u32, r.h as u32, BG).ok_or("mouse pad canvas")?;
+        self.canvas = Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("mouse pad canvas")?;
         self.bw.place(&self.xc, r)?;
         self.bw.write_strut(&self.xc, area)?;
         if self.mapped {

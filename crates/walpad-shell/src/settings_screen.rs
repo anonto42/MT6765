@@ -602,7 +602,7 @@ pub fn render(
                 back_rect.x + (back_rect.w - ICON) / 2,
                 back_rect.y + (back_rect.h - ICON) / 2,
                 ICON,
-                TEXT,
+                text(),
             );
             p.screen_title(title(pg), l.title);
             hits.push((back_rect, Target::Back));
@@ -636,7 +636,7 @@ pub fn render(
                 };
                 if let Some(t) = hit {
                     if pressed == Some(t) {
-                        p.cv.rect(*r, PRESSED_TINT);
+                        p.cv.rect(*r, pressed_tint());
                     }
                     hits.push((*r, t));
                 }
@@ -742,7 +742,7 @@ pub fn render(
                 target,
                 disabled,
             } => {
-                let lc = if *disabled { TEXT_DISABLED } else { TEXT };
+                let lc = if *disabled { text_disabled() } else { text() };
                 let cap = Rect::new(r.x + SP_3, r.y + 8, r.w - 2 * SP_3, 24);
                 p.cv.icon(*icon, cap.x, cap.y, ICON, lc);
                 p.text(
@@ -753,7 +753,7 @@ pub fn render(
                 );
                 p.text(
                     pct,
-                    Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+                    Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
                     cap,
                     Align::Right,
                 );
@@ -763,7 +763,7 @@ pub fn render(
             }
             Row::Mono(line) => p.text(
                 line,
-                Style::new(Face::Mono, 13.0, TEXT_SECONDARY),
+                Style::new(Face::Mono, 13.0, text_secondary()),
                 Rect::new(r.x + SP_2, r.y, r.w - SP_4, r.h),
                 Align::Left,
             ),

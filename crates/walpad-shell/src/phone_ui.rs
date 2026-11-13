@@ -450,20 +450,20 @@ pub fn unread(st: &Option<Status>) -> u32 {
 /// What the line under the tabs says: (text, colour).
 pub fn notice_line(st: &Option<Status>, online: bool) -> (String, Color) {
     if !online {
-        return ("System service not responding".into(), DANGER);
+        return ("System service not responding".into(), danger());
     }
     match phone(st) {
-        None => ("Waiting for the system".into(), TEXT_DISABLED),
+        None => ("Waiting for the system".into(), text_disabled()),
         Some(p) if !p.available => (
             p.reason
                 .clone()
                 .unwrap_or_else(|| "Phone unavailable".into()),
-            WARNING,
+            warning(),
         ),
         // the honest part: signalling works, call sound is not verified on this device
         Some(_) => (
             "Call audio is experimental: it may be silent".into(),
-            TEXT_SECONDARY,
+            text_secondary(),
         ),
     }
 }
@@ -585,7 +585,7 @@ fn key_box(p: &mut Painter, r: Rect, label: &str, pressed: bool, disabled: bool)
         Style::new(
             Face::Regular,
             34.0,
-            if disabled { TEXT_DISABLED } else { TEXT },
+            if disabled { text_disabled() } else { text() },
         ),
         r,
         Align::Center,
@@ -635,9 +635,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 m.dial.clone()
             };
             let col = if m.dial.is_empty() {
-                TEXT_DISABLED
+                text_disabled()
             } else {
-                TEXT
+                text()
             };
             let size = if m.dial.chars().count() > 16 {
                 26.0
@@ -663,9 +663,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                     b.y + (b.h - ICON) / 2,
                     ICON,
                     if pr(PhoneTarget::Backspace) {
-                        TEXT
+                        text()
                     } else {
-                        TEXT_SECONDARY
+                        text_secondary()
                     },
                 );
                 hits.push((b, pt(PhoneTarget::Backspace)));
@@ -736,7 +736,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                         false,
                     );
                     if e.kind == CallKind::Missed {
-                        p.cv.rect(Rect::new(r.x + SP_4 + ICON - 4, r.y + 10, 8, 8), DANGER);
+                        p.cv.rect(Rect::new(r.x + SP_4 + ICON - 4, r.y + 10, 8, 8), danger());
                     }
                     hits.push((r, pt(t)));
                 }
@@ -761,9 +761,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             let add = Rect::new(c.right() - 120, y0, 120, SEG_H);
             p.outline_box(search, 0, pr(PhoneTarget::Search), false, false);
             let (txt, col) = if m.search.is_empty() {
-                ("Search contacts".to_string(), TEXT_DISABLED)
+                ("Search contacts".to_string(), text_disabled())
             } else {
-                (m.search.clone(), TEXT)
+                (m.search.clone(), text())
             };
             p.text(
                 &txt,
@@ -884,7 +884,7 @@ fn render_conversations(
             false,
         );
         if cv.unread > 0 {
-            p.cv.rect(Rect::new(r.x + SP_4 + ICON - 5, r.y + 9, 10, 10), TEXT);
+            p.cv.rect(Rect::new(r.x + SP_4 + ICON - 5, r.y + 9, 10, 10), text());
         }
         hits.push((r, pt(t)));
     }
@@ -908,9 +908,9 @@ fn render_thread(
         back.y + (back.h - ICON) / 2,
         ICON,
         if pr(PhoneTarget::ThreadBack) {
-            TEXT
+            text()
         } else {
-            TEXT_SECONDARY
+            text_secondary()
         },
     );
     hits.push((back, pt(PhoneTarget::ThreadBack)));
@@ -933,7 +933,7 @@ fn render_thread(
     let title = m.label(num);
     p.text(
         &title,
-        Style::new(Face::Bold, SIZE_BODY, TEXT),
+        Style::new(Face::Bold, SIZE_BODY, text()),
         Rect::new(back.right(), y0, call.x - back.right() - SP_2, ROW),
         Align::Left,
     );
@@ -970,23 +970,23 @@ fn render_thread(
         p.cv.rect(
             *r,
             if msg.incoming {
-                SURFACE
+                surface()
             } else {
-                SURFACE_STRONG
+                surface_strong()
             },
         );
         if pr(t) {
-            p.cv.rect(*r, PRESSED_TINT);
+            p.cv.rect(*r, pressed_tint());
         }
         if msg.incoming {
-            p.cv.rect(Rect::new(r.x, r.y, 3, r.h), OUTLINE);
+            p.cv.rect(Rect::new(r.x, r.y, 3, r.h), outline());
         } else {
-            p.cv.rect(Rect::new(r.right() - 3, r.y, 3, r.h), TEXT);
+            p.cv.rect(Rect::new(r.right() - 3, r.y, 3, r.h), text());
         }
         for (k, l) in lines.iter().enumerate() {
             p.text(
                 l,
-                Style::new(Face::Regular, SIZE_BODY, TEXT),
+                Style::new(Face::Regular, SIZE_BODY, text()),
                 Rect::new(
                     r.x + SP_3,
                     r.y + SP_3 + k as i32 * LINE_H,
@@ -1003,9 +1003,9 @@ fn render_thread(
             _ => "",
         };
         let col = if state.contains("Not sent") {
-            DANGER
+            danger()
         } else {
-            TEXT_SECONDARY
+            text_secondary()
         };
         p.text(
             &format!("{}{state}", fmt_when(msg.ts, now, &m.tz)),
@@ -1182,11 +1182,11 @@ pub fn paint_badge(p: &mut Painter, icon_box: Rect, count: u32) {
         (r.x + 11) as f32,
         (r.y + 11) as f32,
         11.0,
-        walpad_ui::tokens::DANGER,
+        walpad_ui::tokens::danger(),
     );
     p.text(
         &text,
-        Style::new(Face::Bold, SIZE_LABEL, walpad_ui::tokens::BG),
+        Style::new(Face::Bold, SIZE_LABEL, walpad_ui::tokens::bg()),
         r,
         Align::Center,
     );

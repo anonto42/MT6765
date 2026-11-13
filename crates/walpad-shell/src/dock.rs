@@ -102,9 +102,9 @@ pub fn handle_shape() -> Vec<Rect> {
 /// moves the strip: up = expand, down = collapse.
 pub fn render_handle(p: &mut Painter, at: (i32, i32), expanded: bool, pressed: bool) {
     let r = Rect::new(at.0, at.1, HANDLE_W, HANDLE_H);
-    let strip = SURFACE_STRONG.over(BG);
+    let strip = surface_strong().over(bg());
     let fill = if pressed {
-        PRESSED_TINT.over(strip)
+        pressed_tint().over(strip)
     } else {
         strip
     };
@@ -120,8 +120,8 @@ pub fn render_handle(p: &mut Painter, at: (i32, i32), expanded: bool, pressed: b
     } else {
         (cy - dy, cy + dy)
     };
-    p.cv.line((cx - dx, base), (cx, tip), 2.0, TEXT);
-    p.cv.line((cx, tip), (cx + dx, base), 2.0, TEXT);
+    p.cv.line((cx - dx, base), (cx, tip), 2.0, text());
+    p.cv.line((cx, tip), (cx + dx, base), 2.0, text());
 }
 
 /// `_NET_WM_STRUT_PARTIAL`: struts count from the screen edge, so the part of the root below the
@@ -160,28 +160,28 @@ pub fn render(p: &mut Painter, pressed: Option<DockButton>) {
     let w = p.cv.width();
     // its own window over other apps (no compositor): SURFACE_STRONG over BG flattened into one
     // opaque strip, a divider on top, flush full-height button cells separated by 1 px dividers
-    p.cv.rect(Rect::new(0, 0, w, DOCK_H), SURFACE_STRONG.over(BG));
+    p.cv.rect(Rect::new(0, 0, w, DOCK_H), surface_strong().over(bg()));
     p.divider(0, 0, w);
     for (i, (r, b)) in button_rects(w).iter().enumerate() {
         let (_, label, icon) = BUTTONS[i];
         if pressed == Some(*b) {
-            p.cv.rect(*r, PRESSED_TINT);
+            p.cv.rect(*r, pressed_tint());
         }
         if i > 0 {
-            p.cv.rect(Rect::new(r.x, 1, 1, DOCK_H - 1), DIVIDER);
+            p.cv.rect(Rect::new(r.x, 1, 1, DOCK_H - 1), divider());
         }
         let tw = p.fonts.measure(label, Face::Regular, SIZE_SECONDARY).ceil() as i32;
         let group = ICON + SP_2 + tw;
         let x0 = r.x + (r.w - group) / 2;
         let colour = if *b == DockButton::CloseApp {
-            DANGER
+            danger()
         } else {
-            TEXT
+            text()
         };
         p.cv.icon(icon, x0, (DOCK_H - ICON) / 2, ICON, colour);
         p.text(
             label,
-            Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+            Style::new(Face::Regular, SIZE_SECONDARY, text()),
             Rect::new(x0 + ICON + SP_2, 0, tw + 4, DOCK_H),
             Align::Left,
         );
@@ -476,8 +476,8 @@ impl Dock {
             fold: Fold::default(),
             active: 0,
             pressed: None,
-            canvas: Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?,
-            handle_canvas: Canvas::new(HANDLE_W as u32, HANDLE_H as u32, BG)
+            canvas: Canvas::new(r.w as u32, DOCK_H as u32, bg()).ok_or("dock canvas")?,
+            handle_canvas: Canvas::new(HANDLE_W as u32, HANDLE_H as u32, bg())
                 .ok_or("dock canvas")?,
             epoch: Instant::now(),
         };
@@ -585,7 +585,7 @@ impl Dock {
         }
         self.area = area;
         let r = dock_rect(area, self.kbd_h);
-        self.canvas = Canvas::new(r.w as u32, DOCK_H as u32, BG).ok_or("dock canvas")?;
+        self.canvas = Canvas::new(r.w as u32, DOCK_H as u32, bg()).ok_or("dock canvas")?;
         self.place()
     }
 

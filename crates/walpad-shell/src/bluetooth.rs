@@ -72,30 +72,30 @@ fn connected_count(b: &BluetoothStatus) -> usize {
 /// Chip on the screen title.
 pub fn chip(st: &Option<Status>) -> (&'static str, Color) {
     let Some(b) = bt(st) else {
-        return ("Unknown", TEXT_DISABLED);
+        return ("Unknown", text_disabled());
     };
     match b.controller {
-        BluetoothController::Starting => ("Starting", WARNING),
-        BluetoothController::Present if b.powered => ("On", SUCCESS),
-        BluetoothController::Present => ("Off", TEXT_SECONDARY),
-        BluetoothController::Absent if !supported(st) => ("None", TEXT_DISABLED),
-        BluetoothController::Absent if !b.enabled => ("Off", TEXT_SECONDARY),
-        BluetoothController::Absent if b.reason.is_some() => ("Failed", DANGER),
-        BluetoothController::Absent => ("Stopped", TEXT_SECONDARY),
+        BluetoothController::Starting => ("Starting", warning()),
+        BluetoothController::Present if b.powered => ("On", success()),
+        BluetoothController::Present => ("Off", text_secondary()),
+        BluetoothController::Absent if !supported(st) => ("None", text_disabled()),
+        BluetoothController::Absent if !b.enabled => ("Off", text_secondary()),
+        BluetoothController::Absent if b.reason.is_some() => ("Failed", danger()),
+        BluetoothController::Absent => ("Stopped", text_secondary()),
     }
 }
 
 /// Quick Settings row subtitle.
 pub fn qs_line(st: &Option<Status>) -> (String, Color) {
     let Some(b) = bt(st) else {
-        return ("Unknown".into(), TEXT_SECONDARY);
+        return ("Unknown".into(), text_secondary());
     };
     match b.controller {
-        BluetoothController::Starting => ("Starting...".into(), WARNING),
+        BluetoothController::Starting => ("Starting...".into(), warning()),
         BluetoothController::Present if b.powered => {
             let n = connected_count(b);
             if b.discovering {
-                ("Scanning...".into(), TEXT_SECONDARY)
+                ("Scanning...".into(), text_secondary())
             } else if n == 1 {
                 let name = b
                     .devices
@@ -103,18 +103,18 @@ pub fn qs_line(st: &Option<Status>) -> (String, Color) {
                     .find(|d| d.connected)
                     .map(|d| d.name.clone())
                     .unwrap_or_default();
-                (format!("Connected: {name}"), SUCCESS)
+                (format!("Connected: {name}"), success())
             } else if n > 1 {
-                (format!("{n} devices connected"), SUCCESS)
+                (format!("{n} devices connected"), success())
             } else {
-                ("On".into(), TEXT_SECONDARY)
+                ("On".into(), text_secondary())
             }
         }
-        BluetoothController::Present => ("Off".into(), TEXT_SECONDARY),
-        BluetoothController::Absent if !supported(st) => ("Not available".into(), TEXT_DISABLED),
-        BluetoothController::Absent if !b.enabled => ("Off".into(), TEXT_SECONDARY),
-        BluetoothController::Absent if b.reason.is_some() => ("Failed to start".into(), DANGER),
-        BluetoothController::Absent => ("Not started".into(), TEXT_SECONDARY),
+        BluetoothController::Present => ("Off".into(), text_secondary()),
+        BluetoothController::Absent if !supported(st) => ("Not available".into(), text_disabled()),
+        BluetoothController::Absent if !b.enabled => ("Off".into(), text_secondary()),
+        BluetoothController::Absent if b.reason.is_some() => ("Failed to start".into(), danger()),
+        BluetoothController::Absent => ("Not started".into(), text_secondary()),
     }
 }
 
@@ -300,14 +300,14 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+        Style::new(Face::Regular, SIZE_SECONDARY, text()),
         Rect::new(l.chip.x + 28, l.chip.y, l.chip.w - 36, l.chip.h),
         Align::Left,
     );
     if let (Some(h), Some(why)) = (l.hint, bt(v.st).and_then(|b| b.reason.clone())) {
         p.text(
             &why,
-            Style::new(Face::Regular, SIZE_SECONDARY, DANGER),
+            Style::new(Face::Regular, SIZE_SECONDARY, danger()),
             h,
             Align::Left,
         );
@@ -342,7 +342,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     if mine.is_empty() {
         p.text(
             "No paired devices",
-            Style::new(Face::Regular, SIZE_BODY, TEXT_DISABLED),
+            Style::new(Face::Regular, SIZE_BODY, text_disabled()),
             Rect::new(
                 l.mine_card.x + SP_4,
                 l.mine_card.y,
@@ -355,11 +355,11 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     for (i, (d, r)) in mine.iter().zip(&l.mine_rows).enumerate() {
         let busy = v.busy == Some(d.address.as_str());
         let (sub, col, action) = if busy {
-            ("Working...".to_string(), WARNING, "")
+            ("Working...".to_string(), warning(), "")
         } else if d.connected {
-            ("Connected".to_string(), SUCCESS, "Disconnect")
+            ("Connected".to_string(), success(), "Disconnect")
         } else {
-            ("Paired".to_string(), TEXT_SECONDARY, "Connect")
+            ("Paired".to_string(), text_secondary(), "Connect")
         };
         let forget = r.forget.unwrap_or(r.row);
         let text_r = Rect::new(r.row.x, r.row.y, r.row.w - FORGET_W - ACTION_W, r.row.h);
@@ -374,14 +374,14 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         } else {
             p.text(
                 action,
-                Style::new(Face::Bold, SIZE_BODY, TEXT),
+                Style::new(Face::Bold, SIZE_BODY, text()),
                 Rect::new(forget.x - ACTION_W, r.row.y, ACTION_W - SP_2, r.row.h),
                 Align::Right,
             );
         }
         p.text(
             "Forget",
-            Style::new(Face::Bold, SIZE_BODY, DANGER),
+            Style::new(Face::Bold, SIZE_BODY, danger()),
             Rect::new(forget.x, forget.y, forget.w - SP_4, forget.h),
             Align::Right,
         );
@@ -424,9 +424,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     for (i, (d, r)) in avail.iter().zip(&l.avail_rows).enumerate() {
         let busy = v.busy == Some(d.address.as_str());
         let (sub, col) = if busy {
-            ("Pairing...", WARNING)
+            ("Pairing...", warning())
         } else {
-            ("Tap to pair", TEXT_SECONDARY)
+            ("Tap to pair", text_secondary())
         };
         let text_r = Rect::new(r.row.x, r.row.y, r.row.w - 80, r.row.h);
         device_row(p, r.row, text_r, d, sub, col, pr(Target::BtAvail(i)));
@@ -442,7 +442,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 r.row.right() - SP_4 - 26,
                 r.row.y + (r.row.h - 18) / 2,
                 bars_from_rssi(d.rssi),
-                TEXT,
+                text(),
             );
         }
         hits.push((r.row, Target::BtAvail(i)));
@@ -472,13 +472,13 @@ fn device_row(
         row.x + SP_4,
         row.y + (row.h - ICON) / 2,
         ICON,
-        OUTLINE,
+        outline(),
     );
     let tx = row.x + SP_4 + ICON + SP_4;
     let tw = text_r.right() - tx - SP_2;
     p.text(
         &d.name,
-        Style::new(Face::Regular, SIZE_BODY, TEXT),
+        Style::new(Face::Regular, SIZE_BODY, text()),
         Rect::new(tx, row.y + 12, tw, 28),
         Align::Left,
     );
@@ -521,7 +521,7 @@ pub fn render_pair(
     };
     p.text(
         &title,
-        Style::new(Face::Regular, SIZE_TITLE, TEXT),
+        Style::new(Face::Regular, SIZE_TITLE, text()),
         Rect::new(r.x + SP_5, r.y + SP_5, r.w - 2 * SP_5, 40),
         Align::Left,
     );
@@ -537,7 +537,7 @@ pub fn render_pair(
     let big = |p: &mut Painter, s: &str| {
         p.text(
             s,
-            Style::new(Face::Mono, 36.0, TEXT),
+            Style::new(Face::Mono, 36.0, text()),
             Rect::new(r.x + SP_5, r.y + 104, r.w - 2 * SP_5, 48),
             Align::Center,
         )
@@ -547,7 +547,7 @@ pub fn render_pair(
             small(
                 p,
                 &format!("Connecting to {name}..."),
-                TEXT_SECONDARY,
+                text_secondary(),
                 body_r,
             );
             p.spinner(r.x + r.w / 2, r.y + 130, 32, spinner_deg as f32);
@@ -556,7 +556,7 @@ pub fn render_pair(
             small(
                 p,
                 "Does the other device show this number?",
-                TEXT_SECONDARY,
+                text_secondary(),
                 body_r,
             );
             big(p, code);
@@ -565,14 +565,17 @@ pub fn render_pair(
             small(
                 p,
                 "then press Enter. Pairing finishes by itself.",
-                TEXT_SECONDARY,
+                text_secondary(),
                 body_r,
             );
             big(p, code);
         }
-        PairState::Failed(why) => {
-            small(p, why, DANGER, Rect::new(body_r.x, body_r.y, body_r.w, 56))
-        }
+        PairState::Failed(why) => small(
+            p,
+            why,
+            danger(),
+            Rect::new(body_r.x, body_r.y, body_r.w, 56),
+        ),
     }
     let by = r.bottom() - SP_5 - BUTTON_H;
     let mut hits = Vec::new();

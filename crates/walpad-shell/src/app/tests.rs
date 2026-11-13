@@ -1761,4 +1761,26 @@ fn settings_all_pages_configurable_controls_and_manual_network() {
         tap(&mut app, Target::SheetConnect).cmds,
         vec![Cmd::Setting("net_hostname", json!("walpadpro"))]
     );
+
+    // Display / Device page: Dark / Light theme toggle
+    tap(&mut app, Target::Back);
+    tap(&mut app, Target::Page(Page::Display));
+    app.on_gesture(&Gesture::Drag { dx: 0, dy: -400 }, 1200);
+    render(&mut app);
+    assert_eq!(
+        tap(&mut app, Target::ThemeToggle).cmds,
+        vec![Cmd::Setting("theme", json!("light"))]
+    );
+    assert_eq!(
+        walpad_ui::tokens::theme(),
+        walpad_ui::tokens::ThemeMode::Light
+    );
+    assert_eq!(
+        tap(&mut app, Target::ThemeToggle).cmds,
+        vec![Cmd::Setting("theme", json!("dark"))]
+    );
+    assert_eq!(
+        walpad_ui::tokens::theme(),
+        walpad_ui::tokens::ThemeMode::Dark
+    );
 }

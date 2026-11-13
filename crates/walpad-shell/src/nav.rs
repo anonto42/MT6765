@@ -17,7 +17,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
 use walpad_ui::components::Painter;
-use walpad_ui::tokens::BG;
+use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts, Icon, Rect};
 use walpad_x::{XConn, XError};
 use x11rb::connection::Connection;
@@ -182,7 +182,7 @@ impl Nav {
             swipe: EdgeSwipe::new(area),
             rec: Recogniser::new(),
             recents: None,
-            canvas: Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("recents canvas")?,
+            canvas: Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("recents canvas")?,
             thumbs: HashMap::new(),
             dirty: false,
             next_capture: None,
@@ -300,7 +300,7 @@ impl Nav {
         }
         self.area = area;
         self.swipe.set_area(area);
-        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("recents canvas")?;
+        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("recents canvas")?;
         let z = zone_rect(area);
         self.configure(self.edge, z)?;
         self.configure(self.rwin, Rect::new(0, 0, area.0, area.1))?;

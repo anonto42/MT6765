@@ -156,6 +156,26 @@ impl FocusKbd {
         Some(KbdAction::Show)
     }
 
+    /// `_NET_ACTIVE_WINDOW` changed (owner report 2026-11-13: the terminal/Kali/Scanner fallback
+    /// keyboard, once up, never hid again when switching away - it only ever showed itself on
+    /// `app_started`, with nothing watching for the active window leaving). `fallback_app`:
+    /// whether the window that just became active is one of the no-XIM apps.
+    ///
+    /// A keyboard a real XIM focus brought up (`by_focus`) is left alone: its own focus-out
+    /// already governs it, and this is purely the fallback apps' own safety net.
+    pub fn active_window_changed(&mut self, now: u64, fallback_app: bool) {
+        if fallback_app {
+            if !self.visible && self.fallback_at.is_none() {
+                self.fallback_at = Some(now + FALLBACK_MS);
+            }
+        } else if self.visible && !self.by_focus {
+            self.fallback_at = None;
+            if self.hide_at.is_none() {
+                self.hide_at = Some(now + HIDE_DEBOUNCE_MS);
+            }
+        }
+    }
+
     pub fn tick(&mut self, now: u64) -> Option<KbdAction> {
         if self.show_at.is_some_and(|t| now >= t) {
             self.show_at = None;
@@ -196,6 +216,8 @@ pub enum ImEvent {
     FocusOut(IcKey),
     Destroyed(IcKey),
     ClientGone(u32),
+    /// `_NET_ACTIVE_WINDOW` changed; `true` if the new one is one of [`FALLBACK_CLASSES`].
+    ActiveWindow(bool),
 }
 
 /// The shell's timed X connection as the xim crate's transport.
@@ -323,7 +345,13 @@ struct Atoms {
     xconnect: u32,
     protocol: u32,
     moredata: u32,
+    active: u32,
 }
+
+/// WM_CLASS of apps that need the keyboard but never talk XIM (st: terminal, kali, scanner - all
+/// the same st+fish shell, owner request 2026-11-12/13). Matched against the active window's
+/// WM_CLASS to drive the fallback show/hide in [`ImServer::poll`] (`active_window_changed`).
+const FALLBACK_CLASSES: &[&str] = &["term-st", "kali-st", "scanner-st"];
 
 pub struct ImServer {
     server: XServer,
@@ -337,6 +365,8 @@ pub struct ImServer {
     /// `_XIM_MOREDATA` chunks per our communication window (Xlib's "only client messages"
     /// transport splits long requests into 20-byte pieces)
     partial: HashMap<u32, Vec<u8>>,
+    /// Last `_NET_ACTIVE_WINDOW` seen, to tell a real change from a repeated PropertyNotify.
+    active_window: u32,
 }
 
 fn ser(e: ServerError) -> XError {
@@ -356,7 +386,14 @@ impl ImServer {
             xconnect: intern("_XIM_XCONNECT")?,
             protocol: intern("_XIM_PROTOCOL")?,
             moredata: intern("_XIM_MOREDATA")?,
+            active: intern("_NET_ACTIVE_WINDOW")?,
         };
+        // watch root for _NET_ACTIVE_WINDOW changes (the fallback show/hide for apps that never
+        // talk XIM at all - st: terminal, kali, scanner - follows which window is active)
+        xc.conn.change_window_attributes(
+            root,
+            &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+        )?;
         let server = X11rbServer::init(ImConn(xc), 0, IM_NAME, LOCALES).map_err(ser)?;
         Ok(ImServer {
             server,
@@ -367,7 +404,34 @@ impl ImServer {
             root,
             clients: HashMap::new(),
             partial: HashMap::new(),
+            active_window: 0,
         })
+    }
+
+    /// WM_CLASS of a window (both components), empty if it has none / is gone.
+    fn class_of(&self, w: u32) -> Vec<String> {
+        self.conn()
+            .get_property(false, w, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 64)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map(|r| {
+                r.value
+                    .split(|b| *b == 0)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| String::from_utf8_lossy(s).into_owned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The current `_NET_ACTIVE_WINDOW` (0 if none / unreadable).
+    fn read_active(&self) -> u32 {
+        self.conn()
+            .get_property(false, self.root, self.atoms.active, AtomEnum::WINDOW, 0, 1)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .and_then(|r| r.value32().and_then(|mut v| v.next()))
+            .unwrap_or(0)
     }
 
     pub fn wait_fd(&self) -> &UnixStream {
@@ -469,6 +533,17 @@ impl ImServer {
                 }
                 Event::DestroyNotify(d) if self.clients.contains_key(&d.window) => {
                     self.drop_client(d.window);
+                }
+                Event::PropertyNotify(e) if e.atom == self.atoms.active => {
+                    let w = self.read_active();
+                    if w != self.active_window {
+                        self.active_window = w;
+                        let class = self.class_of(w);
+                        let fallback = FALLBACK_CLASSES
+                            .iter()
+                            .any(|f| class.iter().any(|c| c.eq_ignore_ascii_case(f)));
+                        self.handler.events.push(ImEvent::ActiveWindow(fallback));
+                    }
                 }
                 // a client window vanished between its request and our answer: not fatal
                 Event::Error(e) => eprintln!("walpad-shell: xim: X error {:?}", e.error_kind),

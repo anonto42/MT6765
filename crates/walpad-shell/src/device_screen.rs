@@ -51,6 +51,7 @@ pub enum Item {
     DimSeg,
     OffSeg,
     LidRow,
+    ThemeRow,
     Info(String, String, Tone),
     Gap,
 }
@@ -63,7 +64,7 @@ pub fn height(item: &Item) -> i32 {
         Item::RotationRow(_) | Item::RotateFlipRow => ROW_H,
         Item::SegLabel(_) => 28,
         Item::DimSeg | Item::OffSeg => 56 + SP_3,
-        Item::LidRow => ROW_H,
+        Item::LidRow | Item::ThemeRow => ROW_H,
         Item::Info(..) => ROW_H,
         Item::Gap => SP_5,
     }
@@ -99,6 +100,7 @@ pub fn items(st: &Option<Status>, d: &DevdSettings) -> Vec<Item> {
         Item::SegLabel("Screen off after"),
         Item::OffSeg,
         Item::LidRow,
+        Item::ThemeRow,
         Item::Gap,
     ]);
 
@@ -208,9 +210,9 @@ pub fn layout(frame: &Frame, st: &Option<Status>, d: &DevdSettings) -> (Vec<Plac
 
 pub fn tone_color(t: Tone) -> Color {
     match t {
-        Tone::Info => TEXT_SECONDARY,
-        Tone::Warning => WARNING,
-        Tone::Danger => DANGER,
+        Tone::Info => text_secondary(),
+        Tone::Warning => warning(),
+        Tone::Danger => danger(),
     }
 }
 
@@ -223,7 +225,7 @@ pub fn info_row(p: &mut Painter, r: Rect, label: &str, value: &str, tone: Tone) 
     let vw = (p.fonts.measure(value, Face::Regular, SIZE_BODY) as i32 + SP_4).min(r.w * 2 / 3);
     p.text(
         label,
-        Style::new(Face::Regular, SIZE_BODY, TEXT),
+        Style::new(Face::Regular, SIZE_BODY, text()),
         Rect::new(r.x + SP_4, r.y, r.w - vw - 2 * SP_4, r.h),
         Align::Left,
     );
@@ -274,7 +276,11 @@ pub fn render(
             pl.rect,
             matches!(
                 pl.item,
-                Item::RotationRow(_) | Item::RotateFlipRow | Item::LidRow | Item::Info(..)
+                Item::RotationRow(_)
+                    | Item::RotateFlipRow
+                    | Item::LidRow
+                    | Item::ThemeRow
+                    | Item::Info(..)
             ),
         )
     }));
@@ -288,7 +294,7 @@ pub fn render(
             Item::Label(l) => p.section_label(l, Rect::new(r.x, r.y, r.w, 24)),
             Item::SegLabel(l) => p.text(
                 l,
-                Style::new(Face::Bold, SIZE_SECONDARY, TEXT_SECONDARY),
+                Style::new(Face::Bold, SIZE_SECONDARY, text_secondary()),
                 Rect::new(r.x + 4, r.y, r.w, 28),
                 Align::Left,
             ),
@@ -299,7 +305,7 @@ pub fn render(
                 let inner = card.inset(SP_4);
                 p.text(
                     "Brightness",
-                    Style::new(Face::Regular, SIZE_BODY, TEXT),
+                    Style::new(Face::Regular, SIZE_BODY, text()),
                     Rect::new(inner.x, inner.y, inner.w, 24),
                     Align::Left,
                 );
@@ -310,7 +316,7 @@ pub fn render(
                 };
                 p.text(
                     &pct,
-                    Style::new(Face::Regular, SIZE_BODY, TEXT_SECONDARY),
+                    Style::new(Face::Regular, SIZE_BODY, text_secondary()),
                     Rect::new(inner.x, inner.y, inner.w, 24),
                     Align::Right,
                 );
@@ -330,7 +336,7 @@ pub fn render(
                     Style::new(
                         if on { Face::Bold } else { Face::Regular },
                         SIZE_BODY,
-                        if online { TEXT } else { TEXT_DISABLED },
+                        if online { text() } else { text_disabled() },
                     ),
                     Rect::new(r.x + SP_4, r.y, r.w - 2 * SP_4 - ICON, r.h),
                     Align::Left,
@@ -341,7 +347,7 @@ pub fn render(
                         r.right() - SP_4 - ICON,
                         r.y + (r.h - ICON) / 2,
                         ICON,
-                        ACCENT,
+                        accent(),
                     );
                 }
                 hits.push((r, Target::Rot(*i)));
@@ -394,6 +400,21 @@ pub fn render(
                 );
                 if toggle.is_some() {
                     hits.push((r, Target::LidToggle));
+                }
+            }
+            Item::ThemeRow => {
+                let dark = theme() == ThemeMode::Dark;
+                let toggle = p.list_row(
+                    r,
+                    None,
+                    "Dark theme",
+                    None,
+                    &walpad_ui::components::Accessory::Toggle(dark),
+                    pr(Target::ThemeToggle),
+                    !online,
+                );
+                if toggle.is_some() {
+                    hits.push((r, Target::ThemeToggle));
                 }
             }
             Item::Info(l, v, t) => {

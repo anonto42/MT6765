@@ -76,45 +76,45 @@ pub fn hotspot_on(st: &Option<Status>) -> bool {
 /// Status lines of the hotspot (text, colour), most important first.
 pub fn hotspot_lines(st: &Option<Status>) -> Vec<(String, Color)> {
     let Some(s) = st else {
-        return vec![("Unknown".into(), TEXT_DISABLED)];
+        return vec![("Unknown".into(), text_disabled())];
     };
     let h = &s.hotspot;
     let mut v = Vec::new();
     match h.state {
         HotspotState::Off => {
-            v.push(("Off".to_string(), TEXT_SECONDARY));
+            v.push(("Off".to_string(), text_secondary()));
             if !h.has_secret {
-                v.push(("Set a password to use the hotspot".into(), WARNING));
+                v.push(("Set a password to use the hotspot".into(), warning()));
             }
         }
-        HotspotState::Starting => v.push(("Starting...".into(), WARNING)),
-        HotspotState::Stopping => v.push(("Stopping...".into(), TEXT_SECONDARY)),
+        HotspotState::Starting => v.push(("Starting...".into(), warning())),
+        HotspotState::Stopping => v.push(("Stopping...".into(), text_secondary())),
         HotspotState::Failed => v.push((
             format!("Failed: {}", h.reason.as_deref().unwrap_or("unknown error")),
-            DANGER,
+            danger(),
         )),
         HotspotState::On => {
             let n = h.clients.unwrap_or(0);
             let devices = if n == 1 { "device" } else { "devices" };
-            v.push((format!("On, {n} {devices} connected"), SUCCESS));
+            v.push((format!("On, {n} {devices} connected"), success()));
             v.push(match h.internet {
                 Some(HotspotInternet::Shared) => (
                     "Sharing this tablet's internet connection".into(),
-                    TEXT_SECONDARY,
+                    text_secondary(),
                 ),
                 Some(HotspotInternet::Unavailable) => (
                     "Internet sharing is not available: local network only".into(),
-                    WARNING,
+                    warning(),
                 ),
                 _ => (
                     "No internet to share: local network only".into(),
-                    TEXT_SECONDARY,
+                    text_secondary(),
                 ),
             });
             if h.exclusive {
                 v.push((
                     "Wi-Fi client paused while the hotspot is on".into(),
-                    WARNING,
+                    warning(),
                 ));
             }
         }
@@ -278,13 +278,13 @@ pub fn render(
         .as_ref()
         .is_some_and(|s| s.wifi.state.as_deref() == Some("hotspot"));
     let (chip_text, chip_col) = match st.as_ref().map(|s| s.wifi.radio) {
-        Some(WifiRadio::Failed) => ("Failed", DANGER),
-        Some(_) if !enabled => ("Off", TEXT_SECONDARY),
-        Some(_) if paused => ("Paused", WARNING),
-        Some(WifiRadio::Up) => ("Up", SUCCESS),
-        Some(WifiRadio::Starting) => ("Starting", WARNING),
-        Some(WifiRadio::Down) => ("Down", TEXT_SECONDARY),
-        None => ("Unknown", TEXT_DISABLED),
+        Some(WifiRadio::Failed) => ("Failed", danger()),
+        Some(_) if !enabled => ("Off", text_secondary()),
+        Some(_) if paused => ("Paused", warning()),
+        Some(WifiRadio::Up) => ("Up", success()),
+        Some(WifiRadio::Starting) => ("Starting", warning()),
+        Some(WifiRadio::Down) => ("Down", text_secondary()),
+        None => ("Unknown", text_disabled()),
     };
     let sw_off = !connected_core || st.is_none();
     p.toggle(
@@ -300,14 +300,14 @@ pub fn render(
     p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip_text,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+        Style::new(Face::Regular, SIZE_SECONDARY, text()),
         Rect::new(l.chip.x + 28, l.chip.y, l.chip.w - 36, l.chip.h),
         Align::Left,
     );
     if let Some(h) = l.hint {
         p.text(
             "Restart the tablet to retry Wi-Fi",
-            Style::new(Face::Regular, SIZE_SECONDARY, DANGER),
+            Style::new(Face::Regular, SIZE_SECONDARY, danger()),
             h,
             Align::Left,
         );
@@ -319,7 +319,7 @@ pub fn render(
         let ssid = s.wifi.ssid.clone().unwrap_or_default();
         p.text(
             &ssid,
-            Style::new(Face::Bold, SIZE_BODY, TEXT),
+            Style::new(Face::Bold, SIZE_BODY, text()),
             Rect::new(card.x + SP_4, card.y + SP_4, card.w - 2 * SP_4 - 170, 28),
             Align::Left,
         );
@@ -327,19 +327,19 @@ pub fn render(
             card.x + SP_4,
             card.y + 52,
             s.wifi.signal_dbm.map_or(0, bars_from_dbm),
-            SUCCESS,
+            success(),
         );
         if let Some(ip) = &s.wifi.ip {
             p.text(
                 ip,
-                Style::new(Face::Mono, SIZE_MONO, TEXT_SECONDARY),
+                Style::new(Face::Mono, SIZE_MONO, text_secondary()),
                 Rect::new(card.x + SP_4 + 40, card.y + 46, 300, 28),
                 Align::Left,
             );
         }
         p.text(
             "Connected",
-            Style::new(Face::Regular, SIZE_SECONDARY, SUCCESS),
+            Style::new(Face::Regular, SIZE_SECONDARY, success()),
             Rect::new(card.x + SP_4, card.y + 78, 200, 24),
             Align::Left,
         );
@@ -405,7 +405,7 @@ pub fn render(
     if let Some(r) = l.saved_empty {
         p.text(
             "No saved networks",
-            Style::new(Face::Regular, SIZE_BODY, TEXT_DISABLED),
+            Style::new(Face::Regular, SIZE_BODY, text_disabled()),
             Rect::new(r.x + SP_4, r.y, r.w - 2 * SP_4, r.h),
             Align::Left,
         );
@@ -423,7 +423,7 @@ pub fn render(
         );
         p.text(
             "Forget",
-            Style::new(Face::Bold, SIZE_BODY, DANGER),
+            Style::new(Face::Bold, SIZE_BODY, danger()),
             Rect::new(forget.x, forget.y, forget.w - SP_4, forget.h),
             Align::Right,
         );

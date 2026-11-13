@@ -229,7 +229,7 @@ fn items(m: &StoreModel) -> Vec<(i32, Item)> {
         ),
         None => "Free space: unknown".to_string(),
     };
-    v.push((24, Item::Note(free, TEXT_SECONDARY)));
+    v.push((24, Item::Note(free, text_secondary())));
     if let Some(e) = &m.error {
         v.push((ERROR_H, Item::Error(e.clone())));
     }
@@ -251,7 +251,7 @@ fn items(m: &StoreModel) -> Vec<(i32, Item)> {
     if !m.loaded {
         v.push((
             ROW_H,
-            Item::Note("Loading the catalogue...".into(), TEXT_SECONDARY),
+            Item::Note("Loading the catalogue...".into(), text_secondary()),
         ));
         return v;
     }
@@ -381,7 +381,7 @@ fn items(m: &StoreModel) -> Vec<(i32, Item)> {
                 ""
             };
             if !hint.is_empty() {
-                v.push((24, Item::Note(hint.into(), TEXT_SECONDARY)));
+                v.push((24, Item::Note(hint.into(), text_secondary())));
             }
             v.push((
                 BUTTON_H,
@@ -461,7 +461,7 @@ pub fn render(
         l.back.x + (l.back.w - ICON) / 2,
         l.back.y + (l.back.h - ICON) / 2,
         ICON,
-        TEXT,
+        text(),
     );
     p.screen_title(m.title(), l.title);
     hits.push((l.back, Target::Back));
@@ -486,10 +486,10 @@ pub fn render(
                 let t = StoreTarget::DismissError;
                 let pr = pressed == Some(Target::Store(t));
                 p.card(*r, pr);
-                p.cv.icon(Icon::Warning, r.x + SP_3, r.y + SP_3, ICON, DANGER);
+                p.cv.icon(Icon::Warning, r.x + SP_3, r.y + SP_3, ICON, danger());
                 p.text(
                     "Could not finish (tap to dismiss)",
-                    Style::new(Face::Bold, SIZE_SECONDARY, DANGER),
+                    Style::new(Face::Bold, SIZE_SECONDARY, danger()),
                     Rect::new(
                         r.x + SP_3 + ICON + SP_2,
                         r.y + SP_2,
@@ -502,7 +502,7 @@ pub fn render(
                 for (i, line) in wrap(p, msg, w, 2).iter().enumerate() {
                     p.text(
                         line,
-                        Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+                        Style::new(Face::Regular, SIZE_SECONDARY, text()),
                         Rect::new(r.x + SP_3, r.y + 34 + i as i32 * 22, w, 22),
                         Align::Left,
                     );
@@ -517,25 +517,25 @@ pub fn render(
                 p.card(*r, false);
                 p.text(
                     title,
-                    Style::new(Face::Regular, SIZE_BODY, TEXT),
+                    Style::new(Face::Regular, SIZE_BODY, walpad_ui::tokens::text()),
                     Rect::new(r.x + SP_4, r.y + SP_2, r.w - 2 * SP_4 - 56, 28),
                     Align::Left,
                 );
                 p.text(
                     &format!("{percent}%"),
-                    Style::new(Face::Bold, SIZE_BODY, TEXT),
+                    Style::new(Face::Bold, SIZE_BODY, walpad_ui::tokens::text()),
                     Rect::new(r.right() - SP_4 - 56, r.y + SP_2, 56, 28),
                     Align::Right,
                 );
                 let bar = Rect::new(r.x + SP_4, r.y + 42, r.w - 2 * SP_4, 8);
-                p.cv.rect(bar, DIVIDER);
+                p.cv.rect(bar, divider());
                 let fw = (bar.w * *percent as i32 / 100).max(if *percent > 0 { 8 } else { 0 });
                 if fw > 0 {
-                    p.cv.rect(Rect::new(bar.x, bar.y, fw, bar.h), ACCENT);
+                    p.cv.rect(Rect::new(bar.x, bar.y, fw, bar.h), accent());
                 }
                 p.text(
                     text,
-                    Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+                    Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
                     Rect::new(r.x + SP_4, r.y + 58, r.w - 2 * SP_4, 24),
                     Align::Left,
                 );

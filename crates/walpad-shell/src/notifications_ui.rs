@@ -71,7 +71,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             Style::new(
                 Face::Regular,
                 SIZE_SECONDARY,
-                if pressed { TEXT_SECONDARY } else { TEXT },
+                if pressed { text_secondary() } else { text() },
             ),
             r,
             Align::Right,
@@ -81,7 +81,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     if let Some(r) = l.empty {
         p.text(
             "No notifications yet",
-            Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
             r,
             Align::Center,
         );

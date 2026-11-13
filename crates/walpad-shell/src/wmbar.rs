@@ -228,7 +228,7 @@ fn snap_glyph(p: &mut Painter, zone: SnapZone, at: Rect, colour: Color) {
 
 pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
     let w = p.cv.width();
-    p.cv.rect(Rect::new(0, 0, w, BAR_H), SURFACE_STRONG.over(BG));
+    p.cv.rect(Rect::new(0, 0, w, BAR_H), surface_strong().over(bg()));
     p.divider(0, BAR_H - 1, w);
     let tw = tab_width(m);
     let mut x = SP_2;
@@ -236,20 +236,20 @@ pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
         let r = Rect::new(x, 0, tw, BAR_H - 1);
         let down = matches!(pressed, Some(Hit::Tab(wn) | Hit::TabClose(wn)) if wn == t.win);
         let active = t.win == m.active;
-        p.cv.rect(r, if active { SURFACE } else { SURFACE_ICON });
+        p.cv.rect(r, if active { surface() } else { surface_icon() });
         if active {
-            p.cv.rect(Rect::new(r.x, BAR_H - 2, r.w, 2), TEXT);
+            p.cv.rect(Rect::new(r.x, BAR_H - 2, r.w, 2), text());
         }
         if down {
-            p.cv.rect(r, PRESSED_TINT);
+            p.cv.rect(r, pressed_tint());
         }
-        p.cv.rect(Rect::new(r.right() - 1, 0, 1, BAR_H - 1), DIVIDER);
+        p.cv.rect(Rect::new(r.right() - 1, 0, 1, BAR_H - 1), divider());
         let label = if tw >= 120 {
             t.label.clone()
         } else {
             (i + 1).to_string()
         };
-        let colour = if active { TEXT } else { TEXT_SECONDARY };
+        let colour = if active { text() } else { text_secondary() };
         p.text(
             &label,
             Style::new(Face::Regular, SIZE_SECONDARY, colour),
@@ -257,37 +257,41 @@ pub fn render(p: &mut Painter, m: &BarModel, pressed: Option<Hit>) {
             Align::Left,
         );
         let cx = x + tw - CLOSE_W + (CLOSE_W - 16) / 2 - 2;
-        p.cv.icon(Icon::Close, cx, (BAR_H - 16) / 2, 16, TEXT_SECONDARY);
+        p.cv.icon(Icon::Close, cx, (BAR_H - 16) / 2, 16, text_secondary());
         x += tw;
     }
     if m.tabs.is_empty() && !m.title.is_empty() {
         p.text(
             &m.title,
-            Style::new(Face::Regular, SIZE_SECONDARY, TEXT_LABEL),
+            Style::new(Face::Regular, SIZE_SECONDARY, text_label()),
             Rect::new(SP_3, 0, w / 2, BAR_H),
             Align::Left,
         );
     }
     if m.can_new {
         let r = Rect::new(x, 0, PLUS_W, BAR_H - 1);
-        p.cv.rect(r, SURFACE_ICON);
+        p.cv.rect(r, surface_icon());
         if pressed == Some(Hit::New) {
-            p.cv.rect(r, PRESSED_TINT);
+            p.cv.rect(r, pressed_tint());
         }
-        p.cv.rect(Rect::new(r.right() - 1, 0, 1, BAR_H - 1), DIVIDER);
+        p.cv.rect(Rect::new(r.right() - 1, 0, 1, BAR_H - 1), divider());
         let (cx, cy) = r.center();
         let (cx, cy) = (cx as f32, cy as f32);
-        p.cv.line((cx - 8.0, cy), (cx + 8.0, cy), 2.0, TEXT);
-        p.cv.line((cx, cy - 8.0), (cx, cy + 8.0), 2.0, TEXT);
+        p.cv.line((cx - 8.0, cy), (cx + 8.0, cy), 2.0, text());
+        p.cv.line((cx, cy - 8.0), (cx, cy + 8.0), 2.0, text());
     }
     if m.free {
         for (r, h) in layout(m) {
             if let Hit::Snap(z) = h {
                 if pressed == Some(h) {
-                    p.cv.rect(Rect::new(r.x, 0, r.w, BAR_H - 1), PRESSED_TINT);
+                    p.cv.rect(Rect::new(r.x, 0, r.w, BAR_H - 1), pressed_tint());
                 }
-                p.cv.rect(Rect::new(r.x, 0, 1, BAR_H - 1), DIVIDER);
-                let colour = if pressed == Some(h) { TEXT } else { TEXT_LABEL };
+                p.cv.rect(Rect::new(r.x, 0, 1, BAR_H - 1), divider());
+                let colour = if pressed == Some(h) {
+                    text()
+                } else {
+                    text_label()
+                };
                 snap_glyph(p, z, r, colour);
             }
         }
@@ -300,20 +304,20 @@ pub fn render_grip(p: &mut Painter, pressed: bool) {
     p.cv.rect(
         Rect::new(0, 0, s, s),
         if pressed {
-            PRESSED_TINT.over(SURFACE_STRONG.over(BG))
+            pressed_tint().over(surface_strong().over(bg()))
         } else {
-            SURFACE_STRONG.over(BG)
+            surface_strong().over(bg())
         },
     );
     p.divider(0, 0, s);
-    p.cv.rect(Rect::new(0, 0, 1, s), DIVIDER);
+    p.cv.rect(Rect::new(0, 0, 1, s), divider());
     let m = s as f32;
     for k in [0.0f32, 9.0] {
         p.cv.line(
             (m - 14.0 - k, m - 10.0),
             (m - 10.0, m - 14.0 - k),
             2.0,
-            TEXT,
+            text(),
         );
     }
 }
@@ -544,8 +548,8 @@ impl WmBar {
             pressed: None,
             grip_pressed: false,
             drag: None,
-            canvas: Canvas::new(area.0 as u32, BAR_H as u32, BG).ok_or("bar canvas")?,
-            grip_canvas: Canvas::new(GRIP as u32, GRIP as u32, BG).ok_or("grip canvas")?,
+            canvas: Canvas::new(area.0 as u32, BAR_H as u32, bg()).ok_or("bar canvas")?,
+            grip_canvas: Canvas::new(GRIP as u32, GRIP as u32, bg()).ok_or("grip canvas")?,
             next_refresh: Instant::now(),
             app_up: false,
             app_id: String::new(),
@@ -575,7 +579,7 @@ impl WmBar {
         }
         self.area = area;
         self.model.width = area.0;
-        self.canvas = Canvas::new(area.0 as u32, BAR_H as u32, BG).ok_or("bar canvas")?;
+        self.canvas = Canvas::new(area.0 as u32, BAR_H as u32, bg()).ok_or("bar canvas")?;
         self.xc.conn.configure_window(
             self.bar,
             &ConfigureWindowAux::new()

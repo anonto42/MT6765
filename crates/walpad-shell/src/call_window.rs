@@ -11,7 +11,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use walpad_proto::PhoneStatus;
 use walpad_ui::components::Painter;
-use walpad_ui::tokens::BG;
+use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts};
 use walpad_x::{XConn, XError};
 use x11rb::connection::Connection;
@@ -105,7 +105,7 @@ impl CallWindow {
             shown: false,
             grabbed: false,
             screen: CallScreen::new(area),
-            canvas: Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("call canvas")?,
+            canvas: Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("call canvas")?,
             next_guard: 0,
             dirty: false,
         })
@@ -229,7 +229,7 @@ impl CallWindow {
             return Ok(());
         }
         self.screen.set_area(area);
-        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("call canvas")?;
+        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("call canvas")?;
         if self.shown {
             self.draw(fonts)?;
         }

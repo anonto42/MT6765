@@ -263,22 +263,22 @@ pub fn layout(
 pub fn paint(p: &mut Painter, l: &Layout) {
     let Some(pill) = l.pill else { return };
     // fill only, 0 px radius, no border (owner request 2026-11-12)
-    p.cv.rect(pill, SURFACE);
+    p.cv.rect(pill, surface());
     let cy = pill.y + pill.h / 2;
     for c in &l.chips {
         p.text(
             &c.text,
-            Style::new(Face::Regular, TEXT_PX, TEXT),
+            Style::new(Face::Regular, TEXT_PX, text()),
             Rect::new(c.rect.x, cy - 15, c.rect.w + 2, 16),
             Align::Left,
         );
         if let Some(f) = c.frac {
             let bar = Rect::new(c.rect.x, cy + 6, c.rect.w, BAR_H);
-            p.cv.rect(bar, DIVIDER);
+            p.cv.rect(bar, divider());
             let fw = ((c.rect.w as f32 * f.clamp(0.0, 1.0)).round() as i32).max(1);
             p.cv.rect(
                 Rect::new(bar.x, bar.y, fw, BAR_H),
-                if c.warn { WARNING } else { TEXT },
+                if c.warn { warning() } else { text() },
             );
         }
     }

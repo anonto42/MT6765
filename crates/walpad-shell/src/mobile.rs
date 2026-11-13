@@ -47,21 +47,21 @@ pub fn pill_cell(st: &Option<Status>) -> Option<(u8, Color)> {
     }
     let on = m.radio_on == Some(true) && registered(m);
     Some(if on {
-        (m.signal_bars.unwrap_or(0), TEXT)
+        (m.signal_bars.unwrap_or(0), text())
     } else {
-        (0, TEXT_DISABLED)
+        (0, text_disabled())
     })
 }
 
 /// The modem chip on the screen title.
 pub fn modem_chip(st: &Option<Status>) -> (&'static str, Color) {
     match mobile(st).map(|m| m.modem) {
-        None => ("Unknown", TEXT_DISABLED),
-        Some(ModemState::Absent) => ("None", TEXT_DISABLED),
-        Some(ModemState::Present) => ("Stopped", TEXT_SECONDARY),
-        Some(ModemState::Booting) => ("Starting", WARNING),
-        Some(ModemState::Ready) => ("Ready", SUCCESS),
-        Some(ModemState::Failed) => ("Failed", DANGER),
+        None => ("Unknown", text_disabled()),
+        Some(ModemState::Absent) => ("None", text_disabled()),
+        Some(ModemState::Present) => ("Stopped", text_secondary()),
+        Some(ModemState::Booting) => ("Starting", warning()),
+        Some(ModemState::Ready) => ("Ready", success()),
+        Some(ModemState::Failed) => ("Failed", danger()),
     }
 }
 
@@ -71,36 +71,48 @@ pub fn sim_lines(st: &Option<Status>) -> (String, String, Color) {
         return (
             "Unknown".into(),
             "No status from the system".into(),
-            TEXT_DISABLED,
+            text_disabled(),
         );
     };
     let s = |a: &str, b: &str, c| (a.to_string(), b.to_string(), c);
     match m.modem {
         ModemState::Absent => {
-            return s("No modem", "Mobile network is not available", TEXT_DISABLED)
+            return s(
+                "No modem",
+                "Mobile network is not available",
+                text_disabled(),
+            )
         }
-        ModemState::Present => return s("Modem stopped", "The modem is not running", WARNING),
+        ModemState::Present => return s("Modem stopped", "The modem is not running", warning()),
         ModemState::Booting => {
             return s(
                 "Starting the modem",
                 "This takes up to two minutes",
-                WARNING,
+                warning(),
             )
         }
         ModemState::Failed => {
             let why = m.reason.clone().unwrap_or_else(|| "unknown error".into());
-            return ("Modem failed".into(), why, DANGER);
+            return ("Modem failed".into(), why, danger());
         }
         ModemState::Ready => {}
     }
     match m.sim {
-        SimState::Absent => s("No SIM card", "Insert a SIM card in slot 1", TEXT_SECONDARY),
-        SimState::PinRequired => s("SIM locked", "Enter the SIM PIN to use it", WARNING),
-        SimState::PukRequired => s("SIM blocked", "PUK required: unlock it in a phone", DANGER),
-        SimState::Busy => s("SIM card", "Reading the SIM...", WARNING),
-        SimState::Unknown => s("SIM card", "Checking the SIM...", TEXT_SECONDARY),
+        SimState::Absent => s(
+            "No SIM card",
+            "Insert a SIM card in slot 1",
+            text_secondary(),
+        ),
+        SimState::PinRequired => s("SIM locked", "Enter the SIM PIN to use it", warning()),
+        SimState::PukRequired => s(
+            "SIM blocked",
+            "PUK required: unlock it in a phone",
+            danger(),
+        ),
+        SimState::Busy => s("SIM card", "Reading the SIM...", warning()),
+        SimState::Unknown => s("SIM card", "Checking the SIM...", text_secondary()),
         SimState::Ready if m.radio_on == Some(false) => {
-            s("SIM card", "Airplane mode: radio off", TEXT_SECONDARY)
+            s("SIM card", "Airplane mode: radio off", text_secondary())
         }
         SimState::Ready => {
             let title = m.operator.clone().unwrap_or_else(|| "SIM card".into());
@@ -117,10 +129,10 @@ pub fn sim_lines(st: &Option<Status>) -> (String, String, Color) {
                 _ => reg.to_string(),
             };
             let col = match m.registration {
-                MobileReg::Home => SUCCESS,
-                MobileReg::Roaming | MobileReg::Searching => WARNING,
-                MobileReg::Denied => DANGER,
-                _ => TEXT_SECONDARY,
+                MobileReg::Home => success(),
+                MobileReg::Roaming | MobileReg::Searching => warning(),
+                MobileReg::Denied => danger(),
+                _ => text_secondary(),
             };
             (title, sub, col)
         }
@@ -130,24 +142,24 @@ pub fn sim_lines(st: &Option<Status>) -> (String, String, Color) {
 /// Quick Settings row subtitle.
 pub fn qs_line(st: &Option<Status>) -> (String, Color) {
     let Some(m) = mobile(st) else {
-        return ("Unknown".into(), TEXT_SECONDARY);
+        return ("Unknown".into(), text_secondary());
     };
     match (m.modem, m.sim) {
-        (ModemState::Absent, _) => ("Not available".into(), TEXT_DISABLED),
-        (ModemState::Booting, _) => ("Modem starting...".into(), WARNING),
-        (ModemState::Present, _) => ("Modem stopped".into(), TEXT_SECONDARY),
-        (ModemState::Failed, _) => ("Modem failed".into(), DANGER),
-        (_, SimState::Absent) => ("No SIM".into(), TEXT_SECONDARY),
-        (_, SimState::PinRequired) => ("SIM PIN required".into(), WARNING),
-        (_, SimState::PukRequired) => ("SIM blocked (PUK)".into(), DANGER),
-        _ if m.radio_on == Some(false) => ("Airplane mode".into(), TEXT_SECONDARY),
-        _ if m.data == MobileData::Failed => ("Data failed".into(), DANGER),
+        (ModemState::Absent, _) => ("Not available".into(), text_disabled()),
+        (ModemState::Booting, _) => ("Modem starting...".into(), warning()),
+        (ModemState::Present, _) => ("Modem stopped".into(), text_secondary()),
+        (ModemState::Failed, _) => ("Modem failed".into(), danger()),
+        (_, SimState::Absent) => ("No SIM".into(), text_secondary()),
+        (_, SimState::PinRequired) => ("SIM PIN required".into(), warning()),
+        (_, SimState::PukRequired) => ("SIM blocked (PUK)".into(), danger()),
+        _ if m.radio_on == Some(false) => ("Airplane mode".into(), text_secondary()),
+        _ if m.data == MobileData::Failed => ("Data failed".into(), danger()),
         _ => {
             let name = m.operator.clone().filter(|_| registered(m));
             match (name, &m.tech) {
-                (Some(n), Some(t)) => (format!("{n} · {t}"), TEXT_SECONDARY),
-                (Some(n), None) => (n, TEXT_SECONDARY),
-                _ => ("Searching...".into(), TEXT_SECONDARY),
+                (Some(n), Some(t)) => (format!("{n} · {t}"), text_secondary()),
+                (Some(n), None) => (n, text_secondary()),
+                _ => ("Searching...".into(), text_secondary()),
             }
         }
     }
@@ -156,24 +168,24 @@ pub fn qs_line(st: &Option<Status>) -> (String, Color) {
 /// Mobile data line under the switches: (text, colour).
 pub fn data_line(st: &Option<Status>) -> (String, Color) {
     let Some(m) = mobile(st) else {
-        return ("Unknown".into(), TEXT_DISABLED);
+        return ("Unknown".into(), text_disabled());
     };
     match m.data {
-        MobileData::Off => ("Mobile data is off".into(), TEXT_SECONDARY),
-        MobileData::Connecting => ("Connecting...".into(), WARNING),
+        MobileData::Off => ("Mobile data is off".into(), text_secondary()),
+        MobileData::Connecting => ("Connecting...".into(), warning()),
         MobileData::On => (
             match &m.ip {
                 Some(ip) => format!("Connected, {ip}"),
                 None => "Connected".into(),
             },
-            SUCCESS,
+            success(),
         ),
         MobileData::Failed => (
             format!(
                 "Failed: {}",
                 m.data_reason.as_deref().unwrap_or("unknown error")
             ),
-            DANGER,
+            danger(),
         ),
     }
 }
@@ -299,7 +311,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+        Style::new(Face::Regular, SIZE_SECONDARY, text()),
         Rect::new(l.chip.x + 28, l.chip.y, l.chip.w - 36, l.chip.h),
         Align::Left,
     );
@@ -307,13 +319,13 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     // SIM card
     let card = l.sim_card;
     p.card(card, false);
-    p.cv.icon(Icon::Sim, card.x + SP_4, card.y + SP_4, 28, TEXT);
+    p.cv.icon(Icon::Sim, card.x + SP_4, card.y + SP_4, 28, text());
     let (title, sub, sub_col) = sim_lines(v.st);
     let tx = card.x + SP_4 + 28 + SP_4;
     let tw = card.right() - tx - 120;
     p.text(
         &title,
-        Style::new(Face::Bold, SIZE_BODY, TEXT),
+        Style::new(Face::Bold, SIZE_BODY, text()),
         Rect::new(tx, card.y + SP_4, tw, 28),
         Align::Left,
     );
@@ -331,7 +343,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         } else {
             0
         };
-        p.signal_bars(card.right() - SP_4 - 26, card.y + SP_4 + 4, bars, TEXT);
+        p.signal_bars(card.right() - SP_4 - 26, card.y + SP_4 + 4, bars, text());
         let dbm = m
             .and_then(|m| m.signal_dbm)
             .filter(|_| lit)
@@ -339,7 +351,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             .unwrap_or_else(|| "No signal".into());
         p.text(
             &dbm,
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(card.right() - 160, card.y + SP_4 + 28, 160 - SP_4, 20),
             Align::Right,
         );
@@ -348,7 +360,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     if let Some(a) = apn_in_use.filter(|_| m.is_some_and(|m| m.data == MobileData::On)) {
         p.text(
             &format!("Data via {a}"),
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(tx, card.y + SP_4 + 60, card.right() - tx - SP_4, 20),
             Align::Left,
         );
@@ -438,7 +450,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     if m.is_some_and(|m| m.data != MobileData::On && m.radio_on == Some(true)) {
         p.text(
             "Data uses the APN above, or the operator's default",
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(l.note.x, l.note.y + 26, l.note.w, 20),
             Align::Left,
         );

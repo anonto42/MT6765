@@ -135,15 +135,15 @@ pub fn battery_row(m: &Model) -> (String, Option<(String, Color)>) {
         return ("Battery (unavailable)".into(), None);
     };
     let b = &st.battery;
-    let time = battery_time_text(b).map(|t| (t, TEXT_SECONDARY));
+    let time = battery_time_text(b).map(|t| (t, text_secondary()));
     match (b.percent, b.source) {
         (Some(p), BatterySource::VoltageEstimate) => (
             format!("Battery ({p}%)"),
-            time.or(Some(("Estimated from voltage".into(), WARNING))),
+            time.or(Some(("Estimated from voltage".into(), warning()))),
         ),
         (Some(p), BatterySource::Gauge) => (
             format!("Battery ({p}%)"),
-            time.or(b.state.clone().map(|s| (s, TEXT_SECONDARY))),
+            time.or(b.state.clone().map(|s| (s, text_secondary()))),
         ),
         _ => ("Battery (unavailable)".into(), None),
     }
@@ -152,15 +152,17 @@ pub fn battery_row(m: &Model) -> (String, Option<(String, Color)>) {
 /// Quick Settings Wi-Fi row subtitle.
 pub fn wifi_row(m: &Model) -> (String, Color) {
     match &m.status {
-        None => ("Unknown".into(), TEXT_SECONDARY),
-        Some(s) if s.wifi.radio == WifiRadio::Failed => ("Failed: restart to retry".into(), DANGER),
-        Some(s) if !s.wifi.enabled => ("Off".into(), TEXT_SECONDARY),
+        None => ("Unknown".into(), text_secondary()),
+        Some(s) if s.wifi.radio == WifiRadio::Failed => {
+            ("Failed: restart to retry".into(), danger())
+        }
+        Some(s) if !s.wifi.enabled => ("Off".into(), text_secondary()),
         Some(s) if s.wifi.state.as_deref() == Some("hotspot") => {
-            ("Paused (hotspot)".into(), WARNING)
+            ("Paused (hotspot)".into(), warning())
         }
         Some(s) => match wifi_name(s) {
-            Some(n) => (n, TEXT_SECONDARY),
-            None => ("Not connected".into(), TEXT_SECONDARY),
+            Some(n) => (n, text_secondary()),
+            None => ("Not connected".into(), text_secondary()),
         },
     }
 }
@@ -168,21 +170,21 @@ pub fn wifi_row(m: &Model) -> (String, Color) {
 /// Quick Settings Hotspot row subtitle.
 pub fn hotspot_row(m: &Model) -> (String, Color) {
     let Some(h) = m.status.as_ref().map(|s| &s.hotspot) else {
-        return ("Unknown".into(), TEXT_SECONDARY);
+        return ("Unknown".into(), text_secondary());
     };
     match h.state {
         HotspotState::On => {
             let n = h.clients.unwrap_or(0);
             (
                 format!("On, {n} {}", if n == 1 { "device" } else { "devices" }),
-                SUCCESS,
+                success(),
             )
         }
-        HotspotState::Starting => ("Starting...".into(), WARNING),
-        HotspotState::Stopping => ("Stopping...".into(), TEXT_SECONDARY),
-        HotspotState::Failed => ("Failed".into(), DANGER),
-        HotspotState::Off if !h.has_secret => ("No password set".into(), TEXT_SECONDARY),
-        HotspotState::Off => ("Off".into(), TEXT_SECONDARY),
+        HotspotState::Starting => ("Starting...".into(), warning()),
+        HotspotState::Stopping => ("Stopping...".into(), text_secondary()),
+        HotspotState::Failed => ("Failed".into(), danger()),
+        HotspotState::Off if !h.has_secret => ("No password set".into(), text_secondary()),
+        HotspotState::Off => ("Off".into(), text_secondary()),
     }
 }
 
@@ -236,7 +238,7 @@ fn qs_row(
     if pressed && !disabled {
         p.row_pressed(r);
     }
-    let fg = if disabled { TEXT_DISABLED } else { TEXT };
+    let fg = if disabled { text_disabled() } else { text() };
     p.cv.icon(icon, r.x + SP_3, r.y + (r.h - ICON) / 2, ICON, fg);
     let tx = r.x + SP_3 + ICON + SP_3;
     let tw = r.right() - tx - if chevron { 32 } else { SP_3 };
@@ -249,7 +251,7 @@ fn qs_row(
                 Style::new(
                     Face::Regular,
                     SIZE_CAPTION - 1.0,
-                    if disabled { TEXT_DISABLED } else { c },
+                    if disabled { text_disabled() } else { c },
                 ),
                 Rect::new(tx, r.y + 30, tw, 18),
                 Align::Left,
@@ -263,7 +265,7 @@ fn qs_row(
             r.right() - 28,
             r.y + (r.h - 20) / 2,
             20,
-            TEXT_SECONDARY,
+            text_secondary(),
         );
     }
 }
@@ -386,7 +388,7 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     } else {
         "--".to_string()
     };
-    let lc = if online { TEXT } else { TEXT_DISABLED };
+    let lc = if online { text() } else { text_disabled() };
     p.cv.icon(
         Icon::Sun,
         g.brightness_label.x,
@@ -407,7 +409,7 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     );
     p.text(
         &pct,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+        Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
         g.brightness_label,
         Align::Right,
     );
@@ -613,9 +615,9 @@ fn panel_caption(p: &mut Painter, s: &str, r: Rect) {
 fn paint_close_badge(p: &mut Painter, r: Rect, pressed: bool) {
     p.cv.rect(r, Tint::new(Color::hex(0x000000), 80));
     if pressed {
-        p.cv.rect(r, PRESSED_TINT);
+        p.cv.rect(r, pressed_tint());
     }
-    p.cv.icon(Icon::Close, r.x + 4, r.y + 4, r.w - 8, TEXT);
+    p.cv.icon(Icon::Close, r.x + 4, r.y + 4, r.w - 8, text());
 }
 
 /// The Apps panel's outline rectangle for the current model.
@@ -636,7 +638,7 @@ pub fn render_apps_panel(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(Rect
     if let Some(r) = g.active_empty {
         p.text(
             "No apps running",
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_DISABLED),
+            Style::new(Face::Regular, SIZE_CAPTION, text_disabled()),
             r,
             Align::Left,
         );

@@ -270,7 +270,7 @@ impl CallScreen {
     }
 
     pub fn render(&mut self, p: &mut Painter) {
-        p.cv.fill(BG);
+        p.cv.fill(bg());
         let (w, h) = self.area;
         let landscape = w > h;
         let cx = w / 2;
@@ -279,9 +279,9 @@ impl CallScreen {
         let call = self.st.call;
         // the state line
         let head_col = match call {
-            CallState::Ended => TEXT_SECONDARY,
-            CallState::Ringing => TEXT,
-            _ => TEXT_SECONDARY,
+            CallState::Ended => text_secondary(),
+            CallState::Ringing => text(),
+            _ => text_secondary(),
         };
         let label = match call {
             CallState::Active | CallState::Held => "In call".to_string(),
@@ -296,17 +296,17 @@ impl CallScreen {
             Rect::new(0, top, w, 28),
             Align::Center,
         );
-        p.cv.icon(Icon::Phone, cx - 28, top + 40, 56, TEXT_DISABLED);
+        p.cv.icon(Icon::Phone, cx - 28, top + 40, 56, text_disabled());
         p.text(
             &who,
-            Style::new(Face::Bold, 36.0, TEXT),
+            Style::new(Face::Bold, 36.0, text()),
             Rect::new(SP_5, top + 108, w - 2 * SP_5, 48),
             Align::Center,
         );
         if let Some(n) = sub {
             p.text(
                 &n,
-                Style::new(Face::Regular, SIZE_BODY, TEXT_SECONDARY),
+                Style::new(Face::Regular, SIZE_BODY, text_secondary()),
                 Rect::new(SP_5, top + 158, w - 2 * SP_5, 28),
                 Align::Center,
             );
@@ -317,9 +317,9 @@ impl CallScreen {
             _ => String::new(),
         };
         let big_col = if call == CallState::Ended {
-            WARNING
+            warning()
         } else {
-            TEXT
+            text()
         };
         let big_y = if landscape { top + 186 } else { top + 196 };
         if !big.is_empty() {
@@ -342,7 +342,7 @@ impl CallScreen {
                 .collect();
             p.text(
                 &shown,
-                Style::new(Face::Regular, 26.0, TEXT_SECONDARY),
+                Style::new(Face::Regular, 26.0, text_secondary()),
                 Rect::new(0, big_y + 40, w, 36),
                 Align::Center,
             );
@@ -354,7 +354,7 @@ impl CallScreen {
         ) {
             p.text(
                 "Call audio is experimental: it may be silent",
-                Style::new(Face::Regular, SIZE_CAPTION, WARNING),
+                Style::new(Face::Regular, SIZE_CAPTION, warning()),
                 Rect::new(SP_5, h - 36, w - 2 * SP_5, 22),
                 Align::Center,
             );
@@ -364,13 +364,20 @@ impl CallScreen {
             let pressed = self.pressed == Some(*t);
             match t {
                 CallTarget::Answer => {
-                    self.round(p, *r, Icon::Phone, 0.0, SUCCESS, true, pressed, "Answer")
+                    self.round(p, *r, Icon::Phone, 0.0, success(), true, pressed, "Answer")
                 }
-                CallTarget::Decline => {
-                    self.round(p, *r, Icon::Phone, 135.0, DANGER, true, pressed, "Decline")
-                }
+                CallTarget::Decline => self.round(
+                    p,
+                    *r,
+                    Icon::Phone,
+                    135.0,
+                    danger(),
+                    true,
+                    pressed,
+                    "Decline",
+                ),
                 CallTarget::Hangup => {
-                    self.round(p, *r, Icon::Phone, 135.0, DANGER, true, pressed, "End")
+                    self.round(p, *r, Icon::Phone, 135.0, danger(), true, pressed, "End")
                 }
                 CallTarget::Mute => self.round(
                     p,
@@ -381,7 +388,7 @@ impl CallScreen {
                         Icon::Mic
                     },
                     0.0,
-                    TEXT,
+                    text(),
                     self.st.muted,
                     pressed,
                     "Mute",
@@ -391,19 +398,19 @@ impl CallScreen {
                     *r,
                     Icon::Volume,
                     0.0,
-                    TEXT,
+                    text(),
                     self.st.speaker,
                     pressed,
                     "Speaker",
                 ),
                 CallTarget::Keypad => {
-                    self.round(p, *r, Icon::Keypad, 0.0, TEXT, false, pressed, "Keypad")
+                    self.round(p, *r, Icon::Keypad, 0.0, text(), false, pressed, "Keypad")
                 }
                 CallTarget::Digit(c) => {
                     p.outline_box(*r, 0, pressed, false, false);
                     p.text(
                         &c.to_string(),
-                        Style::new(Face::Regular, 32.0, TEXT),
+                        Style::new(Face::Regular, 32.0, text()),
                         *r,
                         Align::Center,
                     );
@@ -412,7 +419,7 @@ impl CallScreen {
                     p.outline_box(*r, 0, pressed, false, false);
                     p.text(
                         "Hide keypad",
-                        Style::new(Face::Regular, SIZE_BODY, TEXT),
+                        Style::new(Face::Regular, SIZE_BODY, text()),
                         *r,
                         Align::Center,
                     );
@@ -435,22 +442,22 @@ impl CallScreen {
         label: &str,
     ) {
         let (cx, cy) = r.center();
-        p.cv.rect(r, SURFACE_STRONG);
+        p.cv.rect(r, surface_strong());
         if on {
             p.cv.rect(r, Tint::new(color, 22));
         }
         if pressed {
-            p.cv.rect(r, PRESSED_TINT);
+            p.cv.rect(r, pressed_tint());
         }
         p.cv.rect(
             Rect::new(r.x, r.bottom() - 3, r.w, 3),
-            if on || pressed { color } else { DIVIDER },
+            if on || pressed { color } else { divider() },
         );
         let s = r.w * 2 / 5;
         p.cv.icon_rotated(icon, cx - s / 2, cy - s / 2, s, color, angle);
         p.text(
             label,
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(r.x - 20, r.bottom() + 6, r.w + 40, 20),
             Align::Center,
         );

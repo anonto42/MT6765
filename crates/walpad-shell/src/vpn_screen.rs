@@ -52,12 +52,12 @@ pub fn revert_in(st: &Option<Status>) -> Option<u32> {
 
 pub fn state_chip(st: &Option<Status>) -> (&'static str, Color) {
     match vpn(st).map(|v| v.state) {
-        None => ("Unknown", TEXT_DISABLED),
-        Some(VpnState::Off) => ("Off", TEXT_SECONDARY),
-        Some(VpnState::Starting) => ("Connecting", WARNING),
-        Some(VpnState::On) => ("Connected", SUCCESS),
-        Some(VpnState::Stopping) => ("Stopping", WARNING),
-        Some(VpnState::Failed) => ("Failed", DANGER),
+        None => ("Unknown", text_disabled()),
+        Some(VpnState::Off) => ("Off", text_secondary()),
+        Some(VpnState::Starting) => ("Connecting", warning()),
+        Some(VpnState::On) => ("Connected", success()),
+        Some(VpnState::Stopping) => ("Stopping", warning()),
+        Some(VpnState::Failed) => ("Failed", danger()),
     }
 }
 
@@ -89,7 +89,7 @@ pub fn card_lines(st: &Option<Status>) -> (String, String, Color, Option<String>
         return (
             "Unknown".into(),
             "No status from the system".into(),
-            TEXT_DISABLED,
+            text_disabled(),
             None,
         );
     };
@@ -101,15 +101,15 @@ pub fn card_lines(st: &Option<Status>) -> (String, String, Color, Option<String>
     };
     let (sub, col) = match v.state {
         VpnState::Off if v.profile.is_none() => {
-            ("Import a profile to start".to_string(), TEXT_SECONDARY)
+            ("Import a profile to start".to_string(), text_secondary())
         }
-        VpnState::Off => ("Not connected".into(), TEXT_SECONDARY),
-        VpnState::Starting => ("Connecting...".into(), WARNING),
-        VpnState::On => ("Connected".into(), SUCCESS),
-        VpnState::Stopping => ("Disconnecting...".into(), WARNING),
+        VpnState::Off => ("Not connected".into(), text_secondary()),
+        VpnState::Starting => ("Connecting...".into(), warning()),
+        VpnState::On => ("Connected".into(), success()),
+        VpnState::Stopping => ("Disconnecting...".into(), warning()),
         VpnState::Failed => (
             format!("Failed: {}", v.reason.as_deref().unwrap_or("unknown error")),
-            DANGER,
+            danger(),
         ),
     };
     let detail = (v.state == VpnState::On).then(|| {
@@ -249,7 +249,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+        Style::new(Face::Regular, SIZE_SECONDARY, text()),
         Rect::new(l.chip.x + 28, l.chip.y, l.chip.w - 36, l.chip.h),
         Align::Left,
     );
@@ -257,13 +257,13 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     // status card
     let card = l.card;
     p.card(card, false);
-    p.cv.icon(Icon::Lock, card.x + SP_4, card.y + SP_4, 28, TEXT);
+    p.cv.icon(Icon::Lock, card.x + SP_4, card.y + SP_4, 28, text());
     let (title, sub, sub_col, detail) = card_lines(v.st);
     let tx = card.x + SP_4 + 28 + SP_4;
     let tw = card.right() - tx - SP_4;
     p.text(
         &title,
-        Style::new(Face::Bold, SIZE_BODY, TEXT),
+        Style::new(Face::Bold, SIZE_BODY, text()),
         Rect::new(tx, card.y + SP_4, tw, 28),
         Align::Left,
     );
@@ -276,7 +276,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     if let Some(d) = detail {
         p.text(
             &d,
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(tx, card.y + SP_4 + 60, tw, 20),
             Align::Left,
         );
@@ -287,13 +287,13 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         p.card(k, false);
         p.text(
             "Keep the kill switch?",
-            Style::new(Face::Bold, SIZE_BODY, WARNING),
+            Style::new(Face::Bold, SIZE_BODY, warning()),
             Rect::new(k.x + SP_4, k.y + SP_3, k.w - 140 - 3 * SP_4, 28),
             Align::Left,
         );
         p.text(
             &format!("Everything reverts in {secs} s if you do not confirm"),
-            Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
             Rect::new(k.x + SP_4, k.y + SP_3 + 32, k.w - 140 - 3 * SP_4, 44),
             Align::Left,
         );
@@ -372,7 +372,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     };
     p.text(
         note,
-        Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+        Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
         Rect::new(l.note.x, l.note.y, l.note.w, 40),
         Align::Left,
     );
@@ -404,7 +404,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     if let Some(r) = l.import_note {
         p.text(
             "Put a WireGuard .conf or OpenVPN .ovpn in Downloads or Documents",
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(r.x, r.y, r.w, 40),
             Align::Left,
         );

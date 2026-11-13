@@ -13,7 +13,7 @@ use std::path::Path;
 use walpad_ui::components::{
     sys_key_char, system_keyboard_layout, Painter, SysKbdState, SysKey, SysKeyBtn,
 };
-use walpad_ui::tokens::BG;
+use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts, Rect};
 use walpad_x::{XConn, XError};
 use x11rb::connection::Connection;
@@ -524,7 +524,7 @@ impl SysKeyboard {
             state: SysKbdState::default(),
             keys: Vec::new(),
             pressed: None,
-            canvas: Canvas::new(r.w as u32, r.h as u32, BG).ok_or("keyboard canvas")?,
+            canvas: Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("keyboard canvas")?,
         })
     }
 
@@ -550,7 +550,7 @@ impl SysKeyboard {
         }
         self.area = area;
         let r = keyboard_rect(area);
-        self.canvas = Canvas::new(r.w as u32, r.h as u32, BG).ok_or("keyboard canvas")?;
+        self.canvas = Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("keyboard canvas")?;
         self.pressed = None;
         self.bw.place(&self.xc, r)?;
         self.bw.write_strut(&self.xc, area)?;

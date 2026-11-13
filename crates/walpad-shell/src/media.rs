@@ -538,9 +538,9 @@ fn blit_at(p: &mut Painter, src: &Canvas, x: i32, y: i32) {
 }
 
 fn placeholder(p: &mut Painter, r: Rect, kind: Kind) {
-    p.cv.rect(r, SURFACE);
+    p.cv.rect(r, surface());
     let (cx, cy) = r.center();
-    p.cv.icon(kind.icon(), cx - 20, cy - 20, 40, TEXT_DISABLED);
+    p.cv.icon(kind.icon(), cx - 20, cy - 20, 40, text_disabled());
 }
 
 fn duration_badge(p: &mut Painter, tile: Rect, secs: u32) {
@@ -550,7 +550,7 @@ fn duration_badge(p: &mut Painter, tile: Rect, secs: u32) {
     p.cv.rect(b, Tint::new(Color::hex(0x000000), 82));
     p.text(
         &s,
-        Style::new(Face::Regular, SIZE_CAPTION, TEXT),
+        Style::new(Face::Regular, SIZE_CAPTION, text()),
         b,
         Align::Center,
     );
@@ -585,7 +585,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             p.spinner(cx, cy - 20, 40, v.spinner_deg as f32);
             p.text(
                 "Looking for media...",
-                Style::new(Face::Regular, SIZE_BODY, TEXT_SECONDARY),
+                Style::new(Face::Regular, SIZE_BODY, text_secondary()),
                 Rect::new(l.empty.x, cy + 16, l.empty.w, 28),
                 Align::Center,
             );
@@ -614,15 +614,15 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             }
             let _ = TILE_RADIUS;
             if pr(t) {
-                p.cv.rect(tile, PRESSED_TINT);
-                p.cv.rect(Rect::new(tile.x, tile.bottom() - 3, tile.w, 3), TEXT);
+                p.cv.rect(tile, pressed_tint());
+                p.cv.rect(Rect::new(tile.x, tile.bottom() - 3, tile.w, 3), text());
             } else {
-                p.cv.rect(Rect::new(tile.x, tile.bottom() - 1, tile.w, 1), DIVIDER);
+                p.cv.rect(Rect::new(tile.x, tile.bottom() - 1, tile.w, 1), divider());
             }
             if it.kind == Kind::Video {
                 let (cx, cy) = tile.center();
                 if !matches!(v.m.thumbs.get(&it.path), Some(Thumb::Ready(_))) {
-                    p.cv.icon(Icon::Media, cx - 20, cy - 20, 40, TEXT_DISABLED);
+                    p.cv.icon(Icon::Media, cx - 20, cy - 20, 40, text_disabled());
                 }
                 if let Some(d) = info.and_then(|i| i.duration) {
                     duration_badge(p, tile, d);
@@ -634,9 +634,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                     Face::Regular,
                     SIZE_CAPTION,
                     if installed {
-                        TEXT_SECONDARY
+                        text_secondary()
                     } else {
-                        TEXT_DISABLED
+                        text_disabled()
                     },
                 ),
                 Rect::new(r.x, tile.bottom() + 2, TILE, NAME_H),
@@ -654,13 +654,13 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                     }
                 }
                 _ => {
-                    p.cv.rect(icon_box, SURFACE_STRONG);
+                    p.cv.rect(icon_box, surface_strong());
                     p.cv.icon(
                         it.kind.icon(),
                         icon_box.x + 12,
                         icon_box.y + 12,
                         24,
-                        TEXT_SECONDARY,
+                        text_secondary(),
                     );
                 }
             }
@@ -674,7 +674,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 Style::new(
                     Face::Regular,
                     SIZE_BODY,
-                    if installed { TEXT } else { TEXT_DISABLED },
+                    if installed { text() } else { text_disabled() },
                 ),
                 Rect::new(tx, r.y + 10, tw, 26),
                 Align::Left,
@@ -694,7 +694,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             }
             p.text(
                 &sub.join(" · "),
-                Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+                Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
                 Rect::new(tx, r.y + 38, tw, 22),
                 Align::Left,
             );

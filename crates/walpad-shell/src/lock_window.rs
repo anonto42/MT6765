@@ -17,7 +17,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use walpad_proto::LockKind;
 use walpad_ui::components::Painter;
-use walpad_ui::tokens::BG;
+use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts};
 use walpad_x::{XConn, XError};
 use x11rb::connection::Connection;
@@ -130,7 +130,7 @@ impl LockWindow {
             grabbed: false,
             paused: false,
             screen: LockScreen::new(LockKind::Pin, area, wall),
-            canvas: Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("lock canvas")?,
+            canvas: Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("lock canvas")?,
             next_guard: 0,
             dirty: false,
         })
@@ -305,7 +305,7 @@ impl LockWindow {
             return Ok(());
         }
         self.screen.set_area(area);
-        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, BG).ok_or("lock canvas")?;
+        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("lock canvas")?;
         if self.shown {
             self.draw(fonts)?;
         }

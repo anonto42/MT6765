@@ -385,6 +385,10 @@ impl Canvas {
         self.pm.data()
     }
 
+    pub fn rgba_mut(&mut self) -> &mut [u8] {
+        self.pm.data_mut()
+    }
+
     /// Blend one glyph coverage value over the canvas (used by text).
     pub(crate) fn blend(&mut self, x: i32, y: i32, coverage: u8, c: Color) {
         let (x, y) = (x + self.origin.0, y + self.origin.1);

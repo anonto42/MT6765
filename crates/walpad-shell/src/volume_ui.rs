@@ -84,7 +84,7 @@ pub fn render_qs(
     hits: &mut Vec<(Rect, Target)>,
 ) {
     let on = usable(m);
-    let lc = if on { TEXT } else { TEXT_DISABLED };
+    let lc = if on { text() } else { text_disabled() };
     p.cv.icon(Icon::Volume, caption.x, caption.y, ICON, lc);
     p.text(
         route_caption(m),
@@ -99,7 +99,7 @@ pub fn render_qs(
     );
     p.text(
         &label(m),
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+        Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
         caption,
         Align::Right,
     );
@@ -115,7 +115,7 @@ pub fn render_qs(
     p.surface_box(
         b,
         0,
-        SURFACE,
+        surface(),
         m.pressed == Some(Target::MuteToggle),
         on && muted(m),
         !on,
@@ -126,11 +126,11 @@ pub fn render_qs(
         b.y + (b.h - ICON) / 2,
         ICON,
         if on && muted(m) {
-            WARNING
+            warning()
         } else if on {
-            TEXT
+            text()
         } else {
-            TEXT_DISABLED
+            text_disabled()
         },
     );
     hits.push((mute, Target::MuteToggle));
@@ -194,17 +194,17 @@ pub fn render_osd(p: &mut Painter, area: Rect, o: &Osd) -> Rect {
     let (w, h) = (280, 48);
     let r = Rect::new(area.x + (area.w - w) / 2, area.y + area.h * 72 / 100, w, h);
     let off = o.muted || !o.available;
-    p.cv.rect(r, SURFACE_STRONG.over(BG));
+    p.cv.rect(r, surface_strong().over(bg()));
     p.cv.rect(
         Rect::new(r.x, r.y, 3, r.h),
-        if off { TEXT_DISABLED } else { TEXT },
+        if off { text_disabled() } else { text() },
     );
     p.cv.icon(
         if off { Icon::VolumeOff } else { Icon::Volume },
         r.x + SP_4,
         r.y + (h - ICON) / 2,
         ICON,
-        if o.available { TEXT } else { TEXT_DISABLED },
+        if o.available { text() } else { text_disabled() },
     );
     let track = Rect::new(
         r.x + SP_4 + ICON + SP_3,
@@ -212,14 +212,14 @@ pub fn render_osd(p: &mut Painter, area: Rect, o: &Osd) -> Rect {
         w - 2 * SP_4 - ICON - SP_3 - 56,
         4,
     );
-    p.cv.rect(track, DIVIDER);
+    p.cv.rect(track, divider());
     let fw = if off {
         0
     } else {
         (track.w as f32 * f32::from(o.volume) / 100.0) as i32
     };
     if fw > 0 {
-        p.cv.rect(Rect::new(track.x, track.y, fw.max(4), 4), TEXT);
+        p.cv.rect(Rect::new(track.x, track.y, fw.max(4), 4), text());
     }
     let text = if !o.available {
         "--".to_string()
@@ -230,7 +230,7 @@ pub fn render_osd(p: &mut Painter, area: Rect, o: &Osd) -> Rect {
     };
     p.text(
         &text,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+        Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
         Rect::new(
             track.right() + SP_2,
             r.y,

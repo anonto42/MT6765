@@ -135,6 +135,7 @@ pub const ALLOWED_SETTINGS: &[&str] = &[
     "low_batt_mv",
     "critical_batt_mv",
     "clock_24h",
+    "theme",
     "pinned_apps",
     "touch_gestures",
     "multitouch",
@@ -1156,6 +1157,10 @@ fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
         "net_hostname" => match v.as_str() {
             Some(s) if s.is_empty() || valid_hostname(s) => Ok(()),
             _ => Err("value must be a hostname of 1-63 letters, digits or -".into()),
+        },
+        "theme" => match v.as_str() {
+            Some("dark" | "light") => Ok(()),
+            _ => Err("value must be \"dark\" or \"light\"".into()),
         },
         "charge_mode" => match v.as_str() {
             Some("smart" | "bypass" | "eco" | "fast") => Ok(()),

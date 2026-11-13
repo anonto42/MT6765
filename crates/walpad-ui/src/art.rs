@@ -122,6 +122,30 @@ pub fn wallpaper(w: i32, h: i32) -> Option<crate::canvas::Canvas> {
     })
 }
 
+/// Decoded wallpaper adapted for the active theme mode (`Dark` keeps the original charcoal art;
+/// `Light` maps the charcoal base and white line-art to the light background and subtle dark ink).
+pub fn wallpaper_for_theme(
+    w: i32,
+    h: i32,
+    mode: crate::tokens::ThemeMode,
+) -> Option<crate::canvas::Canvas> {
+    let mut cv = wallpaper(w, h)?;
+    if mode == crate::tokens::ThemeMode::Light {
+        let pal = crate::tokens::LIGHT_PALETTE;
+        let base_r = crate::tokens::BG.r as i32;
+        let span = (255 - base_r).max(1);
+        for px in cv.rgba_mut().as_chunks_mut::<4>().0 {
+            let t = ((px[0] as i32 - base_r).clamp(0, span) * 100 / span) as u32;
+            let c = pal.bg.mix(pal.text_secondary, t * 45 / 100);
+            px[0] = c.r;
+            px[1] = c.g;
+            px[2] = c.b;
+            px[3] = 255;
+        }
+    }
+    Some(cv)
+}
+
 #[cfg(test)]
 mod wallpaper_tests {
     use super::*;

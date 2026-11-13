@@ -142,9 +142,9 @@ impl Tab {
 
 pub fn tone_color(t: Tone) -> Color {
     match t {
-        Tone::Info => TEXT,
-        Tone::Warning => WARNING,
-        Tone::Danger => DANGER,
+        Tone::Info => text(),
+        Tone::Warning => warning(),
+        Tone::Danger => danger(),
     }
 }
 
@@ -152,7 +152,7 @@ pub fn tone_color(t: Tone) -> Color {
 pub fn banner_tint(t: Tone) -> Tint {
     Tint::new(
         match t {
-            Tone::Info => TEXT,
+            Tone::Info => text(),
             other => tone_color(other),
         },
         14,
@@ -160,8 +160,12 @@ pub fn banner_tint(t: Tone) -> Tint {
 }
 
 /// Danger wash of a danger button (rest 16 %, pressed 30 %), over its surface fill.
-const DANGER_TINT: Tint = Tint::new(DANGER, 16);
-const DANGER_TINT_PRESSED: Tint = Tint::new(DANGER, 30);
+fn danger_tint() -> Tint {
+    Tint::new(danger(), 16)
+}
+fn danger_tint_pressed() -> Tint {
+    Tint::new(danger(), 30)
+}
 
 /// Bounding rects of the runs of vertically adjacent list rows (`(row, in a group)`; a row that
 /// is not grouped, or a gap, ends the run): what `Painter::row_group` backs.
@@ -222,7 +226,7 @@ impl Painter<'_> {
         active: bool,
         disabled: bool,
     ) {
-        self.surface_box(r, radius, SURFACE, pressed, active, disabled);
+        self.surface_box(r, radius, surface(), pressed, active, disabled);
     }
 
     /// `outline_box` with an explicit surface fill (`SURFACE_ICON` for icon boxes). Fill only, no
@@ -239,32 +243,32 @@ impl Painter<'_> {
     ) {
         self.cv.rect(r, fill);
         if active && !disabled {
-            self.cv.rect(r, SURFACE_STRONG);
-            self.cv.rect(Rect::new(r.x, r.y, 2, r.h), TEXT);
+            self.cv.rect(r, surface_strong());
+            self.cv.rect(Rect::new(r.x, r.y, 2, r.h), text());
         }
         if pressed && !disabled {
-            self.cv.rect(r, PRESSED_TINT);
+            self.cv.rect(r, pressed_tint());
         }
     }
 
     /// Sharp square icon button (sidebar 56, Home grid 64, Apps panel 48).
     pub fn icon_box(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
-        self.surface_box(r, 0, SURFACE_ICON, pressed, active, false);
+        self.surface_box(r, 0, surface_icon(), pressed, active, false);
         let s = icon_for_box(r.w);
         self.cv
-            .icon(icon, r.x + (r.w - s) / 2, r.y + (r.h - s) / 2, s, TEXT);
+            .icon(icon, r.x + (r.w - s) / 2, r.y + (r.h - s) / 2, s, text());
     }
 
     /// Square icon button with strong backing (the sidebar's Apps toggle). Sharp 0 px corners, fill
     /// only, no outline (owner request 2026-11-12).
     pub fn round_button(&mut self, r: Rect, icon: Icon, pressed: bool, active: bool) {
-        self.surface_box(r, 0, SURFACE_STRONG, pressed, active, false);
+        self.surface_box(r, 0, surface_strong(), pressed, active, false);
         self.cv.icon(
             icon,
             r.x + (r.w - ICON) / 2,
             r.y + (r.h - ICON) / 2,
             ICON,
-            TEXT,
+            text(),
         );
     }
 
@@ -283,7 +287,8 @@ impl Painter<'_> {
         let b = Rect::new(cell.x + (cell.w - box_px) / 2, cell.y, box_px, box_px);
         self.icon_box(b, icon, pressed, false);
         if running {
-            self.cv.rect(Rect::new(b.right() - 10, b.y + 4, 6, 6), TEXT);
+            self.cv
+                .rect(Rect::new(b.right() - 10, b.y + 4, 6, 6), text());
         }
         let px = if box_px >= BOX_GRID {
             SIZE_LABEL
@@ -292,7 +297,7 @@ impl Painter<'_> {
         };
         self.text(
             name,
-            Style::new(Face::Regular, px, TEXT_LABEL),
+            Style::new(Face::Regular, px, text_label()),
             Rect::new(cell.x - 4, b.bottom() + 6, cell.w + 8, 18),
             Align::Center,
         );
@@ -314,16 +319,16 @@ impl Painter<'_> {
     /// Card container: translucent `SURFACE` fill only (pressed: + `PRESSED_TINT`), 0 px radius, no
     /// outline.
     pub fn card(&mut self, r: Rect, pressed: bool) {
-        self.cv.rect(r, SURFACE);
+        self.cv.rect(r, surface());
         if pressed {
-            self.cv.rect(r, PRESSED_TINT);
+            self.cv.rect(r, pressed_tint());
         }
     }
     /// The page surface of a full-screen page: `PAGE_SURFACE` over the wallpaper, flush to the
     /// content area with 0 px radius and no outline.
     pub fn page_surface(&mut self, content: Rect) {
         let r = page_rect(content);
-        self.cv.rect(r, PAGE_SURFACE);
+        self.cv.rect(r, page_surface());
     }
     /// The backing of a run of list rows (Settings, Device): a card around them, so rows over the
     /// wallpaper art stay readable. The rows themselves add no fill (only the pressed tint).
@@ -335,17 +340,17 @@ impl Painter<'_> {
     /// Popover / dropdown / dialog / sheet body: opaque `SURFACE_STRONG.over(BG)` fill with 0 px
     /// radius and no box outline, preventing underlying icons or text from bleeding through.
     pub fn popover(&mut self, r: Rect) {
-        self.cv.rect(r, SURFACE_STRONG.over(BG));
+        self.cv.rect(r, surface_strong().over(bg()));
     }
     /// 1 px horizontal divider.
     pub fn divider(&mut self, x: i32, y: i32, w: i32) {
-        self.cv.rect(Rect::new(x, y, w, 1), DIVIDER);
+        self.cv.rect(Rect::new(x, y, w, 1), divider());
     }
     /// Section label: medium-small, secondary colour, upper case.
     pub fn section_label(&mut self, s: &str, r: Rect) {
         self.text(
             &s.to_uppercase(),
-            Style::new(Face::Bold, SIZE_SECTION, TEXT_SECONDARY),
+            Style::new(Face::Bold, SIZE_SECTION, text_secondary()),
             r,
             Align::Left,
         );
@@ -354,7 +359,7 @@ impl Painter<'_> {
     pub fn caption_upper(&mut self, s: &str, r: Rect) {
         self.text(
             &s.to_uppercase(),
-            Style::new(Face::Bold, SIZE_TINY, TEXT_SECONDARY),
+            Style::new(Face::Bold, SIZE_TINY, text_secondary()),
             r,
             Align::Left,
         );
@@ -362,7 +367,7 @@ impl Painter<'_> {
     pub fn screen_title(&mut self, s: &str, r: Rect) {
         self.text(
             s,
-            Style::new(Face::Regular, SIZE_TITLE, TEXT),
+            Style::new(Face::Regular, SIZE_TITLE, text()),
             r,
             Align::Left,
         );
@@ -383,37 +388,45 @@ impl Painter<'_> {
         let btn_secondary = Tint::new(Color::hex(0x272c36), 245);
         let btn_disabled = Tint::new(Color::hex(0x1e2128), 200);
         let (fill, wash, bar, bar_w, line, line_h, fg) = match (kind, disabled) {
-            (_, true) => (btn_disabled, None, DIVIDER, 0, DIVIDER, 1, TEXT_DISABLED),
+            (_, true) => (
+                btn_disabled,
+                None,
+                divider(),
+                0,
+                divider(),
+                1,
+                text_disabled(),
+            ),
             (ButtonKind::Primary, _) => (
                 btn_primary,
-                pressed.then_some(PRESSED_TINT),
-                TEXT,
+                pressed.then_some(pressed_tint()),
+                text(),
                 3,
-                TEXT,
+                text(),
                 2,
-                TEXT,
+                text(),
             ),
             (ButtonKind::Danger, _) => (
                 btn_secondary,
                 Some(if pressed {
-                    DANGER_TINT_PRESSED
+                    danger_tint_pressed()
                 } else {
-                    DANGER_TINT
+                    danger_tint()
                 }),
-                DANGER,
+                danger(),
                 3,
-                DANGER,
+                danger(),
                 2,
-                DANGER,
+                danger(),
             ),
             (ButtonKind::Secondary, _) => (
                 btn_secondary,
-                pressed.then_some(PRESSED_TINT),
-                if pressed { TEXT } else { TEXT_SECONDARY },
+                pressed.then_some(pressed_tint()),
+                if pressed { text() } else { text_secondary() },
                 2,
-                if pressed { TEXT } else { DIVIDER },
+                if pressed { text() } else { divider() },
                 if pressed { 2 } else { 1 },
-                TEXT,
+                text(),
             ),
         };
         self.cv.rect(r, fill);
@@ -428,7 +441,7 @@ impl Painter<'_> {
         if let ButtonState::Loading(deg) = state {
             let (cx, cy) = r.center();
             self.cv
-                .icon_rotated(Icon::Spinner, cx - 12, cy - 12, ICON, TEXT, deg as f32);
+                .icon_rotated(Icon::Spinner, cx - 12, cy - 12, ICON, text(), deg as f32);
             return;
         }
         let style = Style::new(Face::Regular, SIZE_BODY, fg);
@@ -462,19 +475,19 @@ impl Painter<'_> {
         let inner = r.inset(SP_4);
         self.text(
             &title.to_uppercase(),
-            Style::new(Face::Bold, SIZE_TINY, TEXT_SECONDARY),
+            Style::new(Face::Bold, SIZE_TINY, text_secondary()),
             Rect::new(inner.x, inner.y, inner.w, 18),
             Align::Left,
         );
         let (text, color, caption): (String, Color, Option<(&str, Color)>) = match value {
-            CardValue::Value(v) => (v.clone(), TEXT, None),
+            CardValue::Value(v) => (v.clone(), text(), None),
             CardValue::Estimated(v) => (
                 format!("~{v}"),
-                TEXT,
-                Some(("Estimated from voltage", WARNING)),
+                text(),
+                Some(("Estimated from voltage", warning())),
             ),
-            CardValue::Unknown => ("Unknown".into(), TEXT_SECONDARY, None),
-            CardValue::Error(e) => (e.clone(), DANGER, None),
+            CardValue::Unknown => ("Unknown".into(), text_secondary(), None),
+            CardValue::Error(e) => (e.clone(), danger(), None),
         };
         self.text(
             &text,
@@ -487,7 +500,7 @@ impl Painter<'_> {
             (Some((c, col)), _) => self.caption(c, line3, Align::Left, col),
             (None, Some(d)) => self.text(
                 d,
-                Style::new(Face::Mono, SIZE_CAPTION, TEXT_SECONDARY),
+                Style::new(Face::Mono, SIZE_CAPTION, text_secondary()),
                 line3,
                 Align::Left,
             ),
@@ -501,24 +514,24 @@ impl Painter<'_> {
         let kx = if on { r.right() - 28 } else { r.x + 4 };
         let knob = Rect::new(kx, r.y + 4, 24, 24);
         if on && !disabled {
-            self.cv.rect(r, TEXT);
+            self.cv.rect(r, text());
             if pressed {
-                self.cv.rect(r, PRESSED_TINT);
+                self.cv.rect(r, pressed_tint());
             }
-            self.cv.rect(knob, BG);
+            self.cv.rect(knob, bg());
         } else {
-            self.cv.rect(r, SURFACE_STRONG);
+            self.cv.rect(r, surface_strong());
             if pressed && !disabled {
-                self.cv.rect(r, PRESSED_TINT);
+                self.cv.rect(r, pressed_tint());
             }
             self.cv
-                .rect(Rect::new(r.x, r.bottom() - 1, r.w, 1), DIVIDER);
+                .rect(Rect::new(r.x, r.bottom() - 1, r.w, 1), divider());
             self.cv.rect(
                 knob,
                 if disabled {
-                    TEXT_DISABLED
+                    text_disabled()
                 } else {
-                    TEXT_SECONDARY
+                    text_secondary()
                 },
             );
         }
@@ -529,8 +542,8 @@ impl Painter<'_> {
     pub fn slider(&mut self, r: Rect, value: f32, dragging: bool, disabled: bool) -> Rect {
         let v = value.clamp(0.0, 1.0);
         let track = Rect::new(r.x + 16, r.y + r.h / 2 - 2, r.w - 32, 4);
-        let fill = if disabled { TEXT_DISABLED } else { TEXT };
-        self.cv.rect(track, DIVIDER);
+        let fill = if disabled { text_disabled() } else { text() };
+        self.cv.rect(track, divider());
         let fw = (track.w as f32 * v) as i32;
         if fw > 0 {
             self.cv
@@ -541,7 +554,7 @@ impl Painter<'_> {
         let (tw, th) = if dragging { (20, 28) } else { (16, 24) };
         self.cv
             .rect(Rect::new(kx - tw / 2, ky - th / 2, tw, th), fill);
-        self.cv.rect(Rect::new(kx - 2, ky - 4, 4, 8), BG);
+        self.cv.rect(Rect::new(kx - 2, ky - 4, 4, 8), bg());
         track
     }
 
@@ -554,7 +567,7 @@ impl Painter<'_> {
         pressed: Option<usize>,
         disabled: bool,
     ) -> Vec<Rect> {
-        self.cv.rect(r, SURFACE);
+        self.cv.rect(r, surface());
         let n = labels.len().max(1) as i32;
         let sw = r.w / n;
         let mut out = Vec::new();
@@ -568,22 +581,22 @@ impl Painter<'_> {
             let seg = Rect::new(sx, r.y, w, r.h);
             let sel = i == selected;
             if sel {
-                self.cv.rect(seg, SURFACE_STRONG);
-                self.cv.rect(seg, PRESSED_TINT);
+                self.cv.rect(seg, surface_strong());
+                self.cv.rect(seg, pressed_tint());
                 self.cv.rect(
                     Rect::new(seg.x, seg.bottom() - 2, seg.w, 2),
-                    if disabled { TEXT_DISABLED } else { TEXT },
+                    if disabled { text_disabled() } else { text() },
                 );
             } else if pressed == Some(i) && !disabled {
-                self.cv.rect(seg, PRESSED_TINT);
+                self.cv.rect(seg, pressed_tint());
             }
             if i > 0 {
-                self.cv.rect(Rect::new(sx, r.y, 1, r.h), DIVIDER);
+                self.cv.rect(Rect::new(sx, r.y, 1, r.h), divider());
             }
             let fg = match (sel, disabled) {
-                (_, true) => TEXT_DISABLED,
-                (true, _) => TEXT,
-                _ => TEXT_SECONDARY,
+                (_, true) => text_disabled(),
+                (true, _) => text(),
+                _ => text_secondary(),
             };
             self.text(
                 l,
@@ -604,7 +617,7 @@ impl Painter<'_> {
     /// Pressed highlight of a list row: flush edge-to-edge `PRESSED_TINT` across the row.
     pub fn row_pressed(&mut self, r: Rect) {
         self.cv
-            .rect(Rect::new(r.x, r.y, r.w, (r.h - 1).max(1)), PRESSED_TINT);
+            .rect(Rect::new(r.x, r.y, r.w, (r.h - 1).max(1)), pressed_tint());
     }
 
     /// Returns the rect of the toggle when the accessory is one (for hit testing).
@@ -627,7 +640,7 @@ impl Painter<'_> {
             self.row_pressed(r);
         }
         self.divider(r.x, r.bottom() - 1, r.w);
-        let fg = if disabled { TEXT_DISABLED } else { TEXT };
+        let fg = if disabled { text_disabled() } else { text() };
         let mut x = r.x + SP_4;
         if let Some(ic) = icon {
             self.cv.icon(
@@ -635,7 +648,7 @@ impl Painter<'_> {
                 x,
                 r.y + (r.h - ICON) / 2,
                 ICON,
-                if disabled { TEXT_DISABLED } else { OUTLINE },
+                if disabled { text_disabled() } else { outline() },
             );
             x += ICON + SP_4;
         }
@@ -655,7 +668,7 @@ impl Painter<'_> {
                     sub,
                     Rect::new(x, r.y + 34, text_w, 22),
                     Align::Left,
-                    TEXT_SECONDARY,
+                    text_secondary(),
                 );
             }
             None => self.body(title, Rect::new(x, r.y, text_w, r.h), Align::Left, fg),
@@ -669,7 +682,7 @@ impl Painter<'_> {
                     r.right() - SP_4 - ICON,
                     r.y + (r.h - ICON) / 2,
                     ICON,
-                    TEXT_SECONDARY,
+                    text_secondary(),
                 );
                 None
             }
@@ -685,7 +698,7 @@ impl Painter<'_> {
                     v,
                     Rect::new(ar.x, ar.y, right_w - SP_4, ar.h),
                     Align::Right,
-                    TEXT_SECONDARY,
+                    text_secondary(),
                 );
                 None
             }
@@ -695,7 +708,7 @@ impl Painter<'_> {
                     Style::new(
                         Face::Bold,
                         SIZE_BODY,
-                        if disabled { TEXT_DISABLED } else { TEXT },
+                        if disabled { text_disabled() } else { text() },
                     ),
                     Rect::new(ar.x, ar.y, right_w - SP_4, ar.h),
                     Align::Right,
@@ -713,7 +726,7 @@ impl Painter<'_> {
             let lit = (i as u8) < bars;
             self.cv.rect(
                 Rect::new(x + i * 7, y + 18 - h, 4, h),
-                if lit { color } else { DIVIDER },
+                if lit { color } else { divider() },
             );
         }
     }
@@ -735,10 +748,10 @@ impl Painter<'_> {
         }
         self.divider(r.x, r.bottom() - 1, r.w);
         let (sub, subcol) = match (state, secured) {
-            (NetState::Connected, _) => ("Connected", SUCCESS),
-            (NetState::Connecting(_), _) => ("Connecting…", WARNING),
-            (_, true) => ("Secured", TEXT_SECONDARY),
-            (_, false) => ("Open", TEXT_SECONDARY),
+            (NetState::Connected, _) => ("Connected", success()),
+            (NetState::Connecting(_), _) => ("Connecting…", warning()),
+            (_, true) => ("Secured", text_secondary()),
+            (_, false) => ("Open", text_secondary()),
         };
         let right = r.right() - SP_4;
         let sig_x = right - 26;
@@ -747,16 +760,21 @@ impl Painter<'_> {
             r.y + (r.h - 18) / 2,
             bars,
             if state == NetState::Connected {
-                SUCCESS
+                success()
             } else {
-                TEXT
+                text()
             },
         );
         let mut tx = sig_x - SP_3;
         if secured {
             tx -= ICON;
-            self.cv
-                .icon(Icon::Lock, tx, r.y + (r.h - ICON) / 2, ICON, TEXT_SECONDARY);
+            self.cv.icon(
+                Icon::Lock,
+                tx,
+                r.y + (r.h - ICON) / 2,
+                ICON,
+                text_secondary(),
+            );
             tx -= SP_2;
         }
         // connection state icon (check / spinner) left of the lock
@@ -779,7 +797,7 @@ impl Painter<'_> {
                     Face::Regular
                 },
                 SIZE_BODY,
-                TEXT,
+                text(),
             ),
             Rect::new(r.x + SP_4, r.y + 10, w, 28),
             Align::Left,
@@ -795,9 +813,9 @@ impl Painter<'_> {
             match state {
                 NetState::Connecting(deg) => {
                     self.cv
-                        .icon_rotated(Icon::Spinner, x, y, ICON, WARNING, deg as f32)
+                        .icon_rotated(Icon::Spinner, x, y, ICON, warning(), deg as f32)
                 }
-                _ => self.cv.icon(Icon::Check, x, y, ICON, SUCCESS),
+                _ => self.cv.icon(Icon::Check, x, y, ICON, success()),
             }
         }
     }
@@ -808,10 +826,10 @@ impl Painter<'_> {
         self.popover(r);
         self.divider(r.x, r.y, r.w);
         self.cv
-            .rect(Rect::new(r.x + r.w / 2 - 24, r.y + 8, 48, 4), DIVIDER);
+            .rect(Rect::new(r.x + r.w / 2 - 24, r.y + 8, 48, 4), divider());
         self.text(
             title,
-            Style::new(Face::Regular, SIZE_TITLE, TEXT),
+            Style::new(Face::Regular, SIZE_TITLE, text()),
             Rect::new(r.x + SP_5, r.y + 20, r.w - 2 * SP_5, 40),
             Align::Left,
         );
@@ -844,7 +862,7 @@ impl Painter<'_> {
         self.divider(r.x, r.y, r.w);
         self.text(
             title,
-            Style::new(Face::Regular, SIZE_TITLE, TEXT),
+            Style::new(Face::Regular, SIZE_TITLE, text()),
             Rect::new(r.x + SP_5, r.y + SP_5, r.w - 2 * SP_5, 40),
             Align::Left,
         );
@@ -852,7 +870,7 @@ impl Painter<'_> {
             body,
             Rect::new(r.x + SP_5, r.y + 72, r.w - 2 * SP_5, 48),
             Align::Left,
-            TEXT_SECONDARY,
+            text_secondary(),
         );
         let bw = (r.w - 2 * SP_5 - SP_4) / 2;
         let cancel_r = Rect::new(r.x + SP_5, r.bottom() - SP_5 - BUTTON_H, bw, BUTTON_H);
@@ -901,7 +919,7 @@ impl Painter<'_> {
         self.divider(r.x, r.y, r.w);
         self.text(
             "Power",
-            Style::new(Face::Regular, SIZE_TITLE, TEXT),
+            Style::new(Face::Regular, SIZE_TITLE, text()),
             Rect::new(r.x + SP_5, r.y + SP_5, r.w - 2 * SP_5, 40),
             Align::Left,
         );
@@ -927,8 +945,9 @@ impl Painter<'_> {
             self.button(ir, &text, kind, ButtonState::Default, None);
             if focus == i {
                 // focus bar: 4 px white left indicator + pressed tint
-                self.cv.rect(ir, PRESSED_TINT);
-                self.cv.rect(Rect::new(ir.x, ir.y, 4, ir.h), TEXT);
+                self.cv.rect(ir, pressed_tint());
+                self.cv
+                    .rect(Rect::new(ir.x, ir.y, 4, ir.h), crate::tokens::text());
             }
             out.push(ir);
         }
@@ -949,13 +968,13 @@ impl Painter<'_> {
         error: Option<&str>,
     ) -> Option<Rect> {
         let (line, line_h) = if error.is_some() {
-            (DANGER, 2)
+            (danger(), 2)
         } else if focused {
-            (TEXT, 2)
+            (text(), 2)
         } else {
-            (DIVIDER, 1)
+            (divider(), 1)
         };
-        self.cv.rect(r, SURFACE);
+        self.cv.rect(r, surface());
         self.cv
             .rect(Rect::new(r.x, r.bottom() - line_h, r.w, line_h), line);
         let eye = secret.then(|| Rect::new(r.right() - TOUCH_MIN, r.y, TOUCH_MIN, r.h));
@@ -970,9 +989,9 @@ impl Painter<'_> {
             tail_fit(self.fonts, value, text_w as f32)
         };
         if value.is_empty() {
-            self.body(placeholder, area, Align::Left, TEXT_DISABLED);
+            self.body(placeholder, area, Align::Left, text_disabled());
         } else {
-            self.body(&display, area, Align::Left, TEXT);
+            self.body(&display, area, Align::Left, text());
         }
         if focused {
             let w = if display.is_empty() {
@@ -981,7 +1000,7 @@ impl Painter<'_> {
                 self.fonts.measure(&display, Face::Regular, SIZE_BODY)
             };
             let cx = (area.x as f32 + w).round() as i32 + 1;
-            self.cv.rect(Rect::new(cx, r.y + 14, 2, r.h - 28), TEXT);
+            self.cv.rect(Rect::new(cx, r.y + 14, 2, r.h - 28), text());
         }
         if let Some(e) = eye {
             self.cv.icon(
@@ -989,7 +1008,7 @@ impl Painter<'_> {
                 e.x + (e.w - ICON) / 2,
                 e.y + (e.h - ICON) / 2,
                 ICON,
-                TEXT_SECONDARY,
+                text_secondary(),
             );
         }
         if let Some(msg) = error {
@@ -997,7 +1016,7 @@ impl Painter<'_> {
                 msg,
                 Rect::new(r.x + 4, r.bottom() + 6, r.w, 22),
                 Align::Left,
-                DANGER,
+                danger(),
             );
         }
         eye
@@ -1011,7 +1030,7 @@ impl Painter<'_> {
             .min(area.w - 2 * SP_5)
             .max(160);
         let r = Rect::new(area.x + (area.w - w) / 2, area.y + SP_2, w, 48);
-        self.cv.rect(r, SURFACE_STRONG.over(BG));
+        self.cv.rect(r, surface_strong().over(bg()));
         self.cv.rect(r, banner_tint(tone));
         self.cv.rect(Rect::new(r.x, r.y, 3, r.h), tone_color(tone));
         let ic = match tone {
@@ -1029,13 +1048,13 @@ impl Painter<'_> {
                 r.h,
             ),
             Align::Left,
-            TEXT,
+            crate::tokens::text(),
         );
         r
     }
 
     pub fn banner(&mut self, r: Rect, text: &str, tone: Tone) {
-        self.cv.rect(r, SURFACE_STRONG);
+        self.cv.rect(r, surface_strong());
         self.cv.rect(r, banner_tint(tone));
         self.cv.rect(Rect::new(r.x, r.y, 3, r.h), tone_color(tone));
         self.cv.icon(
@@ -1054,21 +1073,27 @@ impl Painter<'_> {
                 r.h,
             ),
             Align::Left,
-            TEXT,
+            crate::tokens::text(),
         );
     }
 
     pub fn spinner(&mut self, cx: i32, cy: i32, size: i32, deg: f32) {
-        self.cv
-            .icon_rotated(Icon::Spinner, cx - size / 2, cy - size / 2, size, TEXT, deg);
+        self.cv.icon_rotated(
+            Icon::Spinner,
+            cx - size / 2,
+            cy - size / 2,
+            size,
+            text(),
+            deg,
+        );
     }
 
     pub fn empty_state(&mut self, r: Rect, icon: Icon, title: &str, hint: &str) {
         let (cx, cy) = r.center();
-        self.cv.icon(icon, cx - 24, cy - 56, 48, TEXT_DISABLED);
+        self.cv.icon(icon, cx - 24, cy - 56, 48, text_disabled());
         self.text(
             title,
-            Style::new(Face::Regular, SIZE_BODY, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_BODY, text_secondary()),
             Rect::new(r.x, cy, r.w, 28),
             Align::Center,
         );
@@ -1076,17 +1101,17 @@ impl Painter<'_> {
             hint,
             Rect::new(r.x + SP_5, cy + 30, r.w - 2 * SP_5, 24),
             Align::Center,
-            TEXT_DISABLED,
+            text_disabled(),
         );
     }
 
     /// Returns the retry button rect.
     pub fn error_state(&mut self, r: Rect, title: &str, msg: &str, retry: &str) -> Rect {
         let (cx, cy) = r.center();
-        self.cv.icon(Icon::Warning, cx - 24, cy - 88, 48, DANGER);
+        self.cv.icon(Icon::Warning, cx - 24, cy - 88, 48, danger());
         self.text(
             title,
-            Style::new(Face::Regular, SIZE_BODY, TEXT),
+            Style::new(Face::Regular, SIZE_BODY, text()),
             Rect::new(r.x, cy - 28, r.w, 28),
             Align::Center,
         );
@@ -1094,7 +1119,7 @@ impl Painter<'_> {
             msg,
             Rect::new(r.x + SP_5, cy + 2, r.w - 2 * SP_5, 24),
             Align::Center,
-            TEXT_SECONDARY,
+            text_secondary(),
         );
         let b = Rect::new(cx - 90, cy + 40, 180, BUTTON_H);
         self.button(
@@ -1120,7 +1145,7 @@ impl Painter<'_> {
     }
 
     pub fn clock(&mut self, r: Rect, time: &str, suffix: Option<&str>, date: &str) {
-        let style = Style::new(Face::Regular, SIZE_CLOCK, TEXT);
+        let style = Style::new(Face::Regular, SIZE_CLOCK, text());
         let tw = self.fonts.measure(time, Face::Regular, SIZE_CLOCK).ceil() as i32;
         self.text(time, style, Rect::new(r.x, r.y, tw + 2, r.h), Align::Left);
         let mut x = r.x + tw + SP_1;
@@ -1130,7 +1155,7 @@ impl Painter<'_> {
                 sfx,
                 Rect::new(x + 2, r.y + 2, sw + 2, r.h),
                 Align::Left,
-                TEXT_SECONDARY,
+                text_secondary(),
             );
             x += sw + SP_1 + 2;
         }
@@ -1140,7 +1165,7 @@ impl Painter<'_> {
                 date,
                 Rect::new(dx, r.y + 1, r.right() - dx, r.h),
                 Align::Left,
-                TEXT_SECONDARY,
+                text_secondary(),
             );
         }
     }
@@ -1181,7 +1206,7 @@ impl Painter<'_> {
             let lit = (i as u8) < bars;
             self.cv.rect(
                 Rect::new(x + i * 5, y + 16 - h, 3, h),
-                if lit { color } else { DIVIDER },
+                if lit { color } else { divider() },
             );
         }
     }
@@ -1261,7 +1286,7 @@ impl Painter<'_> {
             x += CELL_BARS_W + SP_2;
         }
         if bt {
-            self.cv.icon(Icon::Bluetooth, x, cy - 9, BT_MARK_W, TEXT);
+            self.cv.icon(Icon::Bluetooth, x, cy - 9, BT_MARK_W, text());
             x += BT_MARK_W + SP_2;
         }
         if let Some(c) = gps {
@@ -1269,15 +1294,15 @@ impl Painter<'_> {
             x += GPS_MARK_W + SP_2;
         }
         let wifi_c = match wifi {
-            WifiMark::Connected => TEXT,
-            WifiMark::Failed => DANGER,
-            WifiMark::Disconnected | WifiMark::Unknown => TEXT_DISABLED,
+            WifiMark::Connected => text(),
+            WifiMark::Failed => danger(),
+            WifiMark::Disconnected | WifiMark::Unknown => text_disabled(),
         };
         self.cv.icon(Icon::Wifi, x, cy - 10, 20, wifi_c);
         x += 20 + SP_3;
-        let bc = if low { WARNING } else { TEXT };
+        let bc = if low { warning() } else { text() };
         if charging {
-            self.cv.icon(Icon::Bolt, x, cy - 8, BOLT_W + 2, SUCCESS);
+            self.cv.icon(Icon::Bolt, x, cy - 8, BOLT_W + 2, success());
             x += BOLT_W + SP_1;
         }
         let bw = self
@@ -1294,7 +1319,7 @@ impl Painter<'_> {
         self.cv.icon(Icon::Battery, x, cy - 11, 22, bc);
         x += 22 + SP_2;
         self.cv
-            .icon(Icon::ChevronDown, x, cy - 8, 16, TEXT_SECONDARY);
+            .icon(Icon::ChevronDown, x, cy - 8, 16, text_secondary());
         r
     }
 }
@@ -1445,15 +1470,15 @@ impl Painter<'_> {
             let down = pressed == Some(i);
             // a pressed key is filled white: the strongest feedback while typing blind-ish
             if down {
-                self.cv.rect(k.rect, TEXT);
+                self.cv.rect(k.rect, text());
             } else if k.key == Key::Shift && layer == KeyboardLayer::Upper {
                 // shift engaged: drawn as held
                 self.outline_box(k.rect, 0, true, true, false);
             } else {
                 self.cv
-                    .rect(k.rect, if special { SURFACE } else { SURFACE_ICON });
+                    .rect(k.rect, if special { surface() } else { surface_icon() });
             }
-            let fg = if down { BG } else { TEXT };
+            let fg = if down { bg() } else { text() };
             let c = k.rect;
             match k.key {
                 Key::Char(ch) => self.text(
@@ -1490,7 +1515,7 @@ impl Painter<'_> {
                     "space",
                     c,
                     Align::Center,
-                    if down { BG } else { TEXT_SECONDARY },
+                    if down { bg() } else { text_secondary() },
                 ),
                 Key::Enter => self.text(
                     "Done",
@@ -1634,7 +1659,7 @@ impl Painter<'_> {
         let area = self.cv.bounds();
         // its own window over other apps (no compositor, nothing to blend with): the strip is
         // SURFACE_STRONG over BG flattened into one opaque fill; the keys blend over it
-        self.cv.rect(area, SURFACE_STRONG.over(BG));
+        self.cv.rect(area, surface_strong().over(bg()));
         self.divider(area.x, area.y, area.w);
         let keys = system_keyboard_layout(area, st.symbols);
         let compact = area.h < 300;
@@ -1671,30 +1696,37 @@ impl Painter<'_> {
             match (k.key, text) {
                 (SysKey::Char(ch), _) => self.text(
                     &sys_key_char(ch, st).to_string(),
-                    Style::new(Face::Regular, char_px, TEXT),
+                    Style::new(Face::Regular, char_px, crate::tokens::text()),
                     c,
                     Align::Center,
                 ),
                 (SysKey::Shift, _) => {
                     let (x, y) = icon_at(ICON);
-                    self.cv.icon(Icon::Shift, x, y, ICON, TEXT);
+                    self.cv.icon(Icon::Shift, x, y, ICON, crate::tokens::text());
                 }
                 (SysKey::Backspace, _) => {
                     let (x, y) = icon_at(ICON);
-                    self.cv.icon(Icon::Backspace, x, y, ICON, TEXT);
+                    self.cv
+                        .icon(Icon::Backspace, x, y, ICON, crate::tokens::text());
                 }
                 (SysKey::Hide, _) => {
                     // keyboard with a chevron down: "put the keyboard away"
                     let (x, y) = icon_at(ICON + 2 + 16);
-                    self.cv.icon(Icon::Keyboard, x, y, ICON, TEXT);
                     self.cv
-                        .icon(Icon::ChevronDown, x + ICON + 2, y + 4, 16, TEXT);
+                        .icon(Icon::Keyboard, x, y, ICON, crate::tokens::text());
+                    self.cv.icon(
+                        Icon::ChevronDown,
+                        x + ICON + 2,
+                        y + 4,
+                        16,
+                        crate::tokens::text(),
+                    );
                 }
                 (_, Some((s, face, px))) => {
                     let colour = if k.key == SysKey::Space {
-                        TEXT_SECONDARY
+                        text_secondary()
                     } else {
-                        TEXT
+                        crate::tokens::text()
                     };
                     self.text(s, Style::new(face, px, colour), c, Align::Center)
                 }

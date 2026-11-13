@@ -1,7 +1,7 @@
 //! The shell event loop: X events + core events -> gestures -> app -> render -> present. Redraws
 //! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
 //! after the first frame is on screen (the boot ramdisk health check).
-use crate::app::{load_catalog, read_clock_24h, read_pinned, App, Cmd, WallTime};
+use crate::app::{load_catalog, read_clock_24h, read_pinned, read_theme, App, Cmd, WallTime};
 use crate::call_screen::CallAct;
 use crate::call_window::CallWindow;
 use crate::clipboard::{ClipEvent, Keeper};
@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 use walpad_hw::Root;
 use walpad_proto::{LockKind, ShellInput};
 use walpad_ui::components::Painter;
-use walpad_ui::tokens::BG;
+use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts};
 
 pub struct Options {
@@ -205,8 +205,9 @@ impl Shell {
             }
         };
         let canvas =
-            Canvas::new(w as u32, h as u32, BG).ok_or("cannot allocate the frame buffer")?;
+            Canvas::new(w as u32, h as u32, bg()).ok_or("cannot allocate the frame buffer")?;
         let clock_24h = read_clock_24h(&opts.root);
+        walpad_ui::tokens::set_theme(read_theme(&opts.root));
         let (wall, to_minute) = WallTime::now(clock_24h);
         let core = CoreClient::new(
             opts.core_socket
@@ -711,6 +712,11 @@ impl Shell {
         self.need_refresh = false;
         let devd = read_devd(&self.root);
         let clock_24h = read_clock_24h(&self.root);
+        let theme = read_theme(&self.root);
+        if theme != walpad_ui::tokens::theme() {
+            walpad_ui::tokens::set_theme(theme);
+            self.dirty = true;
+        }
         self.dirty |= self.app.set_config(devd, clock_24h);
         if clock_24h != self.clock_24h {
             self.clock_24h = clock_24h;
@@ -730,7 +736,7 @@ impl Shell {
         if w <= 0 || h <= 0 {
             return;
         }
-        if let Some(c) = Canvas::new(w as u32, h as u32, BG) {
+        if let Some(c) = Canvas::new(w as u32, h as u32, bg()) {
             self.canvas = c;
             self.app.resize(w, h);
             self.dirty = true;
@@ -947,6 +953,10 @@ impl Shell {
                                 self.focus.client_gone(w, now);
                                 None
                             }
+                            ImEvent::ActiveWindow(fallback_app) => {
+                                self.focus.active_window_changed(now, fallback_app);
+                                None
+                            }
                         };
                         self.apply_focus(a);
                     }
@@ -988,8 +998,17 @@ impl Shell {
                 CoreEvent::Input(ShellInput::KeyboardShow) => self.set_keyboard(true, false),
                 CoreEvent::Input(ShellInput::KeyboardHide) => self.set_keyboard(false, false),
                 // a terminal is useless without keys: XIM focus normally brings the keyboard up
-                // (st reports its focus); without an XIM connection it comes up as a fallback
-                CoreEvent::Apps(v) if v["kind"] == "started" && v["app"] == "terminal" => {
+                // (st reports its focus); without an XIM connection it comes up as a fallback.
+                // Kali and Scanner are the same st+fish shell as "terminal" (owner report
+                // 2026-11-13, "from the terminals both kali and the normal terminal" - this used
+                // to only match "terminal" by name, so Kali and Scanner never got it at all).
+                CoreEvent::Apps(v)
+                    if v["kind"] == "started"
+                        && matches!(
+                            v["app"].as_str(),
+                            Some("terminal") | Some("kali") | Some("scanner")
+                        ) =>
+                {
                     let a = self.focus.app_started(now, self.ime.is_some());
                     self.apply_focus(a);
                 }

@@ -133,29 +133,31 @@ pub fn preview(s: &str) -> String {
 }
 
 /// The strip colour of both windows.
-pub const STRIP: crate::tokens::Color = SURFACE_STRONG.over(BG);
+pub fn strip_color() -> crate::tokens::Color {
+    surface_strong().over(bg())
+}
 
 impl Painter<'_> {
     /// Draws the toolbar over the whole canvas; `pressed` = index into `buttons`.
     pub fn edit_bar(&mut self, buttons: &[EditBtn], pressed: Option<usize>) {
         let area = self.cv.bounds();
-        self.cv.rect(area, STRIP);
+        self.cv.rect(area, strip_color());
         for (i, (r, b)) in bar_layout(buttons).into_iter().enumerate() {
             if pressed == Some(i) {
-                self.cv.rect(r, PRESSED_TINT);
+                self.cv.rect(r, pressed_tint());
             }
             if i > 0 {
-                self.cv.rect(Rect::new(r.x, 0, 1, r.h), DIVIDER);
+                self.cv.rect(Rect::new(r.x, 0, 1, r.h), divider());
             }
             // owner report 2026-11-13, "copy paste functions are not profashonalize like
             // normal android devices": an icon (like Android's own selection toolbar) with a
             // small caption under it, not a bare word filling the whole button.
             const ICON: i32 = 22;
             self.cv
-                .icon(b.icon(), r.x + (r.w - ICON) / 2, r.y + 5, ICON, TEXT);
+                .icon(b.icon(), r.x + (r.w - ICON) / 2, r.y + 5, ICON, text());
             self.text(
                 b.label(),
-                Style::new(Face::Regular, SIZE_TINY, TEXT),
+                Style::new(Face::Regular, SIZE_TINY, text()),
                 Rect::new(r.x, r.y + 5 + ICON, r.w, r.h - 5 - ICON),
                 Align::Center,
             );
@@ -170,22 +172,22 @@ impl Painter<'_> {
         pressed: Option<ClipHit>,
     ) -> Vec<(Rect, ClipHit)> {
         let area = self.cv.bounds();
-        self.cv.rect(area, STRIP);
+        self.cv.rect(area, strip_color());
         let hits = clip_layout(area.w, entries.len());
         self.text(
             "Clipboard",
-            Style::new(Face::Bold, SIZE_BODY, TEXT),
+            Style::new(Face::Bold, SIZE_BODY, text()),
             Rect::new(16, 0, area.w - 140, CLIP_HEAD_H),
             Align::Left,
         );
         for (r, hit) in &hits {
             if pressed == Some(*hit) {
-                self.cv.rect(*r, PRESSED_TINT);
+                self.cv.rect(*r, pressed_tint());
             }
             match hit {
                 ClipHit::Clear => self.text(
                     "Clear",
-                    Style::new(Face::Bold, SIZE_SECONDARY, TEXT_SECONDARY),
+                    Style::new(Face::Bold, SIZE_SECONDARY, text_secondary()),
                     *r,
                     Align::Center,
                 ),
@@ -196,11 +198,11 @@ impl Painter<'_> {
                         r.x + (r.w - s) / 2,
                         r.y + (r.h - s) / 2,
                         s,
-                        TEXT,
+                        text(),
                     )
                 }
                 ClipHit::Entry(i) => {
-                    self.cv.rect(Rect::new(0, r.y, area.w, 1), DIVIDER);
+                    self.cv.rect(Rect::new(0, r.y, area.w, 1), divider());
                     let line = self.fonts.fit(
                         &preview(&entries[*i]),
                         Face::Regular,
@@ -209,7 +211,7 @@ impl Painter<'_> {
                     );
                     self.text(
                         &line,
-                        Style::new(Face::Regular, SIZE_BODY, TEXT),
+                        Style::new(Face::Regular, SIZE_BODY, text()),
                         Rect::new(16, r.y, area.w - 32, r.h),
                         Align::Left,
                     );
@@ -217,10 +219,11 @@ impl Painter<'_> {
             }
         }
         if entries.is_empty() {
-            self.cv.rect(Rect::new(0, CLIP_HEAD_H, area.w, 1), DIVIDER);
+            self.cv
+                .rect(Rect::new(0, CLIP_HEAD_H, area.w, 1), divider());
             self.text(
                 "Nothing copied yet",
-                Style::new(Face::Regular, SIZE_BODY, TEXT_SECONDARY),
+                Style::new(Face::Regular, SIZE_BODY, text_secondary()),
                 Rect::new(16, CLIP_HEAD_H, area.w - 32, CLIP_EMPTY_H),
                 Align::Center,
             );

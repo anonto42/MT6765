@@ -294,7 +294,7 @@ impl Recents {
     /// Draw the whole strip (`p.cv` is the visible area).
     pub fn render(&self, p: &mut Painter) {
         let (w, h) = self.area;
-        p.cv.rect(Rect::new(0, 0, w, h), SURFACE_STRONG.over(BG));
+        p.cv.rect(Rect::new(0, 0, w, h), surface_strong().over(bg()));
         if self.cards.is_empty() {
             p.empty_state(
                 Rect::new(0, h / 2 - 120, w, 240),
@@ -317,7 +317,7 @@ impl Recents {
         }
         p.text(
             "Swipe a card up to close it",
-            Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+            Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
             Rect::new(0, h - 96, w, 24),
             Align::Center,
         );
@@ -329,7 +329,7 @@ impl Recents {
         match &self.scaled[i] {
             Some(t) => p.cv.blit(t, thumb.x, thumb.y),
             None => {
-                p.cv.rect(thumb, SURFACE_ICON.over(BG));
+                p.cv.rect(thumb, surface_icon().over(bg()));
                 let big = (g.thumb_w / 3).min(96);
                 let c = thumb.center();
                 p.cv.icon(
@@ -337,7 +337,7 @@ impl Recents {
                     c.0 - big / 2,
                     c.1 - big / 2,
                     big,
-                    TEXT_SECONDARY,
+                    text_secondary(),
                 );
             }
         }
@@ -348,11 +348,11 @@ impl Recents {
             r.x + PAD + SP_1,
             ly + (LABEL_H - ICON) / 2,
             ICON,
-            TEXT,
+            text(),
         );
         p.text(
             &self.cards[i].name,
-            Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+            Style::new(Face::Regular, SIZE_SECONDARY, text()),
             Rect::new(
                 r.x + PAD + SP_1 + ICON + SP_2,
                 ly,
@@ -367,7 +367,7 @@ impl Recents {
             cb.x + (cb.w - ICON) / 2,
             cb.y + (cb.h - ICON) / 2,
             ICON,
-            TEXT_SECONDARY,
+            text_secondary(),
         );
     }
 }

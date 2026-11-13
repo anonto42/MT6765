@@ -123,6 +123,13 @@ pub fn read_clock_24h(root: &Root) -> bool {
     shell_json(root)["clock_24h"].as_bool().unwrap_or(true)
 }
 
+pub fn read_theme(root: &Root) -> walpad_ui::tokens::ThemeMode {
+    shell_json(root)["theme"]
+        .as_str()
+        .map(walpad_ui::tokens::ThemeMode::from_str_or_dark)
+        .unwrap_or_default()
+}
+
 pub const DEFAULT_PINNED: [&str; 4] = ["browser", "terminal", "files", "settings"];
 
 pub fn read_pinned(root: &Root) -> Vec<String> {
@@ -231,6 +238,7 @@ pub enum Target {
     Dim(usize),
     Off(usize),
     LidToggle,
+    ThemeToggle,
     PowerDimCycle,
     PowerDimLevelCycle,
     PowerOffCycle,
@@ -2456,6 +2464,11 @@ impl App {
             Target::LidToggle if interactive => {
                 out.cmd(Cmd::Setting("lid_off", json!(!self.model.devd.lid_off)))
             }
+            Target::ThemeToggle if interactive => {
+                let next = walpad_ui::tokens::theme().toggle();
+                walpad_ui::tokens::set_theme(next);
+                out.cmd(Cmd::Setting("theme", json!(next.as_str())));
+            }
             Target::RotateFlipToggle if interactive => out.cmd(Cmd::Setting(
                 "rotate_flip",
                 json!(!self.model.devd.rotate_flip),
@@ -3083,6 +3096,7 @@ impl App {
             sidebar: sidebar.clone(),
             active: chrome::active_target(self.active, panel_open),
             page: self.scrolls(),
+            theme: walpad_ui::tokens::theme(),
         };
         self.chrome.paint(p, &frame, key);
         self.chrome.render_pressed(p, &sidebar, self.model.pressed);
@@ -3305,14 +3319,14 @@ impl App {
         p.cv.set_origin(0, 0);
         if self.content_h > self.view.h && self.view.h > 0 {
             let track = Rect::new(self.view.right() - 3, self.view.y, 2, self.view.h);
-            p.cv.rect(track, DIVIDER);
+            p.cv.rect(track, divider());
             let thumb_h = ((self.view.h as i64 * self.view.h as i64) / self.content_h as i64)
                 .clamp(24, self.view.h as i64) as i32;
             let max_scroll = (self.content_h - self.view.h).max(1);
             let thumb_y = self.view.y
                 + ((self.scroll as i64 * (self.view.h - thumb_h) as i64) / max_scroll as i64)
                     as i32;
-            p.cv.rect(Rect::new(track.x, thumb_y, 2, thumb_h), ACCENT);
+            p.cv.rect(Rect::new(track.x, thumb_y, 2, thumb_h), accent());
         }
     }
 }

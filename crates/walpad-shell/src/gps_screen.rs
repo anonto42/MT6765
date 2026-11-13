@@ -41,8 +41,8 @@ pub fn switchable(st: &Option<Status>) -> bool {
 pub fn pill_mark(st: &Option<Status>) -> Option<Color> {
     let g = gps(st)?;
     match g.state {
-        GpsState::Fix => Some(TEXT),
-        GpsState::Searching | GpsState::Starting => Some(TEXT_DISABLED),
+        GpsState::Fix => Some(text()),
+        GpsState::Searching | GpsState::Starting => Some(text_disabled()),
         _ => None,
     }
 }
@@ -50,40 +50,40 @@ pub fn pill_mark(st: &Option<Status>) -> Option<Color> {
 /// State chip on the screen title.
 pub fn chip(st: &Option<Status>) -> (&'static str, Color) {
     match gps(st).map(|g| g.state) {
-        None => ("Unknown", TEXT_DISABLED),
-        Some(GpsState::Off) => ("Off", TEXT_DISABLED),
-        Some(GpsState::Starting) => ("Starting", WARNING),
-        Some(GpsState::Stopping) => ("Stopping", TEXT_SECONDARY),
-        Some(GpsState::Searching) => ("Searching", WARNING),
-        Some(GpsState::Fix) => ("Fix", SUCCESS),
-        Some(GpsState::Failed) => ("Failed", DANGER),
+        None => ("Unknown", text_disabled()),
+        Some(GpsState::Off) => ("Off", text_disabled()),
+        Some(GpsState::Starting) => ("Starting", warning()),
+        Some(GpsState::Stopping) => ("Stopping", text_secondary()),
+        Some(GpsState::Searching) => ("Searching", warning()),
+        Some(GpsState::Fix) => ("Fix", success()),
+        Some(GpsState::Failed) => ("Failed", danger()),
     }
 }
 
 /// Quick Settings row subtitle.
 pub fn qs_line(st: &Option<Status>) -> (String, Color) {
     let Some(g) = gps(st) else {
-        return ("Unknown".into(), TEXT_SECONDARY);
+        return ("Unknown".into(), text_secondary());
     };
     match g.state {
-        GpsState::Off => ("Off".into(), TEXT_SECONDARY),
-        GpsState::Starting => ("Starting...".into(), WARNING),
-        GpsState::Stopping => ("Stopping...".into(), TEXT_SECONDARY),
+        GpsState::Off => ("Off".into(), text_secondary()),
+        GpsState::Starting => ("Starting...".into(), warning()),
+        GpsState::Stopping => ("Stopping...".into(), text_secondary()),
         GpsState::Searching => (
             match g.satellites_view {
                 Some(n) if n > 0 => format!("Searching, {n} satellites"),
                 _ => "Searching...".into(),
             },
-            WARNING,
+            warning(),
         ),
         GpsState::Fix => (
             match g.accuracy_m {
                 Some(a) => format!("Fix, within {a} m"),
                 None => "Fix".into(),
             },
-            SUCCESS,
+            success(),
         ),
-        GpsState::Failed => ("Failed".into(), DANGER),
+        GpsState::Failed => ("Failed".into(), danger()),
     }
 }
 
@@ -116,7 +116,7 @@ pub fn state_lines(st: &Option<Status>) -> (String, String, Color) {
         return (
             "Unknown".into(),
             "No status from the system".into(),
-            TEXT_DISABLED,
+            text_disabled(),
         );
     };
     let sats = match (g.satellites_used, g.satellites_view) {
@@ -128,18 +128,18 @@ pub fn state_lines(st: &Option<Status>) -> (String, String, Color) {
         GpsState::Off => (
             "GPS is off".into(),
             "Turn it on to find your position".into(),
-            TEXT_SECONDARY,
+            text_secondary(),
         ),
         GpsState::Starting => (
             "Starting the GPS".into(),
             "This takes a few seconds".into(),
-            WARNING,
+            warning(),
         ),
-        GpsState::Stopping => ("Stopping the GPS".into(), String::new(), TEXT_SECONDARY),
+        GpsState::Stopping => ("Stopping the GPS".into(), String::new(), text_secondary()),
         GpsState::Searching => (
             "Searching for satellites".into(),
             format!("{sats}. A first fix can take minutes"),
-            WARNING,
+            warning(),
         ),
         GpsState::Fix => (
             "Position found".into(),
@@ -147,12 +147,12 @@ pub fn state_lines(st: &Option<Status>) -> (String, String, Color) {
                 Some(a) => format!("Within {a} m, {sats}"),
                 None => sats,
             },
-            SUCCESS,
+            success(),
         ),
         GpsState::Failed => (
             "GPS failed".into(),
             g.reason.clone().unwrap_or_else(|| "unknown error".into()),
-            DANGER,
+            danger(),
         ),
     }
 }
@@ -245,7 +245,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     p.cv.rect(Rect::new(l.chip.x + 12, l.chip.y + 12, 8, 8), chip_col);
     p.text(
         chip,
-        Style::new(Face::Regular, SIZE_SECONDARY, TEXT),
+        Style::new(Face::Regular, SIZE_SECONDARY, text()),
         Rect::new(l.chip.x + 28, l.chip.y, l.chip.w - 36, l.chip.h),
         Align::Left,
     );
@@ -253,12 +253,12 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     // state card
     let card = l.state_card;
     p.card(card, false);
-    p.cv.icon(Icon::Location, card.x + SP_4, card.y + SP_4, 28, TEXT);
+    p.cv.icon(Icon::Location, card.x + SP_4, card.y + SP_4, 28, text());
     let (title, sub, sub_col) = state_lines(v.st);
     let tx = card.x + SP_4 + 28 + SP_4;
     p.text(
         &title,
-        Style::new(Face::Bold, SIZE_BODY, TEXT),
+        Style::new(Face::Bold, SIZE_BODY, text()),
         Rect::new(tx, card.y + SP_4, card.right() - tx - SP_4, 28),
         Align::Left,
     );
@@ -293,7 +293,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         let coords = coords_text(g).unwrap_or_default();
         p.text(
             &coords,
-            Style::new(Face::Mono, 22.0, TEXT),
+            Style::new(Face::Mono, 22.0, text()),
             Rect::new(pc.x + SP_4, pc.y + SP_3, pc.w - 2 * SP_4, 32),
             Align::Left,
         );
@@ -307,7 +307,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         if !parts.is_empty() {
             p.text(
                 &parts.join("  ·  "),
-                Style::new(Face::Regular, SIZE_SECONDARY, TEXT_SECONDARY),
+                Style::new(Face::Regular, SIZE_SECONDARY, text_secondary()),
                 Rect::new(pc.x + SP_4, pc.y + 48, pc.w - 2 * SP_4, 22),
                 Align::Left,
             );
@@ -315,9 +315,9 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         if let Some(age) = g.age_s {
             let fresh = g.state == GpsState::Fix && age <= FRESH_S;
             let (text, col) = if fresh {
-                (format!("Last fix {}", age_text(age)), SUCCESS)
+                (format!("Last fix {}", age_text(age)), success())
             } else {
-                (format!("Last known position, {}", age_text(age)), WARNING)
+                (format!("Last known position, {}", age_text(age)), warning())
             };
             p.text(
                 &text,
@@ -358,7 +358,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
     };
     p.text(
         &head,
-        Style::new(Face::Regular, SIZE_BODY, TEXT),
+        Style::new(Face::Regular, SIZE_BODY, text()),
         Rect::new(sc.x + SP_4, sc.y + SP_3, sc.w - 2 * SP_4, 28),
         Align::Left,
     );
@@ -370,7 +370,7 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         SAT_CARD_H - 48 - 40,
     );
     let base = chart.bottom();
-    p.cv.rect(Rect::new(chart.x, base, chart.w, 1), DIVIDER);
+    p.cv.rect(Rect::new(chart.x, base, chart.w, 1), divider());
     if !signals.is_empty() {
         let n = signals.len().min(16) as i32;
         let gap = 6;
@@ -378,20 +378,20 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
         for (i, s) in signals.iter().take(16).enumerate() {
             let h = bar_height(*s, chart.h);
             let x = chart.x + i as i32 * (bw + gap);
-            let col = if *s == 0 { DIVIDER } else { TEXT };
+            let col = if *s == 0 { divider() } else { text() };
             p.cv.rect(Rect::new(x, base - h, bw, h), col);
         }
     }
     p.text(
         "Signal strength of the strongest satellites (0 to 50 dB-Hz)",
-        Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+        Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
         Rect::new(sc.x + SP_4, sc.bottom() - 32, sc.w - 2 * SP_4, 24),
         Align::Left,
     );
 
     p.text(
         "Needs open sky and Wi-Fi on. The first fix can take minutes.",
-        Style::new(Face::Regular, SIZE_CAPTION, TEXT_SECONDARY),
+        Style::new(Face::Regular, SIZE_CAPTION, text_secondary()),
         l.note,
         Align::Left,
     );

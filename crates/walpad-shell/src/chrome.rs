@@ -131,6 +131,7 @@ pub struct ChromeKey {
     pub active: Option<Target>,
     /// Full-screen page: the page surface is part of the cached layer.
     pub page: bool,
+    pub theme: ThemeMode,
 }
 
 /// The wallpaper (bottom-aligned: the shell shrinks above the dock strip), the sidebar edge and its
@@ -142,16 +143,16 @@ pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: 
 
 /// Everything of the background except the sidebar buttons.
 fn render_base(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Canvas>) {
-    p.cv.fill(BG);
+    p.cv.fill(bg());
     match wall {
         Some(w) => p.cv.blit(w, 0, frame.h - w.height()),
-        None => draw_coffee(p.cv, coffee_rect(frame.content), 3.0, WATERMARK),
+        None => draw_coffee(p.cv, coffee_rect(frame.content), 3.0, watermark()),
     }
     if key.page {
         p.page_surface(frame.content);
     }
     let sb = frame.sidebar;
-    p.cv.rect(Rect::new(sb.right() - 1, sb.y, 1, sb.h), DIVIDER);
+    p.cv.rect(Rect::new(sb.right() - 1, sb.y, 1, sb.h), divider());
     p.divider(sb.x + (sb.w - 40) / 2, key.sidebar.divider_y, 40);
 }
 
@@ -174,8 +175,8 @@ struct Cached {
 #[derive(Default)]
 pub struct Chrome {
     cache: Option<Cached>,
-    /// Decoded wallpaper and whether it is the landscape one (decoded once per orientation).
-    wall: Option<(bool, Canvas)>,
+    /// Decoded wallpaper, whether it is landscape, and its theme (decoded once per orientation/theme).
+    wall: Option<(bool, ThemeMode, Canvas)>,
     /// Times the layer was rebuilt (tests check it is not per frame).
     pub builds: u64,
 }
@@ -185,12 +186,17 @@ impl Chrome {
     pub fn paint(&mut self, p: &mut Painter, frame: &Frame, key: ChromeKey) {
         let stale = self.cache.as_ref().is_none_or(|c| c.key != key);
         let landscape = frame.w > frame.h;
-        if self.wall.as_ref().is_none_or(|(l, _)| *l != landscape) {
-            self.wall = walpad_ui::art::wallpaper(frame.w, frame.h).map(|c| (landscape, c));
+        if self
+            .wall
+            .as_ref()
+            .is_none_or(|(l, t, _)| *l != landscape || *t != key.theme)
+        {
+            self.wall = walpad_ui::art::wallpaper_for_theme(frame.w, frame.h, key.theme)
+                .map(|c| (landscape, key.theme, c));
         }
-        let wall = self.wall.as_ref().map(|(_, c)| c);
+        let wall = self.wall.as_ref().map(|(_, _, c)| c);
         if stale {
-            match Canvas::new(frame.w as u32, frame.h as u32, BG) {
+            match Canvas::new(frame.w as u32, frame.h as u32, bg()) {
                 Some(mut cv) => {
                     let mut bp = Painter {
                         cv: &mut cv,
@@ -222,7 +228,7 @@ impl Chrome {
     pub fn restore(&self, cv: &mut Canvas, r: Rect) {
         match &self.cache {
             Some(c) if cv.copy_rect_from(&c.cv, r) => {}
-            _ => cv.rect(r, BG),
+            _ => cv.rect(r, bg()),
         }
     }
 

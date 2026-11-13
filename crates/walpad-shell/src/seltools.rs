@@ -25,7 +25,7 @@ use walpad_ui::edit_bar::{
     bar_layout, bar_size, clip_height, clip_layout, ClipHit, EditBtn, BAR_GAP, CLIP_HEAD_H,
     CLIP_ROW_H, CLIP_W, MARGIN, TERMINAL_BUTTONS, TEXT_BUTTONS,
 };
-use walpad_ui::tokens::BG;
+use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts, Rect};
 use walpad_x::{XConn, XError};
 use x11rb::connection::Connection;
@@ -259,7 +259,7 @@ fn make_window(xc: &XConn, class: &str, wm_class: &str, r: Rect) -> Result<Win, 
     Ok(Win {
         id,
         gc,
-        canvas: Canvas::new(r.w as u32, r.h as u32, BG).ok_or("edit window canvas")?,
+        canvas: Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("edit window canvas")?,
         mapped: false,
     })
 }
@@ -378,7 +378,7 @@ impl EditBar {
         let on = self.wanted;
         let r = self.bar_geometry();
         if on {
-            self.bar.canvas = Canvas::new(r.w as u32, r.h as u32, BG).ok_or("toolbar canvas")?;
+            self.bar.canvas = Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("toolbar canvas")?;
             self.xc.conn.configure_window(
                 self.bar.id,
                 &ConfigureWindowAux::new()
@@ -486,7 +486,7 @@ impl EditBar {
     fn apply_list(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
         let r = list_rect(self.area, self.bottom_h, self.entries.len());
         let shown = self.shown_entries(r);
-        self.list.canvas = Canvas::new(r.w as u32, r.h as u32, BG).ok_or("list canvas")?;
+        self.list.canvas = Canvas::new(r.w as u32, r.h as u32, bg()).ok_or("list canvas")?;
         self.xc.conn.configure_window(
             self.list.id,
             &ConfigureWindowAux::new()

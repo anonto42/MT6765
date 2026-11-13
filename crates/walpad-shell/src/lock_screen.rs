@@ -507,7 +507,7 @@ impl LockScreen {
     // ------------------------------------------------------------------ drawing
     pub fn render(&mut self, p: &mut Painter) {
         let l = layout(self.area, self.kind);
-        p.cv.fill(BG);
+        p.cv.fill(bg());
         self.hits.clear();
         // clock
         let (time, suffix) = (
@@ -526,29 +526,29 @@ impl LockScreen {
         let x0 = l.clock.x + (l.clock.w - tw - sw) / 2;
         p.text(
             &time,
-            Style::new(Face::Regular, big, TEXT),
+            Style::new(Face::Regular, big, text()),
             Rect::new(x0, l.clock.y, tw + 4, l.clock.h),
             Align::Left,
         );
         if let Some(s) = suffix {
             p.text(
                 s,
-                Style::new(Face::Regular, 22.0, TEXT_SECONDARY),
+                Style::new(Face::Regular, 22.0, text_secondary()),
                 Rect::new(x0 + tw + 8, l.clock.y + 4, sw, l.clock.h / 2),
                 Align::Left,
             );
         }
         p.text(
             &self.wall.date,
-            Style::new(Face::Regular, 20.0, TEXT_SECONDARY),
+            Style::new(Face::Regular, 20.0, text_secondary()),
             l.date,
             Align::Center,
         );
         // prompt: the countdown, an error, or what to enter
         let dis = self.locked_out();
         let (msg, color) = match (self.countdown(), &self.error) {
-            (Some(s), _) => (format!("Try again in {s} s"), DANGER),
-            (None, Some(e)) => (e.clone(), DANGER),
+            (Some(s), _) => (format!("Try again in {s} s"), danger()),
+            (None, Some(e)) => (e.clone(), danger()),
             (None, None) => (
                 match self.kind {
                     LockKind::Pin => "Enter PIN",
@@ -556,7 +556,7 @@ impl LockScreen {
                     LockKind::Pattern => "Draw your pattern",
                 }
                 .to_string(),
-                TEXT_SECONDARY,
+                text_secondary(),
             ),
         };
         p.text(
@@ -581,16 +581,16 @@ impl LockScreen {
         for i in 0..slots {
             let cx = x0 + i as i32 * step;
             if i < n {
-                p.cv.rect(Rect::new(cx - 8, cy - 8, 16, 16), TEXT);
+                p.cv.rect(Rect::new(cx - 8, cy - 8, 16, 16), text());
             } else {
-                p.cv.rect(Rect::new(cx - 8, cy - 8, 16, 16), SURFACE_STRONG);
-                p.cv.rect(Rect::new(cx - 8, cy + 6, 16, 2), DIVIDER);
+                p.cv.rect(Rect::new(cx - 8, cy - 8, 16, 16), surface_strong());
+                p.cv.rect(Rect::new(cx - 8, cy + 6, 16, 2), divider());
             }
         }
         for (r, h) in &l.pad {
             let pressed = self.pressed == Some(*h);
             p.outline_box(*r, 0, pressed, false, dis);
-            let fg = if dis { TEXT_DISABLED } else { TEXT };
+            let fg = if dis { text_disabled() } else { text() };
             match h {
                 Hit::Digit(c) => p.text(
                     &c.to_string(),
@@ -660,19 +660,19 @@ impl LockScreen {
             (x as f32, y as f32)
         };
         for w in sel.windows(2) {
-            p.cv.line(c(w[0]), c(w[1]), 5.0, OUTLINE);
+            p.cv.line(c(w[0]), c(w[1]), 5.0, outline());
         }
         if let (Some(&last), Some((fx, fy)), true) = (sel.last(), self.finger, self.drawing) {
-            p.cv.line(c(last), (fx as f32, fy as f32), 5.0, OUTLINE);
+            p.cv.line(c(last), (fx as f32, fy as f32), 5.0, outline());
         }
         for i in 0..9u8 {
             let (x, y) = l.dots[i as usize];
             if sel.contains(&i) {
-                p.cv.rect(Rect::new(x - 20, y - 20, 40, 40), TEXT);
-                p.cv.rect(Rect::new(x - 6, y - 6, 12, 12), BG);
+                p.cv.rect(Rect::new(x - 20, y - 20, 40, 40), text());
+                p.cv.rect(Rect::new(x - 6, y - 6, 12, 12), bg());
             } else {
-                p.cv.rect(Rect::new(x - 12, y - 12, 24, 24), SURFACE_STRONG);
-                p.cv.rect(Rect::new(x - 12, y + 10, 24, 2), OUTLINE);
+                p.cv.rect(Rect::new(x - 12, y - 12, 24, 24), surface_strong());
+                p.cv.rect(Rect::new(x - 12, y + 10, 24, 2), outline());
             }
         }
     }
