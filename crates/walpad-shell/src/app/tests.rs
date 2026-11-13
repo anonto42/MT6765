@@ -1328,6 +1328,16 @@ fn clock_toggle_restart_shell_and_two_step_power_confirm() {
         tap(&mut app, Target::ClockToggle).cmds,
         vec![Cmd::Setting("clock_24h", json!(false))]
     );
+    tap(&mut app, Target::ClockSetTime);
+    if let Some(Overlay::Password(s)) = &mut app.model.overlay {
+        assert_eq!(s.purpose, SheetPurpose::ClockTime);
+        s.secret = "2026-11-14 09:30".into();
+    } else {
+        panic!("expected ClockTime sheet");
+    }
+    let set_out = tap(&mut app, Target::SheetConnect);
+    assert_eq!(set_out.cmds, vec![Cmd::SetTime("2026-11-14 09:30".into())]);
+    assert!(app.model.overlay.is_none());
     tap(&mut app, Target::Back);
     tap(&mut app, Target::Page(Page::Maintenance));
     let out = tap(&mut app, Target::RestartShell);

@@ -726,12 +726,10 @@ impl Shell {
         self.dirty |= self
             .app
             .set_wallpaper(read_wallpaper(&self.root), read_wallpaper_path(&self.root));
-        if clock_24h != self.clock_24h {
-            self.clock_24h = clock_24h;
-            let (wall, to_minute) = WallTime::now(clock_24h);
-            self.next_minute = Instant::now() + Duration::from_millis(to_minute);
-            self.dirty |= self.app.set_wall(wall);
-        }
+        self.clock_24h = clock_24h;
+        let (wall, to_minute) = WallTime::now(clock_24h);
+        self.next_minute = Instant::now() + Duration::from_millis(to_minute);
+        self.dirty |= self.app.set_wall(wall);
         self.dirty |= self
             .app
             .set_windows(crate::windows_ui::read_prefs(&self.root));

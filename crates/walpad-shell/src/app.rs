@@ -270,6 +270,7 @@ pub enum Target {
     Page(Page),
     Back,
     ClockToggle,
+    ClockSetTime,
     /// Settings > Top bar items: one live figure on or off.
     Stat(StatItem),
     /// Settings > Input > Windows (change multitasking-windows).
@@ -461,6 +462,8 @@ pub enum Cmd {
     Stats(StatItem, bool),
     /// `set_setting` with an allowlisted key.
     Setting(&'static str, Value),
+    /// `set_time`: set the system clock manually (`YYYY-MM-DD HH:MM`).
+    SetTime(String),
     RestartShell,
     Power {
         poweroff: bool,
@@ -704,6 +707,7 @@ impl Cmd {
             Cmd::Rotate(m) => ("rotate", json!({"mode": m})),
             Cmd::Stats(i, on) => ("stats_config", json!({ i.key(): on })),
             Cmd::Setting(k, v) => ("set_setting", json!({"key": k, "value": v})),
+            Cmd::SetTime(dt) => ("set_time", json!({"datetime": dt})),
             Cmd::RestartShell => ("restart_shell", Value::Null),
             Cmd::PowerMenuState(open) => ("power_menu", json!({"open": open})),
             Cmd::Power { poweroff } => (
@@ -751,7 +755,9 @@ impl Cmd {
             | Cmd::ContactDelete(_)
             | Cmd::CallLogClear => Purpose::PhoneAction,
             Cmd::CloseApp(_) => Purpose::Close,
-            Cmd::Setting(..) | Cmd::SetPinned(_) | Cmd::Stats(..) => Purpose::Setting,
+            Cmd::Setting(..) | Cmd::SetTime(_) | Cmd::SetPinned(_) | Cmd::Stats(..) => {
+                Purpose::Setting
+            }
             _ => Purpose::Other,
         }
     }
@@ -2775,6 +2781,13 @@ impl App {
             Target::ClockToggle if interactive => {
                 out.cmd(Cmd::Setting("clock_24h", json!(!self.model.clock_24h)))
             }
+            Target::ClockSetTime if interactive => {
+                let now = jiff::Zoned::now().strftime("%Y-%m-%d %H:%M").to_string();
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::ClockTime,
+                    &now,
+                )));
+            }
             Target::RestartShell if interactive => {
                 out.cmd(Cmd::RestartShell);
                 self.toast("Restarting the shell", Tone::Info);
@@ -3128,6 +3141,10 @@ impl App {
                         self.model.wallpaper = kind;
                         out.cmd(Cmd::Setting("wallpaper_path", json!(val)));
                         out.cmd(Cmd::Setting("wallpaper", json!(kind.as_str())));
+                        self.close_overlay();
+                    }
+                    SheetPurpose::ClockTime => {
+                        out.cmd(Cmd::SetTime(val));
                         self.close_overlay();
                     }
                     _ => {}

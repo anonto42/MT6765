@@ -1038,3 +1038,26 @@ fn launch_takes_an_optional_validated_file_path() {
         assert!(valid_open_path(ok), "{ok}");
     }
 }
+
+#[test]
+fn set_time_validates_datetime() {
+    let (_, c) =
+        req(r#"{"v":1,"id":1,"cmd":"set_time","args":{"datetime":"2026-11-14 00:15"}}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::SetTime {
+            datetime: "2026-11-14 00:15".into()
+        }
+    );
+    assert!(valid_datetime("2024-02-29 23:59:59"));
+    assert!(!valid_datetime("2025-02-29 12:00"));
+    assert!(!valid_datetime("2026-13-01 12:00"));
+    assert!(!valid_datetime("2026-11-14 24:00"));
+    assert!(!valid_datetime("not a date"));
+    assert_eq!(
+        code(req(
+            r#"{"v":1,"id":1,"cmd":"set_time","args":{"datetime":"bad"}}"#
+        )),
+        ErrorCode::InvalidArgs
+    );
+}

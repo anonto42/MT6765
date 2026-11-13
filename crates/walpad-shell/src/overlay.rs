@@ -45,6 +45,7 @@ pub enum SheetPurpose {
     NetMac,
     NetHostname,
     WallpaperPath,
+    ClockTime,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -192,6 +193,7 @@ impl PasswordSheet {
             SheetPurpose::NetIp => ("IPv4 address", KeyboardLayer::Symbols),
             SheetPurpose::NetGateway => ("Gateway / Router IP", KeyboardLayer::Symbols),
             SheetPurpose::NetMac => ("MAC address", KeyboardLayer::Lower),
+            SheetPurpose::ClockTime => ("Set date & time", KeyboardLayer::Symbols),
             _ => ("Device hostname", KeyboardLayer::Lower),
         };
         PasswordSheet {
@@ -211,6 +213,7 @@ impl PasswordSheet {
                 | SheetPurpose::NetMac
                 | SheetPurpose::NetHostname
                 | SheetPurpose::WallpaperPath
+                | SheetPurpose::ClockTime
         )
     }
     /// The sheet sets something on the mobile modem.
@@ -264,6 +267,7 @@ impl PasswordSheet {
                 self.secret.is_empty()
                     || (self.secret.starts_with('/') && !self.secret.contains(".."))
             }
+            SheetPurpose::ClockTime => walpad_proto::valid_datetime(&self.secret),
         }
     }
     /// Longest text the field takes (bytes).
@@ -289,6 +293,7 @@ impl PasswordSheet {
             SheetPurpose::NetMac => 17,
             SheetPurpose::NetHostname => 63,
             SheetPurpose::WallpaperPath => 256,
+            SheetPurpose::ClockTime => 19,
         }
     }
 }
@@ -459,6 +464,7 @@ pub fn render_password(
         SheetPurpose::NetMac => ("AA:BB:CC:DD:EE:FF (empty: hardware)", false, "Save"),
         SheetPurpose::NetHostname => ("e.g. walpad (empty: default)", false, "Save"),
         SheetPurpose::WallpaperPath => ("e.g. /root/wallpaper.png (empty: default)", false, "Save"),
+        SheetPurpose::ClockTime => ("YYYY-MM-DD HH:MM", false, "Save"),
     };
     if let Some(eye) = p.text_field(
         g.field,

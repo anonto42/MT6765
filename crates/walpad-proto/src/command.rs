@@ -53,6 +53,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "restart_shell",
     "screenshot",
     "set_setting",
+    "set_time",
     "power_menu",
     "volume_set",
     "volume_delta",
@@ -467,6 +468,11 @@ pub enum Command {
         key: String,
         value: Value,
     },
+    /// Set the system clock manually (`YYYY-MM-DD HH:MM` or `YYYY-MM-DD HH:MM:SS` in local time)
+    /// and persist to the hardware RTC.
+    SetTime {
+        datetime: String,
+    },
     /// The shell tells the core its power menu opened or closed (the core routes the volume and
     /// power keys to the shell while it is open). `open: true` from a client also opens it.
     PowerMenu {
@@ -850,6 +856,9 @@ impl Command {
                 Err("path must be a .vcf file in a user folder".into())
             }
             Command::SetSetting { key, value } => validate_setting(key, value),
+            Command::SetTime { datetime } if !valid_datetime(datetime) => {
+                Err("datetime must be YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS".into())
+            }
             Command::StatsConfig {
                 cpu: None,
                 ram: None,
@@ -1197,4 +1206,58 @@ fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
             _ => Err("value must be an integer 0-3600".into()),
         },
     }
+}
+
+/// Validate a manual local date & time string (`YYYY-MM-DD HH:MM` or `YYYY-MM-DD HH:MM:SS`).
+pub fn valid_datetime(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 16 && b.len() != 19 {
+        return false;
+    }
+    if b[4] != b'-' || b[7] != b'-' || b[10] != b' ' || b[13] != b':' {
+        return false;
+    }
+    if b.len() == 19 && b[16] != b':' {
+        return false;
+    }
+    let parse_u = |from: usize, to: usize| -> Option<u32> {
+        let slice = s.get(from..to)?;
+        if !slice.bytes().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        slice.parse().ok()
+    };
+    let (Some(y), Some(m), Some(d), Some(hh), Some(mm)) = (
+        parse_u(0, 4),
+        parse_u(5, 7),
+        parse_u(8, 10),
+        parse_u(11, 13),
+        parse_u(14, 16),
+    ) else {
+        return false;
+    };
+    let ss = if b.len() == 19 {
+        match parse_u(17, 19) {
+            Some(v) => v,
+            None => return false,
+        }
+    } else {
+        0
+    };
+    if !(2000..=2099).contains(&y) || !(1..=12).contains(&m) || hh > 23 || mm > 59 || ss > 59 {
+        return false;
+    }
+    let leap = y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400));
+    let max_d = match m {
+        2 => {
+            if leap {
+                29
+            } else {
+                28
+            }
+        }
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    (1..=max_d).contains(&d)
 }

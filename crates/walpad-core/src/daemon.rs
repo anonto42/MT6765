@@ -930,6 +930,34 @@ impl Daemon {
         self.apply_charger_policy(&raw);
     }
 
+    fn set_time(&self, datetime: &str) -> CmdResult {
+        if !walpad_proto::valid_datetime(datetime) {
+            return Err((
+                ErrorCode::InvalidArgs,
+                "datetime must be YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS".into(),
+            ));
+        }
+        let out = std::process::Command::new("date")
+            .args(["-s", datetime])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|e| (ErrorCode::Internal, format!("date: {e}")))?;
+        if !out.status.success() {
+            let msg = String::from_utf8_lossy(&out.stderr);
+            return Err((
+                ErrorCode::Internal,
+                format!("date -s failed: {}", msg.trim()),
+            ));
+        }
+        let _ = std::process::Command::new("hwclock")
+            .args(["-w", "-u"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        Ok(json!({"datetime": datetime}))
+    }
+
     fn set_setting(&mut self, key: &str, value: Value) -> CmdResult {
         let virt = if matches!(
             key,
@@ -1405,6 +1433,7 @@ impl Daemon {
             Command::RestartShell => Ok(json!({"terminated": self.terminate("walpad-shell")})),
             Command::Screenshot => self.screenshot(),
             Command::SetSetting { key, value } => self.set_setting(&key, value),
+            Command::SetTime { datetime } => self.set_time(&datetime),
             Command::Power {
                 confirmed: false, ..
             } => Err((ErrorCode::Refused, "power requires confirmed: true".into())),

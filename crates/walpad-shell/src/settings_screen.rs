@@ -468,11 +468,14 @@ pub fn page_rows(page: Page, c: &Ctx) -> Vec<Row> {
                 info("Uptime", opt(c.sys.uptime_s.map(fmt_uptime))),
             ]
         }
-        Page::Clock => vec![Row::Toggle(
-            "24-hour clock",
-            c.clock_24h,
-            Target::ClockToggle,
-        )],
+        Page::Clock => vec![
+            Row::Toggle("24-hour clock", c.clock_24h, Target::ClockToggle),
+            Row::Action {
+                label: "Set date & time manually",
+                target: Target::ClockSetTime,
+                danger: false,
+            },
+        ],
         Page::TopBar => {
             let it = c.status.as_ref().map(|s| s.stats.items).unwrap_or_default();
             StatItem::ALL
