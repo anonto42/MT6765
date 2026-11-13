@@ -763,28 +763,23 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
             ) > 10
     });
 
-    // a tap on the handle unfolds the compact icon-only strip above the handle (no strut, so apps
-    // keep their size); the handle stays in place so a second tap folds it cleanly
+    // a tap on the handle unfolds the compact icon-only strip (no strut, so apps keep their size)
+    // and hides the arrow handle while the strip is open
     expand_dock(&probe, handle, dock);
     assert_eq!(geom(p, dock), (800 - 224 - 8, 1280 - 28 - 56, 224, 56));
     assert!(!is_mapped(p, strut_win), "floating strip reserves no strut");
-    wait_for("handle stays in place", || geom(p, handle).1 == 1252);
+    wait_for("handle hidden while strip is open", || {
+        !is_mapped(p, handle)
+    });
     // it is drawn: the charcoal strip with white icons only
     wait_for("dock painted", || {
         let img = probe.image(dock, 224, 56);
         px(&img, 224, 5, 30) == (STRIP.r, STRIP.g, STRIP.b)
             && count(&img, 224, 0, 224, 0, 56, TEXT) > 100
     });
-    // a second tap on the handle folds it again
-    let (hx, hy, _, _) = geom(p, handle);
-    probe.click(hx + 28, hy + 14);
-    wait_for("strip folded by the handle", || {
-        !is_mapped(p, dock) && !is_mapped(p, strut_win)
-    });
-    wait_for("handle back on the edge", || geom(p, handle).1 == 1252);
 
-    // Home (second of four cells) raises the shell above the app and the dock, and folds the strip
-    expand_dock(&probe, handle, dock);
+    // Home (second of four cells) raises the shell above the app, folds the strip, and restores
+    // the handle
     assert!(stack_pos(p, shell) < stack_pos(p, dock));
     let (dx, dy, _, _) = geom(p, dock);
     probe.click(dx + 56 + 28, dy + 28);
@@ -793,6 +788,7 @@ fn system_dock_appears_for_foreign_windows_and_home_raises_the_shell() {
     });
     wait_for("strip folded after the action", || !is_mapped(p, dock));
     assert!(!is_mapped(p, strut_win));
+    assert!(is_mapped(p, handle));
 
     // the window manager (the test) reports the shell active: the handle goes away too
     set_active(p, shell);

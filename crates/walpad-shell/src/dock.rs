@@ -76,22 +76,18 @@ pub fn visible_area(shell_w: i32, shell_h: i32) -> (i32, i32) {
     }
 }
 
-/// Clamp a handle top-left position so the handle stays completely inside the visible area and
-/// above the system keyboard (`kbd_h`).
-pub fn clamp_handle_pos(pos: (i32, i32), area: (i32, i32), kbd_h: i32) -> (i32, i32) {
+/// Clamp a handle top-left position so the handle stays completely inside the full visible area.
+pub fn clamp_handle_pos(pos: (i32, i32), area: (i32, i32), _kbd_h: i32) -> (i32, i32) {
     let max_x = (area.0 - HANDLE_W).max(0);
-    let max_y = (area.1 - kbd_h - HANDLE_H).max(0);
+    let max_y = (area.1 - HANDLE_H).max(0);
     (pos.0.clamp(0, max_x), pos.1.clamp(0, max_y))
 }
 
 /// Default handle position: right side, at the bottom edge of the visible area (above the
 /// keyboard / mouse pad while one is up).
 pub fn default_handle_pos(area: (i32, i32), kbd_h: i32) -> (i32, i32) {
-    clamp_handle_pos(
-        (area.0 - HANDLE_W - HANDLE_MARGIN, area.1 - kbd_h - HANDLE_H),
-        area,
-        kbd_h,
-    )
+    let max_y = (area.1 - kbd_h - HANDLE_H).max(0);
+    ((area.0 - HANDLE_W - HANDLE_MARGIN).max(0), max_y)
 }
 
 /// Compact icon-only dock strip positioned next to `handle` (above it when there is room, else
@@ -387,6 +383,7 @@ impl Dock {
         let events = EventMask::BUTTON_PRESS
             | EventMask::BUTTON_RELEASE
             | EventMask::BUTTON1_MOTION
+            | EventMask::POINTER_MOTION
             | EventMask::EXPOSURE
             | EventMask::STRUCTURE_NOTIFY;
         let make = |r: Rect, instance: &str, class: &str| -> Result<(XWindow, u32), XError> {
@@ -702,27 +699,31 @@ impl Dock {
         let above = ConfigureWindowAux::new().stack_mode(StackMode::ABOVE);
         if self.fold.expanded {
             self.xc.conn.configure_window(self.win, &above)?;
+        } else {
+            self.xc.conn.configure_window(self.handle, &above)?;
         }
-        self.xc.conn.configure_window(self.handle, &above)?;
         Ok(())
     }
 
     /// Expand or fold the compact icon-only strip (no strut: apps underneath never resize).
+    /// When expanded, the arrow handle hides so only the icon strip is shown.
     fn apply_fold(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
         let expanded = self.fold.expanded;
         let hr = self.current_handle_rect();
         if expanded {
+            self.xc.conn.unmap_window(self.handle)?;
             self.xc.conn.map_window(self.win)?;
             self.configure(self.win, dock_rect_for_handle(self.area, hr), true)?;
-        } else {
-            self.xc.conn.unmap_window(self.win)?;
-        }
-        self.configure(self.handle, hr, true)?;
-        if expanded {
             // paint right away: a remapped window is not always sent an Expose
             self.redraw(fonts)?;
+        } else {
+            self.xc.conn.unmap_window(self.win)?;
+            if self.mapped {
+                self.xc.conn.map_window(self.handle)?;
+                self.configure(self.handle, hr, true)?;
+                self.redraw_handle(fonts)?;
+            }
         }
-        self.redraw_handle(fonts)?;
         self.xc.conn.flush()?;
         Ok(())
     }
@@ -1029,9 +1030,10 @@ mod tests {
             clamp_handle_pos((2000, 2000), (1280, 800), 0),
             (1280 - HANDLE_W, 800 - HANDLE_H)
         );
+        // movable over the full screen even while keyboard is open
         assert_eq!(
-            clamp_handle_pos((500, 700), (1280, 800), 240),
-            (500, 560 - HANDLE_H)
+            clamp_handle_pos((500, 790), (1280, 800), 240),
+            (500, 800 - HANDLE_H)
         );
     }
 

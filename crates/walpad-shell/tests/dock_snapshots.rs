@@ -53,17 +53,18 @@ fn bottom_shot(name: &str, area: (i32, i32), expanded: bool, pressed: bool) {
             None,
         );
         c.blit(&strip, dr.x, dr.y - top);
+    } else {
+        let hr = handle_rect(area, 0, false);
+        render_handle(
+            &mut Painter {
+                cv: &mut c,
+                fonts: &mut f,
+            },
+            (hr.x, hr.y - top),
+            false,
+            pressed,
+        );
     }
-    let hr = handle_rect(area, 0, expanded);
-    render_handle(
-        &mut Painter {
-            cv: &mut c,
-            fonts: &mut f,
-        },
-        (hr.x, hr.y - top),
-        expanded,
-        pressed,
-    );
     assert_snapshot_in(&golden(), name, &c);
 }
 
