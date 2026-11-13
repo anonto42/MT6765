@@ -596,7 +596,30 @@ impl SysKeyboard {
         )
     }
 
+    fn redraw_key(&mut self, idx: usize, fonts: &mut Fonts) -> Result<(), XError> {
+        let Some(k) = self.keys.get(idx) else {
+            return Ok(());
+        };
+        let rect = k.rect;
+        Painter {
+            cv: &mut self.canvas,
+            fonts,
+        }
+        .system_keyboard_key(k, self.state, self.pressed == Some(idx));
+        crate::present::present(
+            &self.xc.conn,
+            self.bw.win,
+            self.bw.gc,
+            self.bw.depth,
+            &self.canvas,
+            rect,
+        )
+    }
+
     fn key_at(&self, x: i32, y: i32) -> Option<usize> {
+        if !self.keys.is_empty() {
+            return self.keys.iter().position(|k| k.rect.contains(x, y));
+        }
         let r = keyboard_rect(self.area);
         system_keyboard_layout(Rect::new(0, 0, r.w, r.h), self.state.symbols)
             .iter()
@@ -632,12 +655,19 @@ impl SysKeyboard {
                     self.redraw(fonts)?;
                 }
                 Event::ButtonPress(e) if e.event == self.bw.win && e.detail == 1 => {
-                    self.pressed = self.key_at(e.event_x as i32, e.event_y as i32);
-                    self.redraw(fonts)?;
+                    let prev = self.pressed;
+                    let hit = self.key_at(e.event_x as i32, e.event_y as i32);
+                    self.pressed = hit;
+                    if prev != hit {
+                        for idx in [prev, hit].into_iter().flatten() {
+                            self.redraw_key(idx, fonts)?;
+                        }
+                    }
                 }
                 Event::ButtonRelease(e) if e.event == self.bw.win && e.detail == 1 => {
                     let hit = self.key_at(e.event_x as i32, e.event_y as i32);
                     let down = self.pressed.take();
+                    let old_state = self.state;
                     let key = match (hit, down) {
                         (Some(h), Some(d)) if h == d => self.keys.get(h).map(|k| k.key),
                         _ => None,
@@ -651,7 +681,11 @@ impl SysKeyboard {
                             if let Err(e) = self.send(s) {
                                 eprintln!("walpad-shell: keyboard: {}", e.0);
                             }
-                            self.redraw(fonts)?;
+                            if self.state != old_state {
+                                self.redraw(fonts)?;
+                            } else if let Some(idx) = down {
+                                self.redraw_key(idx, fonts)?;
+                            }
                         }
                         Some(Tap::Paste) => {
                             let class =
@@ -661,9 +695,18 @@ impl SysKeyboard {
                             if let Err(e) = self.send(s) {
                                 eprintln!("walpad-shell: keyboard: {}", e.0);
                             }
-                            self.redraw(fonts)?;
+                            if self.state != old_state {
+                                self.redraw(fonts)?;
+                            } else if let Some(idx) = down {
+                                self.redraw_key(idx, fonts)?;
+                            }
                         }
-                        Some(Tap::State) | None => self.redraw(fonts)?,
+                        Some(Tap::State) => self.redraw(fonts)?,
+                        None => {
+                            if let Some(idx) = down {
+                                self.redraw_key(idx, fonts)?;
+                            }
+                        }
                     }
                 }
                 Event::Error(e) => return Err(XError(format!("keyboard X error: {e:?}"))),

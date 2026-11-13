@@ -1662,78 +1662,88 @@ impl Painter<'_> {
         self.cv.rect(area, surface_strong().over(bg()));
         self.divider(area.x, area.y, area.w);
         let keys = system_keyboard_layout(area, st.symbols);
+        for (i, k) in keys.iter().enumerate() {
+            self.draw_system_key(k, st, pressed == Some(i), area);
+        }
+        keys
+    }
+
+    /// Redraws a single key in place on the system keyboard canvas (fast path for key press/release).
+    pub fn system_keyboard_key(&mut self, k: &SysKeyBtn, st: SysKbdState, down: bool) {
+        let area = self.cv.bounds();
+        self.cv.rect(k.rect, surface_strong().over(bg()));
+        self.draw_system_key(k, st, down, area);
+    }
+
+    fn draw_system_key(&mut self, k: &SysKeyBtn, st: SysKbdState, down: bool, area: Rect) {
         let compact = area.h < 300;
         let char_px = if compact { 20.0 } else { 24.0 };
         let label_px = if compact { SIZE_SECONDARY } else { SIZE_BODY };
-        for (i, k) in keys.iter().enumerate() {
-            let latched = match k.key {
-                SysKey::Shift => st.shift,
-                SysKey::Ctrl => st.ctrl,
-                SysKey::Alt => st.alt,
-                _ => false,
-            };
-            let down = pressed == Some(i);
-            // surface fill; pressed: + white 12 %; latched modifier: stronger fill + 2 px indicator bar
-            self.outline_box(k.rect, 0, down || latched, latched, false);
-            let c = k.rect;
-            let label = |s: &'static str| (s, Face::Bold, label_px);
-            let text: Option<(&str, Face, f32)> = match k.key {
-                SysKey::Char(_) | SysKey::Shift | SysKey::Backspace | SysKey::Hide => None,
-                SysKey::Esc => Some(label("Esc")),
-                SysKey::Tab => Some(label("Tab")),
-                SysKey::Ctrl => Some(label("Ctrl")),
-                SysKey::Alt => Some(label("Alt")),
-                SysKey::Paste => Some(label("Paste")),
-                SysKey::Layer => Some(label(if st.symbols { "ABC" } else { "?123" })),
-                SysKey::Enter => Some(label("Enter")),
-                SysKey::Space => Some(("space", Face::Regular, SIZE_SECONDARY)),
-                SysKey::Up => Some(("\u{2191}", Face::Regular, char_px)),
-                SysKey::Down => Some(("\u{2193}", Face::Regular, char_px)),
-                SysKey::Left => Some(("\u{2190}", Face::Regular, char_px)),
-                SysKey::Right => Some(("\u{2192}", Face::Regular, char_px)),
-            };
-            let icon_at = |w: i32| (c.x + (c.w - w) / 2, c.y + (c.h - ICON) / 2);
-            match (k.key, text) {
-                (SysKey::Char(ch), _) => self.text(
-                    &sys_key_char(ch, st).to_string(),
-                    Style::new(Face::Regular, char_px, crate::tokens::text()),
-                    c,
-                    Align::Center,
-                ),
-                (SysKey::Shift, _) => {
-                    let (x, y) = icon_at(ICON);
-                    self.cv.icon(Icon::Shift, x, y, ICON, crate::tokens::text());
-                }
-                (SysKey::Backspace, _) => {
-                    let (x, y) = icon_at(ICON);
-                    self.cv
-                        .icon(Icon::Backspace, x, y, ICON, crate::tokens::text());
-                }
-                (SysKey::Hide, _) => {
-                    // keyboard with a chevron down: "put the keyboard away"
-                    let (x, y) = icon_at(ICON + 2 + 16);
-                    self.cv
-                        .icon(Icon::Keyboard, x, y, ICON, crate::tokens::text());
-                    self.cv.icon(
-                        Icon::ChevronDown,
-                        x + ICON + 2,
-                        y + 4,
-                        16,
-                        crate::tokens::text(),
-                    );
-                }
-                (_, Some((s, face, px))) => {
-                    let colour = if k.key == SysKey::Space {
-                        text_secondary()
-                    } else {
-                        crate::tokens::text()
-                    };
-                    self.text(s, Style::new(face, px, colour), c, Align::Center)
-                }
-                (_, None) => {}
+        let latched = match k.key {
+            SysKey::Shift => st.shift,
+            SysKey::Ctrl => st.ctrl,
+            SysKey::Alt => st.alt,
+            _ => false,
+        };
+        // surface fill; pressed: + white 12 %; latched modifier: stronger fill + 2 px indicator bar
+        self.outline_box(k.rect, 0, down || latched, latched, false);
+        let c = k.rect;
+        let label = |s: &'static str| (s, Face::Bold, label_px);
+        let text: Option<(&str, Face, f32)> = match k.key {
+            SysKey::Char(_) | SysKey::Shift | SysKey::Backspace | SysKey::Hide => None,
+            SysKey::Esc => Some(label("Esc")),
+            SysKey::Tab => Some(label("Tab")),
+            SysKey::Ctrl => Some(label("Ctrl")),
+            SysKey::Alt => Some(label("Alt")),
+            SysKey::Paste => Some(label("Paste")),
+            SysKey::Layer => Some(label(if st.symbols { "ABC" } else { "?123" })),
+            SysKey::Enter => Some(label("Enter")),
+            SysKey::Space => Some(("space", Face::Regular, SIZE_SECONDARY)),
+            SysKey::Up => Some(("\u{2191}", Face::Regular, char_px)),
+            SysKey::Down => Some(("\u{2193}", Face::Regular, char_px)),
+            SysKey::Left => Some(("\u{2190}", Face::Regular, char_px)),
+            SysKey::Right => Some(("\u{2192}", Face::Regular, char_px)),
+        };
+        let icon_at = |w: i32| (c.x + (c.w - w) / 2, c.y + (c.h - ICON) / 2);
+        match (k.key, text) {
+            (SysKey::Char(ch), _) => self.text(
+                &sys_key_char(ch, st).to_string(),
+                Style::new(Face::Regular, char_px, crate::tokens::text()),
+                c,
+                Align::Center,
+            ),
+            (SysKey::Shift, _) => {
+                let (x, y) = icon_at(ICON);
+                self.cv.icon(Icon::Shift, x, y, ICON, crate::tokens::text());
             }
+            (SysKey::Backspace, _) => {
+                let (x, y) = icon_at(ICON);
+                self.cv
+                    .icon(Icon::Backspace, x, y, ICON, crate::tokens::text());
+            }
+            (SysKey::Hide, _) => {
+                // keyboard with a chevron down: "put the keyboard away"
+                let (x, y) = icon_at(ICON + 2 + 16);
+                self.cv
+                    .icon(Icon::Keyboard, x, y, ICON, crate::tokens::text());
+                self.cv.icon(
+                    Icon::ChevronDown,
+                    x + ICON + 2,
+                    y + 4,
+                    16,
+                    crate::tokens::text(),
+                );
+            }
+            (_, Some((s, face, px))) => {
+                let colour = if k.key == SysKey::Space {
+                    text_secondary()
+                } else {
+                    crate::tokens::text()
+                };
+                self.text(s, Style::new(face, px, colour), c, Align::Center)
+            }
+            (_, None) => {}
         }
-        keys
     }
 }
 
