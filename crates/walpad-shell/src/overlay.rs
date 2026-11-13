@@ -44,6 +44,7 @@ pub enum SheetPurpose {
     NetGateway,
     NetMac,
     NetHostname,
+    WallpaperPath,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -209,6 +210,7 @@ impl PasswordSheet {
                 | SheetPurpose::NetGateway
                 | SheetPurpose::NetMac
                 | SheetPurpose::NetHostname
+                | SheetPurpose::WallpaperPath
         )
     }
     /// The sheet sets something on the mobile modem.
@@ -258,6 +260,10 @@ impl PasswordSheet {
             SheetPurpose::NetHostname => {
                 self.secret.is_empty() || walpad_proto::valid_hostname(&self.secret)
             }
+            SheetPurpose::WallpaperPath => {
+                self.secret.is_empty()
+                    || (self.secret.starts_with('/') && !self.secret.contains(".."))
+            }
         }
     }
     /// Longest text the field takes (bytes).
@@ -282,6 +288,7 @@ impl PasswordSheet {
             SheetPurpose::NetIp | SheetPurpose::NetGateway => 45,
             SheetPurpose::NetMac => 17,
             SheetPurpose::NetHostname => 63,
+            SheetPurpose::WallpaperPath => 256,
         }
     }
 }
@@ -451,6 +458,7 @@ pub fn render_password(
         SheetPurpose::NetGateway => ("e.g. 192.168.0.1 (empty: automatic)", false, "Save"),
         SheetPurpose::NetMac => ("AA:BB:CC:DD:EE:FF (empty: hardware)", false, "Save"),
         SheetPurpose::NetHostname => ("e.g. walpad (empty: default)", false, "Save"),
+        SheetPurpose::WallpaperPath => ("e.g. /root/wallpaper.png (empty: default)", false, "Save"),
     };
     if let Some(eye) = p.text_field(
         g.field,

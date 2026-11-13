@@ -52,6 +52,8 @@ pub enum Item {
     OffSeg,
     LidRow,
     ThemeRow,
+    WallpaperSeg,
+    WallpaperPathRow,
     Info(String, String, Tone),
     Gap,
 }
@@ -63,8 +65,8 @@ pub fn height(item: &Item) -> i32 {
         Item::BrightnessCard => 112 + SP_3,
         Item::RotationRow(_) | Item::RotateFlipRow => ROW_H,
         Item::SegLabel(_) => 28,
-        Item::DimSeg | Item::OffSeg => 56 + SP_3,
-        Item::LidRow | Item::ThemeRow => ROW_H,
+        Item::DimSeg | Item::OffSeg | Item::WallpaperSeg => 56 + SP_3,
+        Item::LidRow | Item::ThemeRow | Item::WallpaperPathRow => ROW_H,
         Item::Info(..) => ROW_H,
         Item::Gap => SP_5,
     }
@@ -101,6 +103,10 @@ pub fn items(st: &Option<Status>, d: &DevdSettings) -> Vec<Item> {
         Item::OffSeg,
         Item::LidRow,
         Item::ThemeRow,
+        Item::WallpaperPathRow,
+        Item::Gap,
+        Item::SegLabel("Wallpaper"),
+        Item::WallpaperSeg,
         Item::Gap,
     ]);
 
@@ -264,6 +270,8 @@ pub fn render(
     online: bool,
     brightness: f32,
     dragging: bool,
+    wallpaper: walpad_ui::art::WallpaperKind,
+    wallpaper_path: &str,
     pressed: Option<Target>,
 ) -> Vec<(Rect, Target)> {
     let (placed, _) = layout(frame, st, d);
@@ -280,6 +288,7 @@ pub fn render(
                     | Item::RotateFlipRow
                     | Item::LidRow
                     | Item::ThemeRow
+                    | Item::WallpaperPathRow
                     | Item::Info(..)
             ),
         )
@@ -292,12 +301,27 @@ pub fn render(
         match item {
             Item::Title => p.screen_title("Device", Rect::new(r.x, r.y, r.w, 40)),
             Item::Label(l) => p.section_label(l, Rect::new(r.x, r.y, r.w, 24)),
-            Item::SegLabel(l) => p.text(
-                l,
-                Style::new(Face::Bold, SIZE_SECONDARY, text_secondary()),
-                Rect::new(r.x + 4, r.y, r.w, 28),
-                Align::Left,
-            ),
+            Item::SegLabel(l) => {
+                let text = if *l == "Wallpaper" {
+                    match wallpaper {
+                        walpad_ui::art::WallpaperKind::Default => {
+                            "Wallpaper · System default (Coffee)"
+                        }
+                        walpad_ui::art::WallpaperKind::LiveCoffee
+                        | walpad_ui::art::WallpaperKind::LiveAurora
+                        | walpad_ui::art::WallpaperKind::LiveStars => "Wallpaper · Live",
+                        walpad_ui::art::WallpaperKind::Custom => "Wallpaper · Custom PNG",
+                    }
+                } else {
+                    *l
+                };
+                p.text(
+                    text,
+                    Style::new(Face::Bold, SIZE_SECONDARY, text_secondary()),
+                    Rect::new(r.x + 4, r.y, r.w, 28),
+                    Align::Left,
+                );
+            }
             Item::Gap => {}
             Item::BrightnessCard => {
                 let card = Rect::new(r.x, r.y, r.w, 112);
@@ -416,6 +440,36 @@ pub fn render(
                 if toggle.is_some() {
                     hits.push((r, Target::ThemeToggle));
                 }
+            }
+            Item::WallpaperSeg => {
+                use walpad_ui::art::WallpaperKind;
+                let labels: Vec<&str> = WallpaperKind::ALL.iter().map(|k| k.label()).collect();
+                let seg = Rect::new(r.x, r.y, r.w, 56);
+                let sel = WallpaperKind::ALL
+                    .iter()
+                    .position(|&k| k == wallpaper)
+                    .unwrap_or(0);
+                let rects = p.segmented(seg, &labels, sel, None, !online);
+                for (i, sr) in rects.into_iter().enumerate() {
+                    hits.push((sr, Target::Wallpaper(i)));
+                }
+            }
+            Item::WallpaperPathRow => {
+                let sub = if wallpaper_path.is_empty() {
+                    "Tap to set PNG path (e.g. /root/wall.png)"
+                } else {
+                    wallpaper_path
+                };
+                p.list_row(
+                    r,
+                    None,
+                    "Custom wallpaper PNG",
+                    Some(sub),
+                    &walpad_ui::components::Accessory::Chevron,
+                    pr(Target::WallpaperPathEdit),
+                    !online,
+                );
+                hits.push((r, Target::WallpaperPathEdit));
             }
             Item::Info(l, v, t) => {
                 info_row(p, r, l, v, *t);

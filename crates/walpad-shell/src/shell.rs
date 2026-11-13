@@ -1,7 +1,10 @@
 //! The shell event loop: X events + core events -> gestures -> app -> render -> present. Redraws
 //! only when something changed (input, core status, the minute boundary); writes /run/walpad-ok
 //! after the first frame is on screen (the boot ramdisk health check).
-use crate::app::{load_catalog, read_clock_24h, read_pinned, read_theme, App, Cmd, WallTime};
+use crate::app::{
+    load_catalog, read_clock_24h, read_pinned, read_theme, read_wallpaper, read_wallpaper_path,
+    App, Cmd, WallTime,
+};
 use crate::call_screen::CallAct;
 use crate::call_window::CallWindow;
 use crate::clipboard::{ClipEvent, Keeper};
@@ -718,6 +721,9 @@ impl Shell {
             self.dirty = true;
         }
         self.dirty |= self.app.set_config(devd, clock_24h);
+        self.dirty |= self
+            .app
+            .set_wallpaper(read_wallpaper(&self.root), read_wallpaper_path(&self.root));
         if clock_24h != self.clock_24h {
             self.clock_24h = clock_24h;
             let (wall, to_minute) = WallTime::now(clock_24h);
@@ -1057,6 +1063,9 @@ impl Shell {
 
         // sleep until the next thing that needs us: input, core traffic, a long-press, the minute
         let mut wait = max_wait.as_millis() as u64;
+        if let Some(d) = self.app.next_deadline() {
+            wait = wait.min(d.saturating_sub(now));
+        }
         if let Some(d) = self.rec.next_deadline() {
             wait = wait.min(d.saturating_sub(self.now_ms()));
         }

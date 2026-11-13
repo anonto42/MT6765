@@ -130,6 +130,20 @@ pub fn read_theme(root: &Root) -> walpad_ui::tokens::ThemeMode {
         .unwrap_or_default()
 }
 
+pub fn read_wallpaper(root: &Root) -> walpad_ui::art::WallpaperKind {
+    shell_json(root)["wallpaper"]
+        .as_str()
+        .map(walpad_ui::art::WallpaperKind::parse)
+        .unwrap_or_default()
+}
+
+pub fn read_wallpaper_path(root: &Root) -> String {
+    shell_json(root)["wallpaper_path"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
 pub const DEFAULT_PINNED: [&str; 4] = ["browser", "terminal", "files", "settings"];
 
 pub fn read_pinned(root: &Root) -> Vec<String> {
@@ -239,6 +253,8 @@ pub enum Target {
     Off(usize),
     LidToggle,
     ThemeToggle,
+    Wallpaper(usize),
+    WallpaperPathEdit,
     PowerDimCycle,
     PowerDimLevelCycle,
     PowerOffCycle,
@@ -771,6 +787,10 @@ pub struct Model {
     pub spinner_deg: u16,
     pub devd: DevdSettings,
     pub clock_24h: bool,
+    pub wallpaper: walpad_ui::art::WallpaperKind,
+    pub wallpaper_path: String,
+    pub live_phase_ms: u64,
+    pub next_live_tick: Ms,
     /// Saved window layout (Settings > Input > Windows).
     pub windows: crate::windows_ui::WindowsPrefs,
     pub sys: SysInfo,
@@ -816,6 +836,10 @@ impl Model {
             spinner_deg: 0,
             devd: DevdSettings::default(),
             clock_24h: true,
+            wallpaper: walpad_ui::art::WallpaperKind::Default,
+            wallpaper_path: String::new(),
+            live_phase_ms: 0,
+            next_live_tick: 0,
             windows: Default::default(),
             sys: SysInfo::default(),
             settings_page: None,
@@ -1018,6 +1042,13 @@ impl App {
         let changed = self.model.devd != devd || self.model.clock_24h != clock_24h;
         self.model.devd = devd;
         self.model.clock_24h = clock_24h;
+        changed
+    }
+
+    pub fn set_wallpaper(&mut self, kind: walpad_ui::art::WallpaperKind, path: String) -> bool {
+        let changed = self.model.wallpaper != kind || self.model.wallpaper_path != path;
+        self.model.wallpaper = kind;
+        self.model.wallpaper_path = path;
         changed
     }
 
@@ -1737,6 +1768,11 @@ impl App {
             self.close_power_menu();
             dirty = true;
         }
+        if self.model.wallpaper.is_live() && !self.scrolls() && now >= self.model.next_live_tick {
+            self.model.live_phase_ms = now;
+            self.model.next_live_tick = now.saturating_add(66);
+            dirty = true;
+        }
         if !self.model.media.want_thumbs.is_empty() {
             let v = std::mem::take(&mut self.model.media.want_thumbs);
             self.queued.push(Cmd::MediaThumbs(v));
@@ -1765,7 +1801,9 @@ impl App {
             _ => None,
         };
         let osd = self.model.osd.map(|o| o.until);
-        [spin, toast, osd, self.armed_until(), menu]
+        let live = (self.model.wallpaper.is_live() && !self.scrolls())
+            .then_some(self.model.next_live_tick);
+        [spin, toast, osd, self.armed_until(), menu, live]
             .into_iter()
             .flatten()
             .min()
@@ -2469,6 +2507,27 @@ impl App {
                 walpad_ui::tokens::set_theme(next);
                 out.cmd(Cmd::Setting("theme", json!(next.as_str())));
             }
+            Target::Wallpaper(i) if interactive => {
+                if let Some(&kind) = walpad_ui::art::WallpaperKind::ALL.get(i) {
+                    if kind == walpad_ui::art::WallpaperKind::Custom
+                        && self.model.wallpaper_path.is_empty()
+                    {
+                        self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                            SheetPurpose::WallpaperPath,
+                            &self.model.wallpaper_path,
+                        )));
+                    } else {
+                        self.model.wallpaper = kind;
+                        out.cmd(Cmd::Setting("wallpaper", json!(kind.as_str())));
+                    }
+                }
+            }
+            Target::WallpaperPathEdit if interactive => {
+                self.model.overlay = Some(Overlay::Password(PasswordSheet::net_config(
+                    SheetPurpose::WallpaperPath,
+                    &self.model.wallpaper_path,
+                )));
+            }
             Target::RotateFlipToggle if interactive => out.cmd(Cmd::Setting(
                 "rotate_flip",
                 json!(!self.model.devd.rotate_flip),
@@ -2943,6 +3002,18 @@ impl App {
                         out.cmd(Cmd::Setting("net_hostname", json!(val)));
                         self.close_overlay();
                     }
+                    SheetPurpose::WallpaperPath => {
+                        self.model.wallpaper_path = val.clone();
+                        let kind = if val.is_empty() {
+                            walpad_ui::art::WallpaperKind::Default
+                        } else {
+                            walpad_ui::art::WallpaperKind::Custom
+                        };
+                        self.model.wallpaper = kind;
+                        out.cmd(Cmd::Setting("wallpaper_path", json!(val)));
+                        out.cmd(Cmd::Setting("wallpaper", json!(kind.as_str())));
+                        self.close_overlay();
+                    }
                     _ => {}
                 }
             }
@@ -3097,8 +3168,10 @@ impl App {
             active: chrome::active_target(self.active, panel_open),
             page: self.scrolls(),
             theme: walpad_ui::tokens::theme(),
+            wallpaper: self.model.wallpaper,
+            wallpaper_path: self.model.wallpaper_path.clone(),
         };
-        self.chrome.paint(p, &frame, key);
+        self.chrome.paint(p, &frame, key, self.model.live_phase_ms);
         self.chrome.render_pressed(p, &sidebar, self.model.pressed);
         self.hits.clear();
         self.content_hits.clear();
@@ -3235,6 +3308,8 @@ impl App {
                 m.connected,
                 m.brightness_value(),
                 m.slider_active,
+                m.wallpaper,
+                &m.wallpaper_path,
                 m.pressed,
             ),
             Tab::Settings if m.settings_page == Some(Page::Apps) => {

@@ -132,21 +132,33 @@ pub struct ChromeKey {
     /// Full-screen page: the page surface is part of the cached layer.
     pub page: bool,
     pub theme: ThemeMode,
+    pub wallpaper: walpad_ui::art::WallpaperKind,
+    pub wallpaper_path: String,
 }
 
 /// The wallpaper (bottom-aligned: the shell shrinks above the dock strip), the sidebar edge and its
 /// buttons at rest.  Without a wallpaper (decode failed) plain charcoal with the line-art cup.
 pub fn render_background(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Canvas>) {
-    render_base(p, frame, key, wall);
+    render_base(p, frame, key, wall, 0);
     render_items(p, key);
 }
 
 /// Everything of the background except the sidebar buttons.
-fn render_base(p: &mut Painter, frame: &Frame, key: &ChromeKey, wall: Option<&Canvas>) {
-    p.cv.fill(bg());
-    match wall {
-        Some(w) => p.cv.blit(w, 0, frame.h - w.height()),
-        None => draw_coffee(p.cv, coffee_rect(frame.content), 3.0, watermark()),
+fn render_base(
+    p: &mut Painter,
+    frame: &Frame,
+    key: &ChromeKey,
+    wall: Option<&Canvas>,
+    phase_ms: u64,
+) {
+    if key.wallpaper.is_live() && !key.page {
+        walpad_ui::art::draw_live_wallpaper(p.cv, wall, key.wallpaper, phase_ms, key.theme);
+    } else {
+        p.cv.fill(bg());
+        match wall {
+            Some(w) => p.cv.blit(w, 0, frame.h - w.height()),
+            None => draw_coffee(p.cv, coffee_rect(frame.content), 3.0, watermark()),
+        }
     }
     if key.page {
         p.page_surface(frame.content);
@@ -171,30 +183,61 @@ struct Cached {
     bare_sidebar: Option<Canvas>,
 }
 
+struct WallCache {
+    landscape: bool,
+    theme: ThemeMode,
+    kind: walpad_ui::art::WallpaperKind,
+    path: String,
+    cv: Option<Canvas>,
+}
+
 /// The cached background layer.
 #[derive(Default)]
 pub struct Chrome {
     cache: Option<Cached>,
-    /// Decoded wallpaper, whether it is landscape, and its theme (decoded once per orientation/theme).
-    wall: Option<(bool, ThemeMode, Canvas)>,
+    /// Decoded static wallpaper base (for Default / LiveCoffee / Custom).
+    wall: Option<WallCache>,
     /// Times the layer was rebuilt (tests check it is not per frame).
     pub builds: u64,
 }
 
 impl Chrome {
     /// Copy the background for `key` into `p.cv`, rebuilding the cache when the key changed.
-    pub fn paint(&mut self, p: &mut Painter, frame: &Frame, key: ChromeKey) {
+    pub fn paint(&mut self, p: &mut Painter, frame: &Frame, key: ChromeKey, phase_ms: u64) {
         let stale = self.cache.as_ref().is_none_or(|c| c.key != key);
         let landscape = frame.w > frame.h;
-        if self
-            .wall
-            .as_ref()
-            .is_none_or(|(l, t, _)| *l != landscape || *t != key.theme)
-        {
-            self.wall = walpad_ui::art::wallpaper_for_theme(frame.w, frame.h, key.theme)
-                .map(|c| (landscape, key.theme, c));
+        if self.wall.as_ref().is_none_or(|w| {
+            w.landscape != landscape
+                || w.theme != key.theme
+                || w.kind != key.wallpaper
+                || w.path != key.wallpaper_path
+        }) {
+            use walpad_ui::art::{custom_wallpaper, wallpaper_for_theme, WallpaperKind};
+            let cv = match key.wallpaper {
+                WallpaperKind::Default | WallpaperKind::LiveCoffee => {
+                    wallpaper_for_theme(frame.w, frame.h, key.theme)
+                }
+                WallpaperKind::Custom => custom_wallpaper(&key.wallpaper_path, frame.w, frame.h)
+                    .or_else(|| wallpaper_for_theme(frame.w, frame.h, key.theme)),
+                WallpaperKind::LiveAurora | WallpaperKind::LiveStars => None,
+            };
+            self.wall = Some(WallCache {
+                landscape,
+                theme: key.theme,
+                kind: key.wallpaper,
+                path: key.wallpaper_path.clone(),
+                cv,
+            });
         }
-        let wall = self.wall.as_ref().map(|(_, _, c)| c);
+        let wall = self.wall.as_ref().and_then(|w| w.cv.as_ref());
+        if key.wallpaper.is_live() && !key.page {
+            // Live wallpaper animates every tick on Home: draw straight into `p.cv` without
+            // churning the static `self.cache`.
+            render_base(p, frame, &key, wall, phase_ms);
+            render_items(p, &key);
+            self.cache = None;
+            return;
+        }
         if stale {
             match Canvas::new(frame.w as u32, frame.h as u32, bg()) {
                 Some(mut cv) => {
@@ -202,7 +245,7 @@ impl Chrome {
                         cv: &mut cv,
                         fonts: &mut *p.fonts,
                     };
-                    render_base(&mut bp, frame, &key, wall);
+                    render_base(&mut bp, frame, &key, wall, 0);
                     let sb = frame.sidebar;
                     let bare_sidebar = bp.cv.crop(Rect::new(0, 0, sb.right(), frame.h));
                     render_items(&mut bp, &key);

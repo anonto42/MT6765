@@ -136,6 +136,8 @@ pub const ALLOWED_SETTINGS: &[&str] = &[
     "critical_batt_mv",
     "clock_24h",
     "theme",
+    "wallpaper",
+    "wallpaper_path",
     "pinned_apps",
     "touch_gestures",
     "multitouch",
@@ -1161,6 +1163,18 @@ fn validate_setting(key: &str, v: &Value) -> Result<(), String> {
         "theme" => match v.as_str() {
             Some("dark" | "light") => Ok(()),
             _ => Err("value must be \"dark\" or \"light\"".into()),
+        },
+        "wallpaper" => match v.as_str() {
+            Some("default" | "live_coffee" | "live_aurora" | "live_stars" | "custom") => Ok(()),
+            _ => Err(
+                "value must be \"default\", \"live_coffee\", \"live_aurora\", \"live_stars\", or \"custom\""
+                    .into(),
+            ),
+        },
+        "wallpaper_path" => match v.as_str() {
+            Some("") => Ok(()),
+            Some(s) if s.len() <= 512 && s.starts_with('/') && !s.contains("..") => Ok(()),
+            _ => Err("value must be empty or an absolute path without '..'".into()),
         },
         "charge_mode" => match v.as_str() {
             Some("smart" | "bypass" | "eco" | "fast") => Ok(()),

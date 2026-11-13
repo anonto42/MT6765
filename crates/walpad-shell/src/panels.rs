@@ -34,6 +34,7 @@ pub struct QsGeom {
     pub volume_mute: Rect,
     pub divider2: i32,
     pub rotation: Rect,
+    pub theme: Rect,
     pub screen_off: Rect,
 }
 
@@ -63,7 +64,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         r
     };
     // no Keyboard row: the keyboard opens where it is needed (terminal start, dock button)
-    let (rotation, screen_off) = (row(), row());
+    let (rotation, theme, screen_off) = (row(), row(), row());
     QsGeom {
         panel: Rect::new(x, top, QS_W, screen_off.bottom() + QS_PAD - top),
         wifi,
@@ -80,6 +81,7 @@ pub fn qs_geom(frame: &Frame) -> QsGeom {
         volume_mute,
         divider2,
         rotation,
+        theme,
         screen_off,
     }
 }
@@ -430,8 +432,14 @@ pub fn render_quick_settings(p: &mut Painter, frame: &Frame, m: &Model) -> Vec<(
     } else {
         "Rotation: Auto"
     };
+    let theme_lbl = if theme() == ThemeMode::Dark {
+        "Theme: Dark"
+    } else {
+        "Theme: Light"
+    };
     for (r, icon, label, t) in [
         (g.rotation, Icon::Rotate, rot, Target::Rotation),
+        (g.theme, Icon::Sun, theme_lbl, Target::ThemeToggle),
         (g.screen_off, Icon::Screen, "Screen off", Target::ScreenOff),
     ] {
         qs_row(p, r, icon, label, None, false, pr(t), !online);
@@ -720,6 +728,7 @@ mod tests {
                 g.volume_slider,
                 g.volume_mute,
                 g.rotation,
+                g.theme,
                 g.screen_off,
             ];
             for (i, a) in rows.iter().enumerate() {
@@ -729,8 +738,9 @@ mod tests {
                     assert!(!overlaps(*a, *b), "{a:?} overlaps {b:?}");
                 }
             }
-            // Rotation and Screen off are the last two rows (no Keyboard row between them)
-            assert_eq!(g.screen_off.y, g.rotation.bottom());
+            // Rotation, Theme and Screen off are the last three rows
+            assert_eq!(g.theme.y, g.rotation.bottom());
+            assert_eq!(g.screen_off.y, g.theme.bottom());
             assert_eq!(g.panel.bottom(), g.screen_off.bottom() + QS_PAD);
         }
     }

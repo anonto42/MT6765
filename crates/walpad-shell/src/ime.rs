@@ -165,6 +165,9 @@ impl FocusKbd {
     /// already governs it, and this is purely the fallback apps' own safety net.
     pub fn active_window_changed(&mut self, now: u64, fallback_app: bool) {
         if fallback_app {
+            // back in a fallback app: a hide armed by having just left one does not apply any
+            // more, visible or not (the not-yet-visible case still needs its own show timer).
+            self.hide_at = None;
             if !self.visible && self.fallback_at.is_none() {
                 self.fallback_at = Some(now + FALLBACK_MS);
             }
@@ -756,6 +759,53 @@ mod tests {
         m.app_started(0, true);
         m.manual(false);
         assert_eq!(m.tick(FALLBACK_MS * 2), None);
+    }
+
+    #[test]
+    fn active_window_change_shows_and_hides_the_fallback_keyboard() {
+        // owner report 2026-11-13: once up, the fallback keyboard never hid on switching away -
+        // nothing watched for the active window leaving, only app_started (first launch) raised
+        // it. Becoming active is the same trigger `app_started` would have been (covers
+        // switching back to an *already-running* terminal/Kali/Scanner too, which never sends a
+        // fresh "started" event at all).
+        let mut m = FocusKbd::new();
+        m.active_window_changed(0, true);
+        assert_eq!(m.next_deadline(), Some(FALLBACK_MS));
+        assert_eq!(m.tick(FALLBACK_MS - 1), None);
+        assert_eq!(m.tick(FALLBACK_MS), Some(KbdAction::Show));
+        // switching to a non-fallback window hides it (after the usual debounce)
+        m.active_window_changed(FALLBACK_MS, false);
+        assert_eq!(m.tick(FALLBACK_MS + HIDE_DEBOUNCE_MS - 1), None);
+        assert_eq!(
+            m.tick(FALLBACK_MS + HIDE_DEBOUNCE_MS),
+            Some(KbdAction::Hide)
+        );
+        // switching straight back to a fallback app before the hide lands cancels it (no flicker)
+        let mut m = FocusKbd::new();
+        m.active_window_changed(0, true);
+        m.tick(FALLBACK_MS);
+        assert!(m.visible());
+        m.active_window_changed(FALLBACK_MS + 10, false);
+        m.active_window_changed(FALLBACK_MS + 20, true);
+        assert_eq!(
+            m.tick(FALLBACK_MS + 20 + HIDE_DEBOUNCE_MS),
+            None,
+            "still up, never hid"
+        );
+        assert!(m.visible());
+        // a keyboard a real focus-in brought up is left alone: active-window changes do not
+        // touch it, only a real focus-out does (same contract as before this change)
+        let mut m = FocusKbd::new();
+        focus(&mut m, A, 0);
+        m.tick(SHOW_DELAY_MS);
+        assert!(m.visible());
+        m.active_window_changed(SHOW_DELAY_MS + 10, false);
+        assert_eq!(
+            m.next_deadline(),
+            None,
+            "no hide armed - by_focus governs it, not this"
+        );
+        assert!(m.visible());
     }
 
     #[test]

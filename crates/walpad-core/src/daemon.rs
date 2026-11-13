@@ -933,7 +933,14 @@ impl Daemon {
     fn set_setting(&mut self, key: &str, value: Value) -> CmdResult {
         let virt = if matches!(
             key,
-            "clock_24h" | "theme" | "pinned_apps" | "windows_mode" | "split_ratio" | "split_swap"
+            "clock_24h"
+                | "theme"
+                | "wallpaper"
+                | "wallpaper_path"
+                | "pinned_apps"
+                | "windows_mode"
+                | "split_ratio"
+                | "split_swap"
         ) {
             "/etc/walpad/shell.json"
         } else if matches!(key, "touch_gestures" | "multitouch") {

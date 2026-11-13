@@ -344,6 +344,7 @@ fn home_taps_launch_apps_or_navigate() {
             Target::VolumeSlider,
             Target::MuteToggle,
             Target::Rotation,
+            Target::ThemeToggle,
             Target::ScreenOff
         ]
     );
@@ -1783,4 +1784,59 @@ fn settings_all_pages_configurable_controls_and_manual_network() {
         walpad_ui::tokens::theme(),
         walpad_ui::tokens::ThemeMode::Dark
     );
+}
+
+#[test]
+fn wallpaper_selection_live_and_custom_path() {
+    let mut app = online();
+    assert_eq!(app.model.wallpaper, walpad_ui::art::WallpaperKind::Default);
+
+    // Go to Device screen and scroll to Display wallpaper controls.
+    go(&mut app, Tab::Device);
+    app.on_gesture(&Gesture::Drag { dx: 0, dy: -550 }, 100);
+    render(&mut app);
+
+    // Switch to Live Aurora (index 2).
+    assert_eq!(
+        tap(&mut app, Target::Wallpaper(2)).cmds,
+        vec![Cmd::Setting("wallpaper", json!("live_aurora"))]
+    );
+    assert_eq!(
+        app.model.wallpaper,
+        walpad_ui::art::WallpaperKind::LiveAurora
+    );
+    // Live wallpaper only animates when on Home (not scrolled pages), and ticks at ~15fps.
+    assert!(!app.tick(200));
+    go(&mut app, Tab::Home);
+    assert!(app.tick(200));
+    assert!(!app.tick(220));
+    assert!(app.tick(270));
+
+    // Switch back to System default (index 0).
+    go(&mut app, Tab::Device);
+    app.on_gesture(&Gesture::Drag { dx: 0, dy: -550 }, 300);
+    render(&mut app);
+    assert_eq!(
+        tap(&mut app, Target::Wallpaper(0)).cmds,
+        vec![Cmd::Setting("wallpaper", json!("default"))]
+    );
+    assert_eq!(app.model.wallpaper, walpad_ui::art::WallpaperKind::Default);
+
+    // Edit custom PNG wallpaper path via sheet.
+    tap(&mut app, Target::WallpaperPathEdit);
+    if let Some(Overlay::Password(s)) = &mut app.model.overlay {
+        assert_eq!(s.purpose, SheetPurpose::WallpaperPath);
+        s.secret = "/root/my_wall.png".into();
+    } else {
+        panic!("expected WallpaperPath sheet");
+    }
+    assert_eq!(
+        tap(&mut app, Target::SheetConnect).cmds,
+        vec![
+            Cmd::Setting("wallpaper_path", json!("/root/my_wall.png")),
+            Cmd::Setting("wallpaper", json!("custom")),
+        ]
+    );
+    assert_eq!(app.model.wallpaper, walpad_ui::art::WallpaperKind::Custom);
+    assert_eq!(app.model.wallpaper_path, "/root/my_wall.png");
 }
