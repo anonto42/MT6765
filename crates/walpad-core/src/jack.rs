@@ -14,7 +14,7 @@ use walpad_proto::{JackKind, JackStatus};
 pub const SCRIPT: &str = "/usr/local/sbin/walpad-audio";
 pub const FILE: &str = "/var/lib/walpad/jack-force";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-const TIMEOUT: Duration = Duration::from_secs(8);
+const TIMEOUT: Duration = Duration::from_secs(15);
 /// Live accdet detection is re-read this often (always None on this kernel build; cheap no-op).
 const DETECT_EVERY: Duration = Duration::from_secs(2);
 
@@ -167,6 +167,10 @@ impl Jack {
                 Some(walpad_hw::jack::JackState::HeadsetWithMic) => Some(JackKind::HeadsetWithMic),
             };
             if detected != self.st.detected {
+                eprintln!(
+                    "walpad-core: jack detected {:?} -> {:?}",
+                    self.st.detected, detected
+                );
                 self.st.detected = detected;
                 self.recompute();
                 self.pending = true;
@@ -178,6 +182,7 @@ impl Jack {
                     self.run = None;
                 }
                 Ok(None) if now >= r.deadline => {
+                    eprintln!("walpad-core: walpad-audio timed out");
                     if let Some(r) = self.run.take() {
                         Self::kill(r);
                     }

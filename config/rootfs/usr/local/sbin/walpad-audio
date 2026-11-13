@@ -18,16 +18,23 @@
 R=${WALPAD_AUDIO_ROOT:-}
 
 LIST=
+BATCH=
 list() { [ -n "$LIST" ] || LIST=$(timeout 3 amixer -c 0 controls 2>/dev/null); printf '%s\n' "$LIST"; }
 exists() { list | grep -q "name='$1'"; }
 set_ctl() {
   if exists "$1"; then
-    timeout 3 amixer -c 0 -q cset name="$1" "$2" 2>/dev/null \
-      && echo "walpad-audio: $1 = $2" \
-      || echo "walpad-audio: could not set $1"
+    BATCH="${BATCH}cset name=$1 $2
+"
+    echo "walpad-audio: $1 = $2"
   else
     echo "walpad-audio: no control $1 (skipped)"
   fi
+}
+flush_ctl() {
+  [ -n "$BATCH" ] || return 0
+  printf '%s' "$BATCH" | timeout 5 amixer -c 0 -s -q 2>/dev/null \
+    || echo "walpad-audio: amixer batch failed"
+  BATCH=
 }
 have_card() { [ -e "$R/dev/snd/controlC0" ]; }
 
@@ -45,6 +52,7 @@ case "$cmd" in
     set_ctl Lineout_PGAR_GAIN 8
     set_ctl Headset_PGAL_GAIN 8
     set_ctl Headset_PGAR_GAIN 8
+    flush_ctl
     echo "walpad-audio: speaker on"
     ;;
   jack)
@@ -97,6 +105,7 @@ case "$cmd" in
         ;;
       *) echo "walpad-audio: jack mic must be builtin or headset" >&2; exit 2 ;;
     esac
+    flush_ctl
     echo "walpad-audio: jack route=$route mic=$mic"
     ;;
   *) echo "usage: walpad-audio [jack <headphone|speaker> <builtin|headset>]" >&2; exit 2 ;;

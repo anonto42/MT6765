@@ -32,6 +32,10 @@ case "$3" in
              Audio_MIC1_Mode_Select Audio_MIC2_Mode_Select Audio_MicSource1_Setting; do
       echo "numid=1,iface=MIXER,name='$n'"
     done ;;
+  -s)
+    while IFS= read -r line; do
+      echo "amixer -c 0 $line" >> "$T_CALLS"
+    done ;;
 esac
 exit 0
 EOF
