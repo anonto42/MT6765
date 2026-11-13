@@ -1,0 +1,429 @@
+#!/bin/sh
+# walpad-vm: VirtualBox-style VM (QEMU) and virtual network (bridge/NAT/netns) manager for WalPad 8G.
+# Everything lives under /opt/vms (userdata). Runs on Alpine Linux (aarch64) without KVM (TCG mode).
+set -u
+
+VM_ROOT=${WALPAD_VM_ROOT:-/opt/vms}
+MACHINES_DIR=$VM_ROOT/machines
+NETS_DIR=$VM_ROOT/nets
+
+say() { echo "[vm] $*"; }
+die() { echo "[vm] error: $*" >&2; exit 1; }
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "'$1' not found (run: walpad-vm setup)"
+}
+
+ensure_dirs() {
+  mkdir -p "$MACHINES_DIR" "$NETS_DIR"
+}
+
+valid_name() {
+  case $1 in
+    ""|*[!a-zA-Z0-9_-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+default_uplink() {
+  ip route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}'
+}
+
+# --- Setup ---
+
+cmd_setup() {
+  say "installing QEMU packages via apk..."
+  apk update && apk add --no-cache qemu-img qemu-system-x86_64 qemu-system-aarch64 qemu-x86_64
+}
+
+# --- Virtual Networks (Bridge + optional NAT + Network Namespaces) ---
+
+net_up() {
+  name=$1
+  conf=$NETS_DIR/$name.conf
+  [ -f "$conf" ] || die "network '$name' does not exist"
+  # shellcheck disable=SC1090
+  . "$conf"
+  br="br-$name"
+
+  if ! ip link show "$br" >/dev/null 2>&1; then
+    ip link add name "$br" type bridge || die "failed to create bridge $br"
+  fi
+  ip addr replace "$NET_CIDR" dev "$br" || die "failed to assign $NET_CIDR to $br"
+  ip link set "$br" up || die "failed to bring up $br"
+
+  if [ "${NET_NAT:-0}" = "1" ]; then
+    echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
+    uplink=$(default_uplink)
+    if [ -n "$uplink" ]; then
+      if command -v iptables >/dev/null 2>&1; then
+        iptables -t nat -C POSTROUTING -s "$NET_CIDR" -o "$uplink" -j MASQUERADE 2>/dev/null || \
+          iptables -t nat -A POSTROUTING -s "$NET_CIDR" -o "$uplink" -j MASQUERADE
+        iptables -C FORWARD -i "$br" -o "$uplink" -j ACCEPT 2>/dev/null || \
+          iptables -A FORWARD -i "$br" -o "$uplink" -j ACCEPT
+        iptables -C FORWARD -i "$uplink" -o "$br" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+          iptables -A FORWARD -i "$uplink" -o "$br" -m state --state RELATED,ESTABLISHED -j ACCEPT
+      fi
+      say "network '$name' up ($br = $NET_CIDR, NAT via $uplink)"
+    else
+      say "network '$name' up ($br = $NET_CIDR, NAT enabled; no default route yet)"
+    fi
+  else
+    say "network '$name' up ($br = $NET_CIDR, isolated)"
+  fi
+}
+
+cmd_net_create() {
+  ensure_dirs
+  [ $# -ge 2 ] || die "usage: walpad-vm net create <name> <gateway_cidr> [--nat]"
+  name=$1
+  cidr=$2
+  shift 2
+  valid_name "$name" || die "invalid network name '$name' (use a-z, 0-9, _, -)"
+
+  nat=0
+  for arg in "$@"; do
+    case $arg in
+      --nat) nat=1 ;;
+      *) die "unknown option: $arg" ;;
+    esac
+  done
+
+  conf=$NETS_DIR/$name.conf
+  [ ! -f "$conf" ] || die "network '$name' already exists"
+
+  cat > "$conf" <<EOF
+NET_NAME="$name"
+NET_CIDR="$cidr"
+NET_NAT="$nat"
+EOF
+  net_up "$name"
+}
+
+cmd_net_delete() {
+  ensure_dirs
+  [ $# -ge 1 ] || die "usage: walpad-vm net delete <name>"
+  name=$1
+  conf=$NETS_DIR/$name.conf
+  [ -f "$conf" ] || die "network '$name' does not exist"
+  # shellcheck disable=SC1090
+  . "$conf"
+  br="br-$name"
+
+  if [ "${NET_NAT:-0}" = "1" ] && command -v iptables >/dev/null 2>&1; then
+    uplink=$(default_uplink)
+    if [ -n "$uplink" ]; then
+      iptables -t nat -D POSTROUTING -s "$NET_CIDR" -o "$uplink" -j MASQUERADE 2>/dev/null || true
+      iptables -D FORWARD -i "$br" -o "$uplink" -j ACCEPT 2>/dev/null || true
+      iptables -D FORWARD -i "$uplink" -o "$br" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    fi
+  fi
+
+  if ip link show "$br" >/dev/null 2>&1; then
+    ip link set "$br" down 2>/dev/null || true
+    ip link delete "$br" type bridge 2>/dev/null || true
+  fi
+  rm -f "$conf"
+  say "deleted network '$name'"
+}
+
+cmd_net_list() {
+  ensure_dirs
+  found=0
+  for conf in "$NETS_DIR"/*.conf; do
+    [ -f "$conf" ] || continue
+    found=1
+    # shellcheck disable=SC1090
+    . "$conf"
+    br="br-$NET_NAME"
+    state="down"
+    ip link show "$br" >/dev/null 2>&1 && state="up"
+    mode="isolated"
+    [ "${NET_NAT:-0}" = "1" ] && mode="nat"
+    printf "%-14s %-18s %-10s (%s)\n" "$NET_NAME" "$NET_CIDR" "$mode" "$state"
+  done
+  [ "$found" = "1" ] || say "no virtual networks configured"
+}
+
+cmd_net_shell() {
+  ensure_dirs
+  [ $# -ge 2 ] || die "usage: walpad-vm net shell <net_name> <ip_cidr>"
+  name=$1
+  ip_cidr=$2
+  conf=$NETS_DIR/$name.conf
+  [ -f "$conf" ] || die "network '$name' does not exist"
+  net_up "$name" >/dev/null
+  # shellcheck disable=SC1090
+  . "$conf"
+  br="br-$name"
+  gw=${NET_CIDR%/*}
+
+  id=$$
+  ns="walpad-$name-$id"
+  vh="vh-$id"
+  vn="vn-$id"
+
+  cleanup_ns() {
+    ip link delete "$vh" 2>/dev/null || true
+    ip netns delete "$ns" 2>/dev/null || true
+  }
+  trap cleanup_ns EXIT INT TERM
+
+  ip netns add "$ns" || die "failed to create netns $ns"
+  ip link add "$vh" type veth peer name "$vn" || die "failed to create veth pair"
+  ip link set "$vh" master "$br" up || die "failed to attach $vh to $br"
+  ip link set "$vn" netns "$ns" || die "failed to move $vn into $ns"
+
+  ip netns exec "$ns" ip link set lo up
+  ip netns exec "$ns" ip addr add "$ip_cidr" dev "$vn"
+  ip netns exec "$ns" ip link set "$vn" up
+  ip netns exec "$ns" ip route add default via "$gw" 2>/dev/null || true
+
+  say "entering isolated namespace '$ns' ($ip_cidr on $br, gw $gw); type 'exit' to leave"
+  ip netns exec "$ns" /bin/sh
+}
+
+cmd_net() {
+  [ $# -ge 1 ] || die "usage: walpad-vm net <create|delete|list|shell> ..."
+  sub=$1
+  shift
+  case $sub in
+    create) cmd_net_create "$@" ;;
+    delete) cmd_net_delete "$@" ;;
+    list)   cmd_net_list "$@" ;;
+    shell)  cmd_net_shell "$@" ;;
+    *) die "unknown net command '$sub' (use: create, delete, list, shell)" ;;
+  esac
+}
+
+# --- Virtual Machines (QEMU) ---
+
+vm_is_running() {
+  pidfile=$MACHINES_DIR/$1/pid
+  [ -f "$pidfile" ] || return 1
+  pid=$(cat "$pidfile" 2>/dev/null || true)
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+cmd_create() {
+  ensure_dirs
+  [ $# -ge 1 ] || die "usage: walpad-vm create <name> [--arch x86_64|aarch64] [--ram 512] [--cpus 2] [--disk 8G] [--iso FILE] [--net user|NET]"
+  name=$1
+  shift
+  valid_name "$name" || die "invalid VM name '$name' (use a-z, 0-9, _, -)"
+
+  vmdir=$MACHINES_DIR/$name
+  [ ! -d "$vmdir" ] || die "VM '$name' already exists"
+
+  arch=x86_64
+  ram=512
+  cpus=2
+  disk=8G
+  iso=""
+  net=user
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --arch) shift; arch=${1:-};;
+      --ram)  shift; ram=${1:-};;
+      --cpus) shift; cpus=${1:-};;
+      --disk) shift; disk=${1:-};;
+      --iso)  shift; iso=${1:-};;
+      --net)  shift; net=${1:-};;
+      *) die "unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  case $arch in
+    x86_64|aarch64) ;;
+    *) die "unsupported --arch '$arch' (use x86_64 or aarch64)" ;;
+  esac
+
+  need_cmd qemu-img
+  mkdir -p "$vmdir"
+  if ! qemu-img create -f qcow2 "$vmdir/disk.qcow2" "$disk" >/dev/null; then
+    rm -rf "$vmdir"
+    die "failed to create virtual disk ($disk)"
+  fi
+
+  cat > "$vmdir/vm.conf" <<EOF
+VM_NAME="$name"
+VM_ARCH="$arch"
+VM_RAM="$ram"
+VM_CPUS="$cpus"
+VM_ISO="$iso"
+VM_NET="$net"
+EOF
+  say "created VM '$name' (arch=$arch, ram=${ram}M, cpus=$cpus, disk=$disk, net=$net)"
+}
+
+cmd_start() {
+  ensure_dirs
+  [ $# -ge 1 ] || die "usage: walpad-vm start <name> [--iso FILE] [--headless]"
+  name=$1
+  shift
+  vmdir=$MACHINES_DIR/$name
+  [ -f "$vmdir/vm.conf" ] || die "VM '$name' does not exist"
+  vm_is_running "$name" && die "VM '$name' is already running"
+
+  # shellcheck disable=SC1090
+  . "$vmdir/vm.conf"
+  iso_override=""
+  headless=0
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --iso) shift; iso_override=${1:-} ;;
+      --headless) headless=1 ;;
+      *) die "unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  iso=${iso_override:-$VM_ISO}
+  case $VM_ARCH in
+    x86_64)
+      need_cmd qemu-system-x86_64
+      qemu_bin=qemu-system-x86_64
+      mach_args="-machine pc"
+      ;;
+    aarch64)
+      need_cmd qemu-system-aarch64
+      qemu_bin=qemu-system-aarch64
+      mach_args="-machine virt -cpu cortex-a53"
+      ;;
+    *) die "invalid VM_ARCH '$VM_ARCH'" ;;
+  esac
+
+  net_args=""
+  if [ "$VM_NET" = "user" ]; then
+    net_args="-netdev user,id=n0 -device virtio-net-pci,netdev=n0"
+  else
+    net_up "$VM_NET"
+    tap="tap-$name"
+    ip link delete "$tap" 2>/dev/null || true
+    ip tuntap add dev "$tap" mode tap || die "failed to create TAP device $tap"
+    ip link set "$tap" master "br-$VM_NET" up || die "failed to attach $tap to br-$VM_NET"
+    net_args="-netdev tap,id=n0,ifname=$tap,script=no,downscript=no -device virtio-net-pci,netdev=n0"
+  fi
+
+  cdrom_args=""
+  if [ -n "$iso" ]; then
+    [ -f "$iso" ] || die "ISO file not found: $iso"
+    cdrom_args="-cdrom $iso -boot d"
+  fi
+
+  disp_args="-display gtk"
+  if [ "$headless" = "1" ] || [ -z "${DISPLAY:-}" ]; then
+    disp_args="-nographic"
+  fi
+
+  say "starting VM '$name' ($VM_ARCH, ${VM_RAM}M RAM, net=$VM_NET)..."
+  # shellcheck disable=SC2086
+  $qemu_bin $mach_args -m "$VM_RAM" -smp "$VM_CPUS" \
+    -drive "file=$vmdir/disk.qcow2,format=qcow2,if=virtio" \
+    $cdrom_args $net_args $disp_args \
+    -pidfile "$vmdir/pid" -daemonize || {
+      [ "$VM_NET" = "user" ] || ip link delete "tap-$name" 2>/dev/null || true
+      die "failed to start QEMU"
+    }
+  say "VM '$name' started (PID $(cat "$vmdir/pid"))"
+}
+
+cmd_stop() {
+  ensure_dirs
+  [ $# -ge 1 ] || die "usage: walpad-vm stop <name>"
+  name=$1
+  vmdir=$MACHINES_DIR/$name
+  [ -d "$vmdir" ] || die "VM '$name' does not exist"
+  if vm_is_running "$name"; then
+    pid=$(cat "$vmdir/pid")
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+    say "stopped VM '$name'"
+  else
+    say "VM '$name' is not running"
+  fi
+  rm -f "$vmdir/pid"
+  ip link delete "tap-$name" 2>/dev/null || true
+}
+
+cmd_delete() {
+  ensure_dirs
+  [ $# -ge 1 ] || die "usage: walpad-vm delete <name>"
+  name=$1
+  vmdir=$MACHINES_DIR/$name
+  [ -d "$vmdir" ] || die "VM '$name' does not exist"
+  vm_is_running "$name" && cmd_stop "$name"
+  rm -rf "$vmdir"
+  say "deleted VM '$name'"
+}
+
+cmd_list() {
+  ensure_dirs
+  found=0
+  for conf in "$MACHINES_DIR"/*/vm.conf; do
+    [ -f "$conf" ] || continue
+    found=1
+    # shellcheck disable=SC1090
+    . "$conf"
+    state="stopped"
+    vm_is_running "$VM_NAME" && state="running"
+    printf "%-14s %-8s %-6sM  net=%-10s (%s)\n" "$VM_NAME" "$VM_ARCH" "$VM_RAM" "$VM_NET" "$state"
+  done
+  [ "$found" = "1" ] || say "no VMs created yet"
+}
+
+cmd_status() {
+  ensure_dirs
+  say "root: $VM_ROOT"
+  for b in qemu-img qemu-system-x86_64 qemu-system-aarch64 qemu-x86_64; do
+    if command -v "$b" >/dev/null 2>&1; then
+      printf "  %-22s ok\n" "$b"
+    else
+      printf "  %-22s missing (run: walpad-vm setup)\n" "$b"
+    fi
+  done
+  echo "--- VMs ---"
+  cmd_list
+  echo "--- Virtual Networks ---"
+  cmd_net_list
+}
+
+usage() {
+  cat <<'EOF'
+usage: walpad-vm <command> ...
+
+Setup & status:
+  walpad-vm setup
+  walpad-vm status
+
+Virtual Machines (different OSes via QEMU):
+  walpad-vm create <name> [--arch x86_64|aarch64] [--ram 512] [--cpus 2] [--disk 8G] [--iso FILE] [--net user|NET]
+  walpad-vm start  <name> [--iso FILE] [--headless]
+  walpad-vm stop   <name>
+  walpad-vm list
+  walpad-vm delete <name>
+
+Virtual Networks (VirtualBox-style bridges, NAT & isolated network namespaces):
+  walpad-vm net create <name> <gateway_cidr> [--nat]
+  walpad-vm net delete <name>
+  walpad-vm net list
+  walpad-vm net shell  <name> <ip_cidr>
+EOF
+}
+
+case ${1:-help} in
+  setup)  shift; cmd_setup "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  create) shift; cmd_create "$@" ;;
+  start)  shift; cmd_start "$@" ;;
+  stop)   shift; cmd_stop "$@" ;;
+  delete) shift; cmd_delete "$@" ;;
+  list)   shift; cmd_list "$@" ;;
+  net)    shift; cmd_net "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
