@@ -63,10 +63,19 @@ pub enum Icon {
     /// Code editor (owner request 2026-11-12, "an ide ... geany or lite xl"): angle brackets
     /// with a slash, `</>`.
     Code,
+    /// Selection toolbar (owner report 2026-11-13, "copy paste functions are not
+    /// profashonalize like normal android devices"): icons instead of the word "Cut".
+    Cut,
+    /// Two overlapping sheets, same request as `Cut`.
+    Copy,
+    /// Four corner brackets (a crop/viewfinder shape), same request as `Cut`: "Select all".
+    SelectAll,
+    /// A left-curling arrow, same request as `Cut`: "Undo".
+    Undo,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 46] = [
+    pub const ALL: [Icon; 50] = [
         Icon::Home,
         Icon::Apps,
         Icon::Wifi,
@@ -113,6 +122,10 @@ impl Icon {
         Icon::Bolt,
         Icon::Bell,
         Icon::Code,
+        Icon::Cut,
+        Icon::Copy,
+        Icon::SelectAll,
+        Icon::Undo,
     ];
 
     /// Icon id used in apps.json (`"icon": "globe"`).
@@ -511,6 +524,30 @@ fn build(icon: Icon) -> (Option<Path>, Option<Path>) {
             p.poly(&[(15.0, 5.0), (21.0, 12.0), (15.0, 19.0)], false);
             p.line((13.5, 4.0), (10.5, 20.0));
         }
+        Icon::Cut => {
+            // two blades crossing in an X above two ring handles, like a pair of scissors
+            p.circle(7.0, 17.0, 2.3);
+            p.circle(17.0, 17.0, 2.3);
+            p.line((7.0, 17.0), (19.0, 5.0));
+            p.line((17.0, 17.0), (5.0, 5.0));
+        }
+        Icon::Copy => {
+            // two overlapping sheets
+            p.rrect(3.5, 3.5, 13.0, 13.0, 2.0);
+            p.rrect(8.5, 8.5, 12.0, 12.0, 2.0);
+        }
+        Icon::SelectAll => {
+            // four corner brackets, like a crop/viewfinder
+            p.poly(&[(4.0, 9.0), (4.0, 4.0), (9.0, 4.0)], false);
+            p.poly(&[(15.0, 4.0), (20.0, 4.0), (20.0, 9.0)], false);
+            p.poly(&[(4.0, 15.0), (4.0, 20.0), (9.0, 20.0)], false);
+            p.poly(&[(15.0, 20.0), (20.0, 20.0), (20.0, 15.0)], false);
+        }
+        Icon::Undo => {
+            // a left-curling arrow: a wide arc open on the right, arrowhead at its lower end
+            p.arc(13.0, 13.0, 7.0, 280.0, 100.0);
+            p.arrow_head((7.0, 21.0), (12.0, 18.5), (10.0, 23.5));
+        }
     }
     (p.stroke.finish(), p.dots.finish())
 }
@@ -620,7 +657,7 @@ mod tests {
         assert_eq!(Icon::from_name("globe"), Some(Icon::Globe));
         assert_eq!(Icon::from_name("files"), Some(Icon::Folder));
         assert_eq!(Icon::from_name("nope"), None);
-        assert_eq!(Icon::ALL.len(), 46);
+        assert_eq!(Icon::ALL.len(), 50);
         assert_eq!(Icon::from_name("phone"), Some(Icon::Phone));
         assert_eq!(Icon::from_name("bluetooth"), Some(Icon::Bluetooth));
         assert_eq!(Icon::from_name("code"), Some(Icon::Code));

@@ -28,6 +28,18 @@ impl EditBtn {
             EditBtn::Undo => "Undo",
         }
     }
+    /// Owner report 2026-11-13, "copy paste functions are not profashonalize like normal
+    /// android devices": the toolbar draws this instead of `label()` now (Android's own
+    /// selection toolbar is icon-only); `label()` stays for the accessibility/test name.
+    pub fn icon(self) -> Icon {
+        match self {
+            EditBtn::Cut => Icon::Cut,
+            EditBtn::Copy => Icon::Copy,
+            EditBtn::Paste => Icon::Clipboard,
+            EditBtn::SelectAll => Icon::SelectAll,
+            EditBtn::Undo => Icon::Undo,
+        }
+    }
 }
 
 /// Apps with a text field: all five actions (Ctrl+X/C/V/A/Z).
@@ -135,10 +147,16 @@ impl Painter<'_> {
             if i > 0 {
                 self.cv.rect(Rect::new(r.x, 0, 1, r.h), DIVIDER);
             }
+            // owner report 2026-11-13, "copy paste functions are not profashonalize like
+            // normal android devices": an icon (like Android's own selection toolbar) with a
+            // small caption under it, not a bare word filling the whole button.
+            const ICON: i32 = 22;
+            self.cv
+                .icon(b.icon(), r.x + (r.w - ICON) / 2, r.y + 5, ICON, TEXT);
             self.text(
                 b.label(),
-                Style::new(Face::Bold, SIZE_SECONDARY, TEXT),
-                r,
+                Style::new(Face::Regular, SIZE_TINY, TEXT),
+                Rect::new(r.x, r.y + 5 + ICON, r.w, r.h - 5 - ICON),
                 Align::Center,
             );
         }
