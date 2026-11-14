@@ -15,3 +15,6 @@
    tests, fbmirror logic, secrets grep) must pass. The X tests can time out under load; rerun
    the single test before suspecting the code.
 9. Cargo runs through `scripts/rust.sh` (CI docker image) when no host cargo exists.
+10. Code structure: keep one responsibility per file, `<= 300` lines per production `.rs` file
+    (excluding pure wire-protocol enums such as `walpad-proto/src/command.rs`), and keep main
+    code and unit tests in separate files (`tests.rs` / `tests_*.rs` / `tests/`).
