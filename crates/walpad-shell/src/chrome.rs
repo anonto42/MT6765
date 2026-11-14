@@ -2,125 +2,25 @@
 //! pill) and the background layer. The background (charcoal + coffee watermark + the sidebar at
 //! rest) is rendered once into a cached canvas and copied into each frame with one memcpy; it is
 //! rebuilt only when its key changes (size, pinned apps, active destination, panel open).
-use crate::app::{Model, Target};
-use crate::panels::{battery_label, wifi_mark};
-use crate::topbar;
+use crate::app::Target;
 use walpad_ui::art::{coffee_rect, draw_coffee};
-use walpad_ui::components::{Painter, Tab};
+use walpad_ui::components::Painter;
 use walpad_ui::layout::Frame;
 use walpad_ui::tokens::*;
-use walpad_ui::{Canvas, Face, Icon, Rect};
+use walpad_ui::{Canvas, Rect};
 
 /// Index of each sidebar destination in `Tab::ALL` (`Target::Nav`).
-pub const NAV_HOME: usize = 0;
-pub const NAV_APPS: usize = 1;
-pub const NAV_SETTINGS: usize = 4;
+mod header;
+mod sidebar;
+#[cfg(test)]
+mod tests;
 
-const PAD_TOP: i32 = 20;
-const GAP: i32 = SP_3;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SideItem {
-    /// The drawn button.
-    pub rect: Rect,
-    /// The touch area: the full sidebar width around the button.
-    pub hit: Rect,
-    pub target: Target,
-    pub icon: Icon,
-    /// The Apps toggle is a circle, the rest rounded squares.
-    pub round: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SidebarLayout {
-    pub items: Vec<SideItem>,
-    /// y of the short divider above Settings.
-    pub divider_y: i32,
-}
-
-/// Home, the pinned apps (`(tile index, icon)`, Settings shortcut excluded), a divider, Settings,
-/// a flexible spacer, and the Apps toggle at the bottom (chevron right closed, left open).
-pub fn sidebar_layout(frame: &Frame, pinned: &[(usize, Icon)], panel_open: bool) -> SidebarLayout {
-    let sb = frame.sidebar;
-    let x = sb.x + (sb.w - BOX_DOCK) / 2;
-    let item = |y: i32, target: Target, icon: Icon, round: bool| SideItem {
-        rect: Rect::new(x, y, BOX_DOCK, BOX_DOCK),
-        hit: Rect::new(sb.x, y - GAP / 2, sb.w, BOX_DOCK + GAP),
-        target,
-        icon,
-        round,
-    };
-    let toggle_y = sb.bottom() - PAD_TOP - BOX_DOCK;
-    let mut items = vec![item(
-        sb.y + PAD_TOP,
-        Target::Nav(NAV_HOME),
-        Icon::Home,
-        false,
-    )];
-    let mut y = sb.y + PAD_TOP + BOX_DOCK + GAP;
-    // pinned apps only while Settings and the toggle still fit below them
-    let room = |y: i32| y + BOX_DOCK + 2 * GAP + 1 + BOX_DOCK + GAP <= toggle_y;
-    for (i, icon) in pinned {
-        if !room(y) {
-            break;
-        }
-        items.push(item(y, Target::Tile(*i), *icon, false));
-        y += BOX_DOCK + GAP;
-    }
-    let divider_y = y;
-    y += 1 + GAP;
-    items.push(item(y, Target::Nav(NAV_SETTINGS), Icon::Settings, false));
-    items.push(item(
-        toggle_y,
-        Target::Nav(NAV_APPS),
-        if panel_open {
-            Icon::Back
-        } else {
-            Icon::ChevronRight
-        },
-        true,
-    ));
-    SidebarLayout { items, divider_y }
-}
-
-/// The pinned apps shown in the sidebar: Home tiles minus the Settings shortcut (Settings has
-/// its own button).
-pub fn pinned_items(m: &Model) -> Vec<(usize, Icon)> {
-    m.tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.id != "settings")
-        .map(|(i, t)| (i, t.icon))
-        .collect()
-}
-
-/// The sidebar destination drawn as active.
-pub fn active_target(active: Tab, panel_open: bool) -> Option<Target> {
-    if panel_open {
-        return Some(Target::Nav(NAV_APPS));
-    }
-    match active {
-        Tab::Home | Tab::Apps => Some(Target::Nav(NAV_HOME)),
-        Tab::Settings => Some(Target::Nav(NAV_SETTINGS)),
-        Tab::Network
-        | Tab::Device
-        | Tab::Mobile
-        | Tab::Bluetooth
-        | Tab::Vpn
-        | Tab::Media
-        | Tab::Phone
-        | Tab::Gps
-        | Tab::Notifications => None,
-    }
-}
-
-fn draw_item(p: &mut Painter, it: &SideItem, pressed: bool, active: bool) {
-    if it.round {
-        p.round_button(it.rect, it.icon, pressed, active);
-    } else {
-        p.icon_box(it.rect, it.icon, pressed, active);
-    }
-}
+pub use header::render_header;
+use sidebar::draw_item;
+pub use sidebar::{
+    active_target, pinned_items, sidebar_layout, SideItem, SidebarLayout, NAV_APPS, NAV_HOME,
+    NAV_SETTINGS,
+};
 
 /// What the cached background depends on.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,152 +188,5 @@ impl Chrome {
             p.cv.copy_rect_from_at(bare, (0, 0), it.rect);
         }
         draw_item(p, it, true, false);
-    }
-}
-
-/// Header: clock (12/24 h as configured) and date at the left, the quick-settings pill at the
-/// right. Returns the pill rect.
-/// Width reserved for the notification bell icon box, left of the Quick Settings pill (owner
-/// request 2026-11-12, change `device-notifications`).
-const BELL_W: i32 = 40;
-
-/// Returns `(quick settings pill, bell icon box)`.
-pub fn render_header(p: &mut Painter, frame: &Frame, m: &Model, qs_open: bool) -> (Rect, Rect) {
-    let h = frame.header;
-    let w = &m.wall;
-    // 12-hour mode shows "2:22" (no leading zero) with AM/PM beside it
-    let time = if w.suffix.is_some() {
-        format!("{}:{:02}", w.hour, w.minute)
-    } else {
-        format!("{:02}:{:02}", w.hour, w.minute)
-    };
-    let battery = battery_label(m);
-    // a bolt before the percent while charging (owner request 2026-11-11)
-    let battery = if m.status.as_ref().is_some_and(|s| {
-        s.battery
-            .state
-            .as_deref()
-            .is_some_and(|st| st.to_ascii_lowercase().starts_with("charg"))
-    }) {
-        format!("{}{battery}", walpad_ui::components::CHARGING_MARK)
-    } else {
-        battery
-    };
-    // mobile signal bars while a SIM is present (owner request 2026-11-10)
-    let cell = crate::mobile::pill_cell(&m.status);
-    // Bluetooth mark while the controller is powered (owner request 2026-11-10)
-    let bt = crate::bluetooth::powered(&m.status);
-    // GPS mark while the GPS is on (owner request 2026-11-11)
-    let gps = crate::gps_screen::pill_mark(&m.status);
-    let pill_w = p.quick_pill_w_marks(&battery, cell.is_some(), bt, gps.is_some());
-    let low = m.status.as_ref().is_some_and(|s| s.battery.low);
-    let pill = p.quick_pill_marks(
-        h.right() - SP_4,
-        h.y + h.h / 2,
-        wifi_mark(m),
-        &battery,
-        low,
-        m.pressed == Some(Target::QuickSettings),
-        qs_open,
-        cell,
-        bt,
-        gps,
-    );
-    // notification bell, just left of the pill (owner request 2026-11-12, change
-    // device-notifications): a small icon box, never part of the pill component itself.
-    let bell = Rect::new(
-        pill.x - SP_3 - BELL_W,
-        h.y + (h.h - BELL_W) / 2,
-        BELL_W,
-        BELL_W,
-    );
-    p.icon_box(
-        bell,
-        Icon::Bell,
-        m.pressed == Some(Target::NotificationsCard),
-        false,
-    );
-    let unread = m
-        .status
-        .as_ref()
-        .map_or(0, |s| s.notifications.unread_count);
-    if unread > 0 {
-        crate::phone_ui::paint_badge(p, bell, unread);
-    }
-    let clock_x = h.x + SP_5;
-    let mut clock_right = clock_x + h.w - pill_w - BELL_W - SP_3 - SP_4 - 2 * SP_5;
-    // live stats between the clock and the pill, stopping short of the bell (owner request
-    // 2026-11-11 / 2026-11-12)
-    if let Some(st) = m.status.as_ref().map(|s| &s.stats) {
-        let clock_end = clock_x + p.clock_time_w(&time, w.suffix);
-        let date_w = p.fonts.measure(&w.date, Face::Regular, SIZE_CAPTION).ceil() as i32;
-        let l = topbar::layout(p.fonts, st, h, clock_end, date_w, bell.x - SP_3);
-        if let Some(sp) = l.pill {
-            // the date keeps its room only while it fits left of the stats
-            clock_right = if l.date { sp.x - SP_3 } else { clock_end };
-            topbar::paint(p, &l);
-        }
-    }
-    p.clock(
-        Rect::new(clock_x, h.y, clock_right - clock_x, h.h),
-        &time,
-        w.suffix,
-        &w.date,
-    );
-    p.divider(h.x, h.bottom() - 1, h.w);
-    (pill, bell)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn overlaps(a: Rect, b: Rect) -> bool {
-        a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
-    }
-
-    #[test]
-    fn sidebar_has_home_pinned_settings_and_the_toggle_at_the_bottom() {
-        let pinned = [(0, Icon::Globe), (1, Icon::Terminal)];
-        for f in [Frame::new(800, 1280), Frame::new(1280, 800)] {
-            let l = sidebar_layout(&f, &pinned, false);
-            let t: Vec<Target> = l.items.iter().map(|i| i.target).collect();
-            assert_eq!(
-                t,
-                [
-                    Target::Nav(NAV_HOME),
-                    Target::Tile(0),
-                    Target::Tile(1),
-                    Target::Nav(NAV_SETTINGS),
-                    Target::Nav(NAV_APPS)
-                ]
-            );
-            let toggle = l.items.last().unwrap();
-            assert!(toggle.round && toggle.icon == Icon::ChevronRight);
-            assert_eq!(toggle.rect.bottom(), f.h - PAD_TOP);
-            for (i, a) in l.items.iter().enumerate() {
-                assert!(a.rect.w >= TOUCH_MIN && a.hit.w == SIDEBAR_W);
-                assert!(f.sidebar.contains(a.rect.x, a.rect.y));
-                for b in &l.items[i + 1..] {
-                    assert!(!overlaps(a.hit, b.hit), "{a:?} / {b:?}");
-                }
-            }
-            assert!(l.items[2].rect.bottom() < l.divider_y && l.divider_y < l.items[3].rect.y);
-        }
-        let open = sidebar_layout(&Frame::new(800, 1280), &pinned, true);
-        assert_eq!(open.items.last().unwrap().icon, Icon::Back);
-    }
-
-    #[test]
-    fn too_many_pins_never_push_settings_off_the_bar() {
-        let pinned: Vec<(usize, Icon)> = (0..12).map(|i| (i, Icon::Apps)).collect();
-        let l = sidebar_layout(&Frame::new(1280, 800), &pinned, false);
-        let settings = l
-            .items
-            .iter()
-            .find(|i| i.target == Target::Nav(NAV_SETTINGS))
-            .unwrap();
-        let toggle = l.items.last().unwrap();
-        assert!(settings.hit.bottom() <= toggle.hit.y);
     }
 }

@@ -1,11 +1,19 @@
 use super::*;
-use crate::core_client::ReplyError;
+use crate::config::DevdSettings;
+use crate::core_client::{CoreEvent, ReplyError};
+use crate::gesture::Gesture;
+use crate::overlay::{self, Overlay, PasswordSheet, SheetPurpose};
+use crate::settings_screen::Page;
+use serde_json::{json, Value};
 use std::path::Path;
+use walpad_hw::Root;
 use walpad_proto::{
-    AppState, Battery, BatterySource, Hardware, ScreenState, WifiRadio, WifiStatus,
+    AppState, Battery, BatterySource, Hardware, ScreenState, Secret, ShellInput, Status, WifiRadio,
+    WifiStatus,
 };
-use walpad_ui::components::keyboard_layout;
-use walpad_ui::{Canvas, Fonts};
+use walpad_ui::components::{keyboard_layout, Key, KeyboardLayer, Painter, Tab, Tone};
+use walpad_ui::tokens::*;
+use walpad_ui::{Canvas, Fonts, Icon, Rect};
 
 mod bluetooth;
 mod gps;

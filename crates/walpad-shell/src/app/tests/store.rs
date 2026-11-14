@@ -1,5 +1,6 @@
 //! App store screen: Settings > Apps and the Tools tile (change app-catalogue-manager).
 use super::*;
+use crate::panels;
 use crate::store::{StoreTarget, StoreView};
 
 pub const GIB: u64 = 1024 * 1024;

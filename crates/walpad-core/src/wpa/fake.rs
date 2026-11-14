@@ -9,23 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug)]
-pub struct FakeAp {
-    pub ssid: Vec<u8>,
-    pub signal: i32,
-    pub freq: u32,
-    pub flags: String,
-    /// Passphrase of the AP (None = open).
-    pub passphrase: Option<String>,
-}
+mod aps;
 
-struct Net {
-    id: u32,
-    ssid_hex: String,
-    psk: Option<String>,
-    open: bool,
-    enabled: bool,
-}
+use aps::Net;
+pub use aps::{default_aps, FakeAp};
 
 pub struct FakeSupplicant {
     stop: Arc<AtomicBool>,
@@ -42,40 +29,6 @@ impl Drop for FakeSupplicant {
         }
         let _ = std::fs::remove_file(&self.sock);
     }
-}
-
-pub fn default_aps() -> Vec<FakeAp> {
-    let ap = |s: &str, sig, freq, flags: &str, pw: Option<&str>| FakeAp {
-        ssid: s.as_bytes().to_vec(),
-        signal: sig,
-        freq,
-        flags: flags.into(),
-        passphrase: pw.map(String::from),
-    };
-    vec![
-        ap(
-            "Home",
-            -52,
-            5180,
-            "[WPA2-PSK-CCMP][ESS]",
-            Some("correct horse"),
-        ),
-        ap(
-            "Home",
-            -70,
-            2412,
-            "[WPA2-PSK-CCMP][ESS]",
-            Some("correct horse"),
-        ),
-        ap("Cafe Open", -60, 2437, "[ESS]", None),
-        FakeAp {
-            ssid: "Café".as_bytes().to_vec(),
-            signal: -75,
-            freq: 2462,
-            flags: "[WPA2-PSK-CCMP][ESS]".into(),
-            passphrase: Some("espresso123".into()),
-        },
-    ]
 }
 
 /// Start a fake supplicant listening at `<root>/run/wpa_supplicant/wlan0`; `conf` is the path of the

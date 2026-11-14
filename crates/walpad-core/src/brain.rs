@@ -5,112 +5,17 @@ use crate::logic::{
     touch_map as tm, Ms,
 };
 use serde::de::DeserializeOwned;
-use std::fmt;
 use walpad_hw::battery::RawBattery;
 use walpad_hw::evdev::{
     InputEvent, EV_ABS, EV_KEY, EV_SW, KEY_POWER, KEY_VOLUMEDOWN, KEY_VOLUMEUP,
 };
 use walpad_proto::{ScreenMode, ScreenState, ShellInput};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Role {
-    Touch,
-    Key,
-    Hall,
-}
+mod effect;
+#[cfg(test)]
+mod tests;
 
-/// Something the core decided to do.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Effect {
-    // device subsystem
-    Backlight(u32),
-    Orientation(u16),
-    Struts(u16),
-    KeyboardDock(u16),
-    PowerMenuOpen,
-    PowerMenuActivate,
-    /// The screen was switched off by hand (short power press): lock at once.
-    LockNow,
-    Cover(bool),
-    LowBattery(bool),
-    CriticalPoweroff(u32),
-    // input subsystem
-    /// Pointer motion and button 1 (what the touch bridge always did).
-    Pointer(tm::Act),
-    /// Another X button (the right click of a long press).
-    Button(u8, bool),
-    /// One wheel click (scroll gestures), Control held for a pinch.
-    Wheel {
-        button: u8,
-        ctrl: bool,
-    },
-    Action(kg::Action),
-    /// A volume key while the shell's power menu is open: goes to the shell, not to the gestures.
-    ShellKey(ShellInput),
-}
-
-impl Effect {
-    pub fn is_device(&self) -> bool {
-        !matches!(
-            self,
-            Effect::Pointer(_)
-                | Effect::Button(..)
-                | Effect::Wheel { .. }
-                | Effect::Action(_)
-                | Effect::ShellKey(_)
-        )
-    }
-}
-
-/// The `WOULD ...` line used by shadow mode (format is what shadow_diff.sh parses).
-impl fmt::Display for Effect {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Effect::Backlight(v) => write!(f, "WOULD backlight {v}"),
-            Effect::Orientation(o) => write!(f, "WOULD orientation {o}"),
-            Effect::Struts(o) => write!(f, "WOULD struts {o}"),
-            Effect::KeyboardDock(o) => write!(f, "WOULD keyboard-dock {o}"),
-            Effect::PowerMenuOpen => write!(f, "WOULD powermenu open"),
-            Effect::PowerMenuActivate => write!(f, "WOULD powermenu activate"),
-            // the Python daemon has no screen lock: nothing to compare in shadow mode
-            Effect::LockNow => Ok(()),
-            Effect::Cover(c) => write!(f, "WOULD cover {}", if *c { "closed" } else { "open" }),
-            Effect::LowBattery(l) => write!(f, "WOULD low-battery {l}"),
-            Effect::CriticalPoweroff(mv) => write!(f, "WOULD poweroff (critical battery {mv} mV)"),
-            Effect::ShellKey(k) => write!(f, "WOULD shell-key {k:?}"),
-            Effect::Pointer(tm::Act::Move(x, y)) => write!(f, "WOULD pointer move {x} {y}"),
-            Effect::Pointer(tm::Act::Press) => write!(f, "WOULD pointer press"),
-            Effect::Pointer(tm::Act::Release) => write!(f, "WOULD pointer release"),
-            Effect::Pointer(tm::Act::Pair(..)) => Ok(()),
-            Effect::Button(n, d) => write!(
-                f,
-                "WOULD pointer button {n} {}",
-                if *d { "press" } else { "release" }
-            ),
-            Effect::Wheel { button, ctrl } => {
-                write!(
-                    f,
-                    "WOULD pointer wheel {button}{}",
-                    if *ctrl { " ctrl" } else { "" }
-                )
-            }
-            Effect::Action(a) => match a {
-                kg::Action::None => Ok(()),
-                kg::Action::Key(k) => write!(f, "WOULD action key:{k}"),
-                kg::Action::Ctl(c) => write!(f, "WOULD action ctl:{c}"),
-                kg::Action::Launch(a) => write!(f, "WOULD action launch:{a}"),
-                kg::Action::Run(c) => write!(f, "WOULD action run:{c} (rejected under Rust)"),
-                kg::Action::Home => write!(f, "WOULD action home"),
-                kg::Action::Back => write!(f, "WOULD action back"),
-                kg::Action::Keyboard => write!(f, "WOULD action keyboard"),
-                kg::Action::PowerMenu => write!(f, "WOULD action powermenu"),
-                kg::Action::Screenshot => write!(f, "WOULD action screenshot"),
-                kg::Action::Volume(v) => write!(f, "WOULD action volume:{v:+}"),
-                kg::Action::Unknown(s) => write!(f, "WOULD action unknown:{s}"),
-            },
-        }
-    }
-}
+pub use effect::{Effect, Role};
 
 const GSENSOR_EVERY: Ms = 400;
 const BATTERY_EVERY: Ms = 10_000;
@@ -369,88 +274,5 @@ impl Brain {
         } else {
             t
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn key(code: u16, value: i32) -> InputEvent {
-        InputEvent {
-            sec: 0,
-            usec: 0,
-            kind: EV_KEY,
-            code,
-            value,
-        }
-    }
-    fn brain() -> Brain {
-        Brain::new("", "", "", Some(120), 0)
-    }
-    fn tick(b: &mut Brain, now: Ms) -> Vec<Effect> {
-        b.tick(now, &mut || None, &mut RawBattery::default)
-    }
-
-    #[test]
-    fn long_power_press_opens_the_menu_once_and_short_press_activates_it() {
-        let mut b = brain();
-        assert!(b.on_event(Role::Key, &key(KEY_POWER, 1), 0).is_empty());
-        assert!(!tick(&mut b, 900).contains(&Effect::PowerMenuOpen));
-        assert!(tick(&mut b, 1000).contains(&Effect::PowerMenuOpen));
-        assert!(!tick(&mut b, 1100).contains(&Effect::PowerMenuOpen));
-        b.on_event(Role::Key, &key(KEY_POWER, 0), 1200);
-        // menu open: a short press activates the focused item instead of toggling the screen
-        b.menu_open = true;
-        b.on_event(Role::Key, &key(KEY_POWER, 1), 2000);
-        let fx = b.on_event(Role::Key, &key(KEY_POWER, 0), 2100);
-        assert_eq!(fx, vec![Effect::PowerMenuActivate]);
-    }
-
-    #[test]
-    fn volume_keys_go_to_the_shell_while_its_menu_is_open() {
-        let mut b = brain();
-        b.shell_keys = true;
-        let down = b.on_event(Role::Key, &key(KEY_VOLUMEDOWN, 1), 10);
-        let up = b.on_event(Role::Key, &key(KEY_VOLUMEUP, 1), 20);
-        assert!(down.contains(&Effect::ShellKey(ShellInput::VolumeDown)));
-        assert!(up.contains(&Effect::ShellKey(ShellInput::VolumeUp)));
-        // releases and the later tick produce no volume gesture
-        let mut all = b.on_event(Role::Key, &key(KEY_VOLUMEDOWN, 0), 60);
-        all.extend(b.on_event(Role::Key, &key(KEY_VOLUMEUP, 0), 80));
-        all.extend(tick(&mut b, 800));
-        assert!(
-            !all.iter().any(|e| matches!(e, Effect::Action(_))),
-            "{all:?}"
-        );
-    }
-
-    #[test]
-    fn volume_keys_follow_the_gestures_when_no_menu_is_open() {
-        let mut b = brain();
-        let fx = b.on_event(Role::Key, &key(KEY_VOLUMEUP, 1), 10);
-        assert!(!fx.iter().any(|e| matches!(e, Effect::ShellKey(_))));
-        b.on_event(Role::Key, &key(KEY_VOLUMEUP, 0), 60);
-        let fx = tick(&mut b, 600);
-        assert!(
-            fx.iter().any(|e| matches!(e, Effect::Action(_))),
-            "single press after the tap window is a volume action: {fx:?}"
-        );
-    }
-
-    #[test]
-    fn a_short_power_press_that_turns_the_screen_off_locks_and_waking_does_not() {
-        let mut b = brain();
-        b.on_event(Role::Key, &key(KEY_POWER, 1), 1000);
-        let mut fx = b.on_event(Role::Key, &key(KEY_POWER, 0), 1100);
-        fx.extend(tick(&mut b, 1200));
-        assert_eq!(b.screen.state(), ScreenState::Off);
-        assert!(fx.contains(&Effect::LockNow), "{fx:?}");
-        // the press that wakes it again locks nothing
-        b.on_event(Role::Key, &key(KEY_POWER, 1), 5000);
-        let mut fx = b.on_event(Role::Key, &key(KEY_POWER, 0), 5100);
-        fx.extend(tick(&mut b, 5200));
-        assert_ne!(b.screen.state(), ScreenState::Off);
-        assert!(!fx.contains(&Effect::LockNow), "{fx:?}");
     }
 }

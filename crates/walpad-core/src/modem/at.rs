@@ -4,9 +4,14 @@
 //! waiting. The channel is opened per job and closed afterwards, so `walpad-modem data` can use it
 //! between jobs. Every command has a hard deadline (5 s on the tablet).
 use std::os::fd::OwnedFd;
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use std::path::Path;
 use std::time::{Duration, Instant};
+
+#[cfg(test)]
+mod tests;
+mod worker;
+
+pub use worker::{Done, Job, Outcome, Recv, Worker};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Final {
@@ -265,134 +270,5 @@ impl Port {
             }
             self.wait(rustix::event::PollFlags::IN, deadline)?;
         }
-    }
-}
-
-pub type Outcome = Result<Reply, AtError>;
-
-pub struct Job<K> {
-    pub kind: K,
-    pub cmds: Vec<AtCmd>,
-}
-
-/// The results in command order; a job stops at the first transport error (open, timeout, I/O),
-/// so `results` can be shorter than the job.
-pub struct Done<K> {
-    pub kind: K,
-    pub results: Vec<Outcome>,
-}
-
-pub enum Recv<K> {
-    Done(Done<K>),
-    Empty,
-    /// The worker thread is gone.
-    Gone,
-}
-
-/// The single AT worker thread. Dropping it ends the thread after its current job.
-pub struct Worker<K> {
-    tx: Sender<Job<K>>,
-    rx: Receiver<Done<K>>,
-}
-
-impl<K: Send + 'static> Worker<K> {
-    pub fn spawn(path: PathBuf, per_cmd: Duration) -> std::io::Result<Worker<K>> {
-        let (tx, jobs) = channel::<Job<K>>();
-        let (done, rx) = channel::<Done<K>>();
-        std::thread::Builder::new()
-            .name("walpad-at".into())
-            .spawn(move || {
-                while let Ok(job) = jobs.recv() {
-                    let results = run_job(&path, &job.cmds, per_cmd);
-                    if done
-                        .send(Done {
-                            kind: job.kind,
-                            results,
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            })?;
-        Ok(Worker { tx, rx })
-    }
-
-    pub fn send(&self, job: Job<K>) -> bool {
-        self.tx.send(job).is_ok()
-    }
-
-    /// A finished job, if any (never blocks).
-    pub fn try_recv(&self) -> Recv<K> {
-        match self.rx.try_recv() {
-            Ok(d) => Recv::Done(d),
-            Err(TryRecvError::Empty) => Recv::Empty,
-            Err(TryRecvError::Disconnected) => Recv::Gone,
-        }
-    }
-}
-
-fn run_job(path: &Path, cmds: &[AtCmd], per_cmd: Duration) -> Vec<Outcome> {
-    let mut port = match Port::open(path) {
-        Ok(p) => p,
-        Err(e) => return vec![Err(e)],
-    };
-    let mut out = Vec::new();
-    for c in cmds {
-        let r = port.command(c, per_cmd);
-        let stop = r.is_err();
-        out.push(r);
-        if stop {
-            break;
-        }
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn replies_are_split_from_transcripts() {
-        let r = split_reply("AT+CSQ", "AT+CSQ\r\r\n+CSQ: 29, 5\r\n\r\nOK\r\n").unwrap();
-        assert_eq!(r.lines, ["+CSQ: 29, 5"]);
-        assert_eq!(r.fin, Final::Ok);
-        assert_eq!(
-            split_reply("AT+CSQ", "\r\n+CSQ: 29, 5\r\n"),
-            None,
-            "no final yet"
-        );
-        let e = split_reply("AT+CPIN?", "\r\n+CME ERROR: 10\r\n").unwrap();
-        assert_eq!(e.fin, Final::Cme("10".into()));
-        assert_eq!(
-            split_reply("AT+CMGS", "+CMS ERROR: 500\r\n").unwrap().fin,
-            Final::Cms("500".into())
-        );
-        assert_eq!(
-            split_reply("ATD", "NO CARRIER\r\n").unwrap().fin,
-            Final::NoCarrier
-        );
-        // URCs stay in the lines (the parsers ignore what they do not know)
-        let u = split_reply("AT+CFUN?", "+EIND: 64\r\n+CFUN: 1\r\nOK\r\n").unwrap();
-        assert_eq!(u.lines, ["+EIND: 64", "+CFUN: 1"]);
-    }
-
-    #[test]
-    fn a_secret_command_never_prints() {
-        let c = AtCmd::secret("AT+CPIN=\"4711\"".into());
-        assert_eq!(format!("{c:?}"), "AT+CPIN=***");
-        assert!(!c.display().contains("4711"));
-        assert_eq!(AtCmd::new("AT+CSQ").display(), "AT+CSQ");
-    }
-
-    #[test]
-    fn opening_a_missing_channel_fails_fast() {
-        let r = run_job(
-            Path::new("/nonexistent/radio/pttycmd1"),
-            &[AtCmd::new("AT")],
-            Duration::from_millis(100),
-        );
-        assert!(matches!(r.as_slice(), [Err(AtError::Open(_))]));
     }
 }

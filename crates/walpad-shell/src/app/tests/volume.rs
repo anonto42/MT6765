@@ -1,5 +1,6 @@
 //! Volume (owner request 2026-11-10): Quick Settings slider and mute, the key pill, Settings > Sound.
 use super::*;
+use crate::settings_screen;
 use walpad_proto::AudioStatus;
 
 fn with_audio(app: &mut App, volume: u8, muted: bool, available: bool) {

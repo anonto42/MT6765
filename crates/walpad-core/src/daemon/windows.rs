@@ -2,36 +2,18 @@
 //! of an app (several terminals), focus/close by window id, move/resize/snap and the layout mode.
 //! The geometry is `walpad_proto::wm`, the decisions are `crate::layout`, the X requests are
 //! `XBridge`.
-use super::*;
-use crate::layout::{Layout, LayoutOp, WinView};
-use crate::xbridge::{WinInfo, XWindow};
+use super::errors::CmdResult;
+use super::windows_layout::WinClose;
+use super::Daemon;
+use crate::apps::LaunchError;
+use crate::xbridge::{class_matches, WinInfo, XWindow};
+use serde_json::{json, Value};
+use std::time::{Duration, Instant};
 use walpad_proto::wm::{self, LayoutMode, SnapZone, WRect};
+use walpad_proto::{ErrorCode, Topic};
 
-/// How often the layout engine looks at the windows while a mode other than `single` is on.
-pub(super) const LAYOUT_EVERY: Duration = Duration::from_millis(400);
 /// A window that ignores WM_DELETE_WINDOW gets SIGTERM after this long.
 const WIN_CLOSE_GRACE: Duration = Duration::from_secs(3);
-
-/// A close request for one window: SIGTERM of its pid when it is still there at `deadline`.
-pub(super) struct WinClose {
-    window: u32,
-    pid: Option<u32>,
-    deadline: Instant,
-}
-
-/// Mode, ratio and swap saved in /etc/walpad/shell.json (absent or bad values: single, 50, false).
-pub(super) fn load_layout(root: &Root) -> Layout {
-    let v: Value =
-        serde_json::from_str(&read_file(root, "/etc/walpad/shell.json")).unwrap_or(Value::Null);
-    Layout::new(
-        v["windows_mode"]
-            .as_str()
-            .and_then(LayoutMode::parse)
-            .unwrap_or_default(),
-        v["split_ratio"].as_u64().unwrap_or(50).min(255) as u8,
-        v["split_swap"].as_bool().unwrap_or(false),
-    )
-}
 
 impl Daemon {
     fn layout_json(&self) -> Value {
@@ -236,86 +218,5 @@ impl Daemon {
             );
         }
         Ok(self.layout_json())
-    }
-
-    /// Layout engine and window close deadlines. Returns true when something was done.
-    pub(super) fn windows_tick(&mut self, now: Instant) -> bool {
-        let mut did = self.finish_win_closes(now);
-        if self.layout.busy() && now >= self.layout_at {
-            self.layout_at = now + LAYOUT_EVERY;
-            did |= self.apply_layout();
-        }
-        did
-    }
-
-    fn apply_layout(&mut self) -> bool {
-        let o = self.brain.rotation.orientation();
-        let Some((area, wins)) = self.x_try(|b| Ok((b.work_area(o), b.app_windows()?))) else {
-            // X is away: everything is sent again once it is back
-            self.layout.invalidate();
-            return false;
-        };
-        let views: Vec<WinView> = wins
-            .iter()
-            .map(|w| WinView {
-                id: w.win.id,
-                rect: w.rect,
-                maximized: w.maximized,
-            })
-            .collect();
-        let ops = self.layout.plan(&views, area);
-        if ops.is_empty() {
-            return false;
-        }
-        let done = self.x_try(|b| {
-            for op in &ops {
-                match *op {
-                    LayoutOp::Maximize(w) => b.set_maximized(w, true)?,
-                    LayoutOp::Unmaximize(w) => b.set_maximized(w, false)?,
-                    LayoutOp::Place(w, r) => b.move_resize(w, r)?,
-                }
-            }
-            Ok(())
-        });
-        if done.is_none() {
-            self.layout.invalidate();
-        }
-        true
-    }
-
-    fn finish_win_closes(&mut self, now: Instant) -> bool {
-        if self.win_closes.is_empty() {
-            return false;
-        }
-        let due: Vec<WinClose> = {
-            let (due, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut self.win_closes)
-                .into_iter()
-                .partition(|c| now >= c.deadline);
-            self.win_closes = keep;
-            due
-        };
-        if due.is_empty() {
-            return false;
-        }
-        let alive: Vec<u32> = self
-            .x_try(|b| b.app_windows())
-            .unwrap_or_default()
-            .iter()
-            .map(|w| w.win.id)
-            .collect();
-        for c in due {
-            if alive.contains(&c.window) {
-                match c.pid {
-                    Some(pid) if terminate_pid(pid, false) => {
-                        eprintln!(
-                            "walpad-core: window {} ignored close, SIGTERM to {pid}",
-                            c.window
-                        )
-                    }
-                    _ => eprintln!("walpad-core: window {} did not close", c.window),
-                }
-            }
-        }
-        true
     }
 }

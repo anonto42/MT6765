@@ -1,5 +1,6 @@
 //! Settings > Top bar items and the header stats (owner request 2026-11-11).
 use super::*;
+use crate::settings_screen;
 use crate::topbar::StatItem;
 use walpad_proto::{StatsItems, StatsStatus};
 

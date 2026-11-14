@@ -5,45 +5,44 @@
 //! up the lock window is paused (`LockWindow::set_paused`): the call screen shows over the lock
 //! screen and offers nothing but the call controls; when it goes the lock screen is back.
 //! Own X connection, every wait has a deadline (walpad-x). The content is `call_screen.rs`.
-use crate::call_screen::{CallAct, CallScreen, Out};
+use crate::call_screen::{CallAct, CallScreen};
 use crate::dock::visible_area;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use walpad_proto::PhoneStatus;
-use walpad_ui::components::Painter;
 use walpad_ui::tokens::bg;
 use walpad_ui::{Canvas, Fonts};
 use walpad_x::{XConn, XError};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
-    AtomEnum, ChangeWindowAttributesAux, ConfigureWindowAux, ConnectionExt as _, CreateGCAux,
-    CreateWindowAux, EventMask, GrabMode, GrabStatus, MapState, PropMode, StackMode,
-    Window as XWindow, WindowClass,
+    AtomEnum, ChangeWindowAttributesAux, ConnectionExt as _, CreateGCAux, CreateWindowAux,
+    EventMask, MapState, PropMode, Window as XWindow, WindowClass,
 };
 use x11rb::protocol::Event;
 use x11rb::wrapper::ConnectionExt as _;
-use x11rb::CURRENT_TIME;
+
+mod x11;
 
 pub const WM_CLASS_INSTANCE: &str = "walpad-call";
 pub const WM_CLASS_CLASS: &str = "WalPad-Call";
 /// How often a lost grab / stacking is repaired while the screen is up.
-const GUARD_EVERY_MS: u64 = 400;
+pub(super) const GUARD_EVERY_MS: u64 = 400;
 
 pub struct CallWindow {
-    xc: XConn,
-    win: XWindow,
-    gc: u32,
+    pub(super) xc: XConn,
+    pub(super) win: XWindow,
+    pub(super) gc: u32,
     depth: u8,
     root_size: (i32, i32),
     shown: bool,
-    grabbed: bool,
-    screen: CallScreen,
+    pub(super) grabbed: bool,
+    pub(super) screen: CallScreen,
     canvas: Canvas,
-    next_guard: u64,
+    pub(super) next_guard: u64,
     dirty: bool,
 }
 
-fn pointer_events() -> EventMask {
+pub(super) fn pointer_events() -> EventMask {
     EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::BUTTON1_MOTION
 }
 
@@ -154,127 +153,6 @@ impl CallWindow {
         self.xc.conn.unmap_window(self.win)?;
         self.xc.conn.flush()?;
         Ok(())
-    }
-
-    fn raise(&self) -> Result<(), XError> {
-        self.xc.conn.configure_window(
-            self.win,
-            &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
-        )?;
-        Ok(())
-    }
-
-    fn grab(&mut self) -> Result<bool, XError> {
-        let c = &self.xc.conn;
-        let kb = c
-            .grab_keyboard(
-                false,
-                self.win,
-                CURRENT_TIME,
-                GrabMode::ASYNC,
-                GrabMode::ASYNC,
-            )?
-            .reply()?
-            .status;
-        let ptr = c
-            .grab_pointer(
-                false,
-                self.win,
-                pointer_events(),
-                GrabMode::ASYNC,
-                GrabMode::ASYNC,
-                self.win,
-                0u32,
-                CURRENT_TIME,
-            )?
-            .reply()?
-            .status;
-        self.grabbed = kb == GrabStatus::SUCCESS && ptr == GrabStatus::SUCCESS;
-        if !self.grabbed {
-            if kb == GrabStatus::SUCCESS {
-                c.ungrab_keyboard(CURRENT_TIME)?;
-            }
-            if ptr == GrabStatus::SUCCESS {
-                c.ungrab_pointer(CURRENT_TIME)?;
-            }
-        }
-        c.flush()?;
-        Ok(self.grabbed)
-    }
-
-    fn release(&mut self) -> Result<(), XError> {
-        self.xc.conn.ungrab_keyboard(CURRENT_TIME)?;
-        self.xc.conn.ungrab_pointer(CURRENT_TIME)?;
-        self.grabbed = false;
-        Ok(())
-    }
-
-    fn guard(&mut self, now: u64) -> Result<(), XError> {
-        if !self.shown || now < self.next_guard {
-            return Ok(());
-        }
-        self.next_guard = now + GUARD_EVERY_MS;
-        self.raise()?;
-        if !self.grabbed {
-            self.grab()?;
-        }
-        self.xc.conn.flush()?;
-        Ok(())
-    }
-
-    /// The shell window was resized (rotation).
-    pub fn set_shell_size(&mut self, w: i32, h: i32, fonts: &mut Fonts) -> Result<(), XError> {
-        let area = visible_area(w, h);
-        if area == self.screen.area {
-            return Ok(());
-        }
-        self.screen.set_area(area);
-        self.canvas = Canvas::new(area.0 as u32, area.1 as u32, bg()).ok_or("call canvas")?;
-        if self.shown {
-            self.draw(fonts)?;
-        }
-        Ok(())
-    }
-
-    /// Milliseconds until the timer or the guard needs us (None when hidden).
-    pub fn next_deadline(&self, now: u64) -> Option<u64> {
-        if !self.shown {
-            return None;
-        }
-        let guard = self.next_guard.saturating_sub(now).max(1);
-        let timer = self.screen.next_deadline(now);
-        Some(timer.map_or(guard, |t| t.min(guard)))
-    }
-
-    fn draw(&mut self, fonts: &mut Fonts) -> Result<(), XError> {
-        if !self.shown {
-            return Ok(());
-        }
-        self.screen.render(&mut Painter {
-            cv: &mut self.canvas,
-            fonts,
-        });
-        crate::present::present(
-            &self.xc.conn,
-            self.win,
-            self.gc,
-            self.depth,
-            &self.canvas,
-            self.canvas.bounds(),
-        )?;
-        self.dirty = false;
-        Ok(())
-    }
-
-    fn out(&mut self, o: Out, acts: &mut Vec<CallAct>) {
-        match o {
-            Out::None => {}
-            Out::Redraw => self.dirty = true,
-            Out::Act(a) => {
-                self.dirty = true;
-                acts.push(a);
-            }
-        }
     }
 
     /// X events and timers. `now` is the shell clock (ms). Returns what the owner asked for.

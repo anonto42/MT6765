@@ -1,6 +1,8 @@
 //! Mobile network screen and the Quick Settings Mobile data row (owner request 2026-11-10).
 use super::*;
+use crate::overlay;
 use walpad_proto::{MobileData, MobileReg, MobileStatus, ModemState, SimState};
+use walpad_ui::tokens::TEXT;
 
 fn set_mobile(app: &mut App, f: impl FnOnce(&mut MobileStatus)) {
     let mut s = app.model.status.clone().unwrap();

@@ -21,51 +21,31 @@ const PROBE_EVERY: Duration = Duration::from_secs(10);
 const TONE_TIMEOUT: Duration = Duration::from_secs(12);
 const SAVE_DELAY: Duration = Duration::from_millis(800);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Job {
-    Get,
-    Apply,
-}
+mod parse;
+mod poll;
+#[cfg(test)]
+mod tests;
 
-struct Run {
-    job: Job,
-    child: Child,
-    deadline: Instant,
-}
+pub use parse::parse_state;
+use parse::{Job, Run};
 
 pub struct Volume {
     script: PathBuf,
     file: PathBuf,
-    out: PathBuf,
+    pub(super) out: PathBuf,
     base: Option<PathBuf>,
-    st: AudioStatus,
+    pub(super) st: AudioStatus,
     run: Option<Run>,
     /// An `apply` of the current state is wanted.
-    pending: bool,
-    next_probe: Instant,
+    pub(super) pending: bool,
+    pub(super) next_probe: Instant,
     /// Save the state at this time (coalesces slider drags into one write).
-    save_at: Option<Instant>,
-    backend: Option<String>,
+    pub(super) save_at: Option<Instant>,
+    pub(super) backend: Option<String>,
     timeout: Duration,
-    probe_every: Duration,
+    pub(super) probe_every: Duration,
     /// The running test tone (`walpad-volume test`) and when to give up on it.
-    tone: Option<(Child, Instant)>,
-}
-
-/// One `key=value` line of the script's output.
-fn field<'a>(out: &'a str, key: &str) -> Option<&'a str> {
-    out.lines()
-        .filter_map(|l| l.split_once('='))
-        .find(|(k, _)| *k == key)
-        .map(|(_, v)| v.trim())
-}
-
-/// `<percent> <muted>` of the state file.
-pub fn parse_state(text: &str) -> Option<(u8, bool)> {
-    let mut it = text.split_whitespace();
-    let v: u32 = it.next()?.parse().ok()?;
-    let m = it.next().map(|m| m == "1").unwrap_or(false);
-    (v <= 100).then_some((v as u8, m))
+    pub(super) tone: Option<(Child, Instant)>,
 }
 
 impl Volume {
@@ -224,7 +204,7 @@ impl Volume {
         let _ = r.child.wait();
     }
 
-    fn save(&mut self) {
+    pub(super) fn save(&mut self) {
         let text = format!("{} {}\n", self.st.volume, u8::from(self.st.muted));
         if let Some(d) = self.file.parent() {
             let _ = std::fs::create_dir_all(d);
@@ -234,118 +214,5 @@ impl Volume {
         if std::fs::write(&tmp, text).is_ok() {
             let _ = std::fs::rename(&tmp, &self.file);
         }
-    }
-
-    /// Poll the child, start the next job, write the state file. True when the status changed.
-    pub fn tick(&mut self, now: Instant) -> bool {
-        let before = self.st;
-        if let Some((child, deadline)) = self.tone.as_mut() {
-            match child.try_wait() {
-                Ok(None) if now < *deadline => {}
-                Ok(None) => {
-                    if let Some((c, _)) = self.tone.take() {
-                        Self::kill(Run {
-                            job: Job::Get,
-                            child: c,
-                            deadline: now,
-                        });
-                    }
-                }
-                _ => self.tone = None,
-            }
-        }
-        if let Some(t) = self.save_at {
-            if now >= t {
-                self.save_at = None;
-                self.save();
-            }
-        }
-        if let Some(r) = self.run.as_mut() {
-            match r.child.try_wait() {
-                Ok(Some(status)) => {
-                    let Some(r) = self.run.take() else {
-                        return false;
-                    };
-                    let text = std::fs::read_to_string(&self.out).unwrap_or_default();
-                    self.finish(r.job, status.success(), &text);
-                }
-                Ok(None) if now >= r.deadline => {
-                    if let Some(r) = self.run.take() {
-                        Self::kill(r);
-                    }
-                    self.st.available = false;
-                }
-                Ok(None) => {}
-                Err(_) => {
-                    self.run = None;
-                    self.st.available = false;
-                }
-            }
-        }
-        if self.run.is_none() {
-            if self.pending {
-                self.pending = false;
-                self.spawn(Job::Apply, now);
-            } else if now >= self.next_probe {
-                self.next_probe = now + self.probe_every;
-                self.spawn(Job::Get, now);
-            }
-        }
-        self.st != before
-    }
-
-    fn finish(&mut self, job: Job, ok: bool, out: &str) {
-        let avail = ok && field(out, "available") == Some("1");
-        self.st.available = avail;
-        if job == Job::Get {
-            let backend = field(out, "backend").map(str::to_string);
-            // a sound server that started (or stopped) since the last probe: apply the stored state
-            if avail && backend != self.backend {
-                self.pending = true;
-            }
-            self.backend = backend;
-        } else if avail {
-            self.backend = field(out, "backend")
-                .map(str::to_string)
-                .or(self.backend.take());
-        }
-    }
-}
-
-impl Drop for Volume {
-    fn drop(&mut self) {
-        if let Some(r) = self.run.take() {
-            Self::kill(r);
-        }
-        if let Some((mut c, _)) = self.tone.take() {
-            let _ = c.kill();
-            let _ = c.wait();
-        }
-        if self.save_at.is_some() {
-            self.save();
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn state_file_parsing() {
-        assert_eq!(parse_state("70 0\n"), Some((70, false)));
-        assert_eq!(parse_state("0 1"), Some((0, true)));
-        assert_eq!(parse_state("55"), Some((55, false)));
-        assert_eq!(parse_state("101 0"), None);
-        assert_eq!(parse_state("x"), None);
-        assert_eq!(parse_state(""), None);
-    }
-
-    #[test]
-    fn output_fields() {
-        let o = "volume=40\nmuted=1\navailable=1\nbackend=pulse\n";
-        assert_eq!(field(o, "volume"), Some("40"));
-        assert_eq!(field(o, "backend"), Some("pulse"));
-        assert_eq!(field(o, "nope"), None);
     }
 }

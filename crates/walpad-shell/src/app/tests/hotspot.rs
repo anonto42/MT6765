@@ -1,5 +1,7 @@
 //! Wi-Fi switch and hotspot (owner request 2026-11-10): Network screen and Quick Settings.
 use super::*;
+use crate::overlay::PasswordSheet;
+use crate::panels;
 use walpad_proto::{HotspotInternet, HotspotState, HotspotStatus};
 
 fn with_status(app: &mut App, f: impl FnOnce(&mut Status)) {
