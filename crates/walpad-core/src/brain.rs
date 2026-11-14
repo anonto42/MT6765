@@ -364,6 +364,8 @@ impl Brain {
         let t = self.power.poll_interval_ms().min(GESTURE_TICK);
         if self.gest.active() {
             t.min(TOUCH_TICK)
+        } else if self.screen.state() == ScreenState::Off && t >= GESTURE_TICK {
+            1000
         } else {
             t
         }

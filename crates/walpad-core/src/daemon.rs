@@ -1822,9 +1822,15 @@ impl Daemon {
             Listener,
             Fifo,
             Client(usize),
+            Input,
         }
         let mut slots = Vec::new();
         let ready: Vec<(usize, bool, bool)>;
+        let input_fds: Vec<_> = self
+            .live
+            .as_ref()
+            .map(|l| l.inputs.poll_fds().collect())
+            .unwrap_or_default();
         {
             let mut fds = Vec::new();
             fds.push(PollFd::new(&self.listener, PollFlags::IN));
@@ -1832,6 +1838,10 @@ impl Daemon {
             if let Some(f) = &self.fifo {
                 fds.push(PollFd::new(f, PollFlags::IN));
                 slots.push(Slot::Fifo);
+            }
+            for fd in &input_fds {
+                fds.push(PollFd::new(fd, PollFlags::IN));
+                slots.push(Slot::Input);
             }
             for (i, c) in self.clients.iter().enumerate() {
                 let mut fl = PollFlags::IN;
@@ -2056,7 +2066,8 @@ impl Daemon {
                 self.step(Duration::from_millis(40));
             } else if self.live.is_some() {
                 self.pump_live();
-                let wait = self.brain.poll_interval_ms().clamp(10, 40);
+                let cap = if self.real_root() { 1000 } else { 40 };
+                let wait = self.brain.poll_interval_ms().clamp(10, cap);
                 self.step(Duration::from_millis(wait));
             } else {
                 self.step(Duration::from_millis(200));

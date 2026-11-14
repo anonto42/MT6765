@@ -82,6 +82,11 @@ impl Inputs {
         self.readers.len()
     }
 
+    /// Character-device file descriptors suitable for `poll(2)`.
+    pub fn poll_fds(&self) -> impl Iterator<Item = std::os::fd::BorrowedFd<'_>> {
+        self.readers.iter().filter_map(|(_, r)| r.poll_fd())
+    }
+
     /// All pending events from every device, ordered by kernel timestamp. Re-discovers every 5 s
     /// (new devices only) while fewer than the four expected devices are open.
     pub fn poll(&mut self, root: &Root) -> Vec<(Role, InputEvent)> {

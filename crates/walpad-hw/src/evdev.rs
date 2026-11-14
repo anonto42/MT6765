@@ -145,19 +145,30 @@ pub fn read_sw_bitmap(path: &std::path::Path) -> std::io::Result<[u8; SW_BITMAP_
 pub struct EvdevReader {
     file: File,
     pending: Vec<u8>,
+    is_char: bool,
 }
 
 impl EvdevReader {
     pub fn open(path: &std::path::Path) -> std::io::Result<Self> {
-        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
         let file = std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
             .open(path)?;
+        let is_char = file
+            .metadata()
+            .is_ok_and(|m| m.file_type().is_char_device());
         Ok(EvdevReader {
             file,
             pending: Vec::new(),
+            is_char,
         })
+    }
+    /// File descriptor for `poll(2)` when backed by a real character device (regular files in
+    /// tests are always `POLLIN` and would busy-spin).
+    pub fn poll_fd(&self) -> Option<std::os::fd::BorrowedFd<'_>> {
+        use std::os::fd::AsFd;
+        self.is_char.then(|| self.file.as_fd())
     }
     /// Read whatever is available now (non-blocking).
     pub fn read_available(&mut self) -> std::io::Result<Vec<InputEvent>> {

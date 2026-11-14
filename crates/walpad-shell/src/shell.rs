@@ -98,6 +98,7 @@ pub struct Shell {
     started: Instant,
     next_minute: Instant,
     dirty: bool,
+    screen_off: bool,
     need_refresh: bool,
     first_frame: bool,
     pub frames: u64,
@@ -271,6 +272,7 @@ impl Shell {
             started: Instant::now(),
             next_minute: Instant::now() + Duration::from_millis(to_minute),
             dirty: true,
+            screen_off: false,
             need_refresh: true,
             first_frame: true,
             frames: 0,
@@ -984,11 +986,17 @@ impl Shell {
                     self.report_keyboard();
                 }
                 CoreEvent::Status(s) => {
+                    let was_off = self.screen_off;
+                    self.screen_off = s.screen == walpad_proto::ScreenState::Off;
+                    if was_off && !self.screen_off {
+                        self.dirty = true;
+                    }
                     self.on_lock_status(&s.lock);
                     self.on_phone_status(&s.phone);
                 }
                 // the core is gone: no call can be controlled, the screen must not stay up
                 CoreEvent::Disconnected => {
+                    self.screen_off = false;
                     self.call_status = Default::default();
                     self.sync_call();
                 }
@@ -1057,7 +1065,7 @@ impl Shell {
         if self.need_refresh {
             self.reload();
         }
-        if self.dirty {
+        if self.dirty && !self.screen_off {
             self.redraw()?;
         }
 
