@@ -705,7 +705,7 @@ for f in "$PWD"/config/rootfs/etc/pulse/daemon.conf "$PWD"/config/rootfs/etc/pul
   [ -f "$f" ] && ok "image ships ${f#*/rootfs}" || bad "image ships ${f#*/rootfs}" missing present
 done
 grep -q "default-sample-rate = 44100" config/rootfs/etc/pulse/daemon.conf && grep -q "alternate-sample-rate = 44100" config/rootfs/etc/pulse/daemon.conf && ok "pulse: fixed 44.1 kHz" || bad "pulse: fixed 44.1 kHz" missing present
-grep -q "tsched=0" config/rootfs/etc/pulse/system.pa && ok "pulse: tsched off" || bad "pulse: tsched off" missing present
+grep -q "module-null-sink" config/rootfs/etc/pulse/system.pa && grep -q "parec" "$S/walpad-sound" && ok "pulse: null sink + parec/aplay bridge" || bad "pulse: null sink + parec/aplay bridge" missing present
 grep -q "udev" config/rootfs/etc/pulse/system.pa && bad "pulse: no udev module" present absent || ok "pulse: no udev module"
 grep -q "autospawn = no" config/rootfs/etc/pulse/client.conf && ok "pulse: clients never autospawn" || bad "pulse: autospawn" missing present
 for f in config/rootfs/usr/lib/firefox-esr/distribution/policies.json; do python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>/dev/null && ok "firefox policies.json is valid JSON" || bad "firefox policies.json" invalid valid; done

@@ -1,18 +1,10 @@
-# WalPad 8G: one ALSA sink directly on hw:0,0 (alsa-lib rejects period_time in a plug slave, so the plug cannot carry the period settings) (asound.conf: 44.1 kHz S16 stereo onto
-# hw:0,0).  No hotplug detection module (the image has no hotplug daemon): the card is fixed.
-# tsched=0 (no timer-based scheduling), 4 fragments of 4408 bytes = 1102 frames (about 25 ms) = the
-# period/buffer the driver accepts; mmap=0 (plain read/write access); and ignore_dB=1:
-# pulse never touches the codec's mixer (walpad-audio owns the amp switches), volume is software.
+# WalPad 8G: PulseAudio uses module-null-sink ("walpad") and walpad-sound bridges
+# walpad.monitor to hw:0,0 via parec | aplay.  Using module-alsa-sink directly on hw:0,0
+# triggers a kernel_panic in the legacy mt-soc driver under video CPU load (snd_pcm_rewind/recover),
+# whereas linear aplay writes are stable.  walpad-volume still controls software volume on "walpad".
 load-module module-native-protocol-unix auth-anonymous=1 socket=/run/pulse/native
-load-module module-alsa-sink device=hw:0,0 sink_name=walpad tsched=0 fragments=3 fragment_size=8192 rate=44100 format=s16le channels=2 mmap=0 ignore_dB=1
+load-module module-null-sink sink_name=walpad sink_properties=device.description="WalPad"
 set-default-sink walpad
-# Capture (owner request 2026-11-12, change headphone-mic-jack): the codec's capture PCM is the
-# separate ALSA device hw:0,1 (`00-01: MultiMedia1_Capture` in /proc/asound/pcm), never hw:0,0.
-# Which mic actually reaches it (built-in vs. headset) is chosen by walpad-audio's mixer switches
-# (Audio_ADC_1/2_Switch, Audio_MicSource1_Setting), not by this module; the source exists whether
-# or not a mic path is currently enabled, same as the sink exists whether or not anything plays.
-load-module module-alsa-source device=hw:0,1 source_name=walpad_mic tsched=0 fragments=3 fragment_size=8192 rate=44100 format=s16le channels=2 ignore_dB=1
-set-default-source walpad_mic
 # release the card after 10 s of silence (an idle PCM must not stay open)
 # no suspend-on-idle: closing and re-opening the codec PCM repeatedly hung the tablet (2026-11-11)
 #load-module module-suspend-on-idle timeout=10
