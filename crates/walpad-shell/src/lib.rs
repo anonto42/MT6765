@@ -1,45 +1,32 @@
-//! walpad-shell library: gesture recogniser, X11 presenter/window, application state and the
-//! event loop. The binary is a thin wrapper (src/main.rs).
+//! walpad-shell library: Feature-Sliced Design (FSD)
+//! - `app`: shell composition root, event loop, navigation, and global application state
+//! - `features`: vertical feature slices (UI screens, windows, models, workers, tests)
+//! - `shared`: cross-feature reusable infrastructure (IPC client, X11, input, UI chrome, config)
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod app;
-pub mod bluetooth;
-pub mod call_screen;
-pub mod call_window;
-pub mod chrome;
-pub mod clipboard;
-pub mod config;
-pub mod core_client;
-pub mod cursor;
-pub mod device_screen;
-pub mod dock;
-pub mod edge;
-pub mod gesture;
-pub mod gps_screen;
-pub mod home;
-pub mod ime;
-pub mod keyboard;
-pub mod lock_screen;
-pub mod lock_window;
-pub mod media;
-pub mod media_worker;
-pub mod mobile;
-pub mod mousepad;
-pub mod nav;
-pub mod network;
-pub mod notifications_ui;
-pub mod overlay;
-pub mod panels;
-pub mod phone_ui;
-pub mod present;
-pub mod recents;
-pub mod seltools;
-pub mod settings_screen;
-pub mod shell;
-pub mod store;
-pub mod topbar;
-pub mod volume_ui;
-pub mod vpn_screen;
-pub mod window;
-pub mod windows_ui;
-pub mod wmbar;
+pub mod features;
+pub mod shared;
+
+// Crate-root module re-exports preserving public, internal, and test paths.
+pub use app::{nav, shell};
+pub use features::call::{call_screen, call_window};
+pub use features::device::device_screen;
+pub use features::gps::gps_screen;
+pub use features::lock::{lock_screen, lock_window};
+pub use features::media::worker as media_worker;
+pub use features::notifications::notifications_ui;
+pub use features::phone::phone_ui;
+pub use features::settings::settings_screen;
+pub use features::volume::volume_ui;
+pub use features::vpn::vpn_screen;
+pub use features::windows::windows_ui;
+pub use features::{
+    bluetooth, clipboard, dock, home, keyboard, media, mobile, mousepad, network, panels, recents,
+    seltools, store, wmbar,
+};
+pub use shared::config;
+pub use shared::input::{edge, gesture};
+pub use shared::ipc::core_client;
+pub use shared::ui::{chrome, overlay, topbar};
+pub use shared::x11::{cursor, ime, present, window};

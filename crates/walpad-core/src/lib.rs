@@ -1,26 +1,23 @@
-//! walpad-core library: pure logic modules (no I/O, time passed in) plus the daemon.
+//! walpad-core library: Hexagonal / Feature-Sliced architecture
+//! - `domain`: pure deterministic state machine and business logic (no I/O)
+//! - `features`: vertical capability slices (connectivity, telephony, location, device)
+//! - `adapters`: outbound platform/IPC bridges (shadow, xbridge)
+//! - `app`: daemon composition root & event loop
+//! - `shared`: shared test/dev helpers
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod apps;
-pub mod bluetooth;
-pub mod brain;
-pub mod daemon;
-pub mod fake;
-pub mod gnss;
-pub mod hotspot;
-pub mod inputs;
-pub mod jack;
-pub mod layout;
-pub mod lock;
-pub mod logic;
-pub mod modem;
-pub mod notifications;
-pub mod phone;
-pub mod pkg;
-pub mod shadow;
-pub mod shadow_live;
-pub mod stats;
-pub mod volume;
-pub mod vpn;
-pub mod wpa;
-pub mod xbridge;
+pub mod adapters;
+pub mod app;
+pub mod domain;
+pub mod features;
+pub mod shared;
+
+// Crate-root module re-exports preserving public & test paths.
+pub use adapters::{shadow, shadow_live, xbridge};
+pub use app::daemon;
+pub use domain::{brain, logic};
+pub use features::connectivity::{bluetooth, hotspot, vpn, wpa};
+pub use features::device::{apps, inputs, jack, layout, lock, notifications, pkg, stats, volume};
+pub use features::location::gnss;
+pub use features::telephony::{modem, phone};
+pub use shared::fake;

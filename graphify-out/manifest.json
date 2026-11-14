@@ -197,148 +197,16 @@
     "ast_hash": "aee35888f758eeb1544cebec0c9fdada",
     "semantic_hash": ""
   },
-  "crates/walpad-core/src/apps.rs": {
-    "mtime": 1794669486.6440697,
-    "seen": 1794674809.357156,
-    "ast_hash": "2272f6c295f9c8a1461cbf3bb3812e39",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/brain.rs": {
-    "mtime": 1794671486.9361017,
-    "seen": 1794674809.357176,
-    "ast_hash": "6fd20ba73e7919c95d5147f9b0312525",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon.rs": {
-    "mtime": 1794667578.7200394,
-    "seen": 1794674809.3571794,
-    "ast_hash": "8d256d185cbc06bb455b26fb7df8e633",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/fake.rs": {
-    "mtime": 1794227627.8160324,
-    "seen": 1794312585.572716,
-    "ast_hash": "86522d841b11ad6bfc70fd8be35ce3ae",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/hotspot.rs": {
-    "mtime": 1794671573.020103,
-    "seen": 1794674809.3571994,
-    "ast_hash": "931d41a74a67bd42174cd8e102196731",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/inputs.rs": {
-    "mtime": 1794673807.4241385,
-    "seen": 1794674809.357204,
-    "ast_hash": "f09f83cf489e559e52bb2a8120590a2c",
-    "semantic_hash": ""
-  },
   "crates/walpad-core/src/lib.rs": {
-    "mtime": 1794453621.9280255,
-    "seen": 1794498070.8526838,
-    "ast_hash": "968c7c65402ce81f07770186e254109b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/battery.rs": {
-    "mtime": 1794671250.7520978,
-    "seen": 1794674809.357215,
-    "ast_hash": "d577b6199b7ca77737dce9414987c275",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/key_gestures.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.357224,
-    "ast_hash": "1029459e3e6821ebeb6911000eb3a000",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/mod.rs": {
-    "mtime": 1794453621.9280255,
-    "seen": 1794498070.8526888,
-    "ast_hash": "c2e5fa8c4375f7bc87dfd2b27bb659c4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/power_key.rs": {
-    "mtime": 1794673813.5201387,
-    "seen": 1794674809.3572304,
-    "ast_hash": "415ad0ef472c6cea1858c4b1093a20f1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/rotation.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.357232,
-    "ast_hash": "a88506af50e7c450ca0948e447faeed1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/screen_timeout.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572345,
-    "ast_hash": "e680a08a6b6e2cc5e6b6692d4c6bee28",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/touch_map.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572392,
-    "ast_hash": "7ef26bf3166f1d5e008f48a25d3d95e0",
+    "mtime": 1794675053.5081584,
+    "seen": 1794676725.3167486,
+    "ast_hash": "2753e5ccae65d4d79b774648ed324ab2",
     "semantic_hash": ""
   },
   "crates/walpad-core/src/main.rs": {
     "mtime": 1794230464.3480775,
     "seen": 1794312585.5727282,
     "ast_hash": "b14c664185ae1a83ff23edcc44f6fade",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/shadow.rs": {
-    "mtime": 1794673815.6401389,
-    "seen": 1794674809.3572905,
-    "ast_hash": "398c1a6aa8e305cfb60900b8f34c107c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/shadow_live.rs": {
-    "mtime": 1794229736.9200659,
-    "seen": 1794312585.5727296,
-    "ast_hash": "fe0d2f2089c38cf6053213321a5e11ed",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/ctrl.rs": {
-    "mtime": 1794230305.2200751,
-    "seen": 1794312585.5727305,
-    "ast_hash": "75c4d71cf5674787cf946a7927be63f3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/fake.rs": {
-    "mtime": 1794671468.4001014,
-    "seen": 1794674809.3573067,
-    "ast_hash": "7f914f2e4ec5797878744fcec334d71d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/manager.rs": {
-    "mtime": 1794671532.4881024,
-    "seen": 1794674809.3573084,
-    "ast_hash": "3bb0f770025ac0d375e56d67857e3f62",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/mod.rs": {
-    "mtime": 1794230187.1720731,
-    "seen": 1794312585.5727332,
-    "ast_hash": "38b3e337c08c7e56f9764d4683938d85",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/parse.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.3573122,
-    "ast_hash": "90d5883e55187091a987931bcdc0f7da",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/psk.rs": {
-    "mtime": 1794673816.7961388,
-    "seen": 1794674809.3573143,
-    "ast_hash": "b12fabad77471e76204a6f5ea3478bc3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/xbridge.rs": {
-    "mtime": 1794668974.7160616,
-    "seen": 1794674809.357316,
-    "ast_hash": "86a1f5b60f10413ec38db8b6dcab90ca",
     "semantic_hash": ""
   },
   "crates/walpad-core/tests/apps.rs": {
@@ -497,130 +365,16 @@
     "ast_hash": "af79dad784d4f9085bbc449b16e4c569",
     "semantic_hash": ""
   },
-  "crates/walpad-shell/src/app.rs": {
-    "mtime": 1794666956.6320295,
-    "seen": 1794674809.3574052,
-    "ast_hash": "70555859ff0ed63a89209ac62d7144e8",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests.rs": {
-    "mtime": 1794666705.7200255,
-    "seen": 1794674809.3574271,
-    "ast_hash": "fe3274640f0190735d3b782cfb56ebdb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/hotspot.rs": {
-    "mtime": 1794666707.4800255,
-    "seen": 1794674809.357431,
-    "ast_hash": "3defd6399970cc7a57dad1fa6f83b09a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/chrome.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3574514,
-    "ast_hash": "6b721c28ea7365fc66e5e4ced4c0198c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/config.rs": {
-    "mtime": 1794673907.8681402,
-    "seen": 1794674809.35747,
-    "ast_hash": "78e76d08db81bf7285baefd292300cba",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/core_client.rs": {
-    "mtime": 1794671637.0601041,
-    "seen": 1794674809.3574722,
-    "ast_hash": "d485ef08c1c5207607a3b62fa82366b1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/device_screen.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3574753,
-    "ast_hash": "d29abdf840ed44cff3a7002ae7414200",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock.rs": {
-    "mtime": 1794671764.712106,
-    "seen": 1794674809.3574784,
-    "ast_hash": "8d4d864af96c2f382f5746762cc93112",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/gesture.rs": {
-    "mtime": 1794673913.4161403,
-    "seen": 1794674809.3574874,
-    "ast_hash": "e98be5c52658c619941e7157b21d7825",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/home.rs": {
-    "mtime": 1794673915.8361404,
-    "seen": 1794674809.3574922,
-    "ast_hash": "453a63094d5ec25bb07516da5bf9c999",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/keyboard.rs": {
-    "mtime": 1794672816.2041228,
-    "seen": 1794674809.3574984,
-    "ast_hash": "dadfff85756fa7af3b9a1c9eba43abe2",
-    "semantic_hash": ""
-  },
   "crates/walpad-shell/src/lib.rs": {
-    "mtime": 1794549048.4560065,
-    "seen": 1794550791.9503067,
-    "ast_hash": "a0c5f6bdfcceb47bdf1184ca181fb887",
+    "mtime": 1794675458.2681649,
+    "seen": 1794676725.3173084,
+    "ast_hash": "810a097ef3ce11bfa75e7838fdc2e180",
     "semantic_hash": ""
   },
   "crates/walpad-shell/src/main.rs": {
     "mtime": 1794549048.4560065,
     "seen": 1794550791.9503088,
     "ast_hash": "a579dc2bb2ef2d65a83ea23fc1db52cd",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad.rs": {
-    "mtime": 1794672854.7401235,
-    "seen": 1794674809.357522,
-    "ast_hash": "bc713542e8982e5046fb1bd98fb49e9b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/network.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575313,
-    "ast_hash": "d923f041f956fa34ca8c043b35514b41",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/overlay.rs": {
-    "mtime": 1794670217.3880813,
-    "seen": 1794674809.357536,
-    "ast_hash": "a742a9b372e812ab664e50c4682d7720",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/panels.rs": {
-    "mtime": 1794669995.276078,
-    "seen": 1794674809.3575406,
-    "ast_hash": "dba45aeb40a85b1ce18f12c9e0810044",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/present.rs": {
-    "mtime": 1794673921.2521405,
-    "seen": 1794674809.3575516,
-    "ast_hash": "5306bb1bcb06731e79418d5185498acf",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/settings_screen.rs": {
-    "mtime": 1794669128.3880641,
-    "seen": 1794674809.3575623,
-    "ast_hash": "d43fae808686fb6489c10b393778a19f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575673,
-    "ast_hash": "25ea38cc7ad145fa6e09b61619f062f7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/window.rs": {
-    "mtime": 1794549048.4720066,
-    "seen": 1794550791.9503279,
-    "ast_hash": "907310ca8378855ba89ea1951e3ecc64",
     "semantic_hash": ""
   },
   "crates/walpad-shell/tests/capability.rs": {
@@ -786,9 +540,9 @@
     "semantic_hash": ""
   },
   "scripts/check.sh": {
-    "mtime": 1794237747.9401937,
-    "seen": 1794312585.572803,
-    "ast_hash": "24d4977026d62bbc522f20a3258dd39d",
+    "mtime": 1794676323.8241787,
+    "seen": 1794676725.3175166,
+    "ast_hash": "79cefa18606dba0a9be2d7e58094e8b8",
     "semantic_hash": ""
   },
   "scripts/console.py": {
@@ -1368,9 +1122,9 @@
     "semantic_hash": ""
   },
   ".agents/shared/rules/rust-migration.md": {
-    "mtime": 1794312519.8079937,
-    "seen": 1794312585.5728927,
-    "ast_hash": "e3f07a1893c5531de85146b64cbc50e5",
+    "mtime": 1794674880.4401557,
+    "seen": 1794676725.3177583,
+    "ast_hash": "3f36c4b12a27ee3c4362ff49f5c5518b",
     "semantic_hash": ""
   },
   ".agents/shared/rules/vendor-daemons.md": {
@@ -1380,9 +1134,9 @@
     "semantic_hash": ""
   },
   ".agents/shared/scopes/core.md": {
-    "mtime": 1794312539.4439933,
-    "seen": 1794312585.5728946,
-    "ast_hash": "87024fe9d4cfaa61c9b9a942074acb02",
+    "mtime": 1794675902.984172,
+    "seen": 1794676725.3177629,
+    "ast_hash": "87ae45306bddfe7c698f3edf78772c3b",
     "semantic_hash": ""
   },
   ".agents/shared/scopes/rootfs.md": {
@@ -1392,9 +1146,9 @@
     "semantic_hash": ""
   },
   ".agents/shared/scopes/shell.md": {
-    "mtime": 1794312539.4479933,
-    "seen": 1794312585.5728962,
-    "ast_hash": "52f1af6e2e391015575287ee1293c74c",
+    "mtime": 1794675905.052172,
+    "seen": 1794676725.3177671,
+    "ast_hash": "42e32ac213e3450ae810cccd1cc4eb52",
     "semantic_hash": ""
   },
   ".claude/README.md": {
@@ -1655,12 +1409,6 @@
     "ast_hash": "5bf1939c7c13d13bd5268781b99a36c0",
     "semantic_hash": ""
   },
-  "openspec/config.yaml": {
-    "mtime": 1794312570.2879927,
-    "seen": 1794312585.572938,
-    "ast_hash": "300deb7e2d17bd238836b8654bd26f82",
-    "semantic_hash": ""
-  },
   "config/rootfs/etc/walpad/catalogue.json": {
     "mtime": 1794368997.0360844,
     "seen": 1794498070.852627,
@@ -1791,144 +1539,6 @@
     "mtime": 1794366020.7200427,
     "seen": 1794498070.8526714,
     "ast_hash": "e679ac4b01c9e3e59b1ae88c61c07784",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/mod.rs": {
-    "mtime": 1794669630.900072,
-    "seen": 1794674809.3571649,
-    "ast_hash": "c7dbd4fcf3d868f4c7c3e92fd6d3db40",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/parse.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3571696,
-    "ast_hash": "6715ffcb27d6683a7626e3be72163a7e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/windows.rs": {
-    "mtime": 1794667535.5160387,
-    "seen": 1794674809.35719,
-    "ast_hash": "8476672d5d9827796ff4f04d9f9cd36a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/gnss.rs": {
-    "mtime": 1794671554.7761028,
-    "seen": 1794674809.3571956,
-    "ast_hash": "17b1137b7236d3ec23206616529439aa",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/jack.rs": {
-    "mtime": 1794673809.6161387,
-    "seen": 1794674809.3572063,
-    "ast_hash": "06b64fe54499d90602e3160364116a03",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/layout.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.3572083,
-    "ast_hash": "3a4a85ff99683563ec1e66958741eea5",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/lock.rs": {
-    "mtime": 1794669728.9360735,
-    "seen": 1794674809.3572116,
-    "ast_hash": "e4eb76585c4dc797b1fe40f488626e59",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/gesture.rs": {
-    "mtime": 1794669429.868069,
-    "seen": 1794674809.3572173,
-    "ast_hash": "abcf7234dfd320ceaf9fefbc01f6b9b5",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/jack.rs": {
-    "mtime": 1794673811.3601387,
-    "seen": 1794674809.3572216,
-    "ast_hash": "89d3be54169b2da5c7e9175d5cdddf62",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/notifications.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.357228,
-    "ast_hash": "65359bd3840624dc9bd4eb287aed3f7b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/soc.rs": {
-    "mtime": 1794671386.2881,
-    "seen": 1794674809.3572361,
-    "ast_hash": "50ec2c9d84131d57890c90e76a170fb2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/at.rs": {
-    "mtime": 1794671530.4081023,
-    "seen": 1794674809.357243,
-    "ast_hash": "5e95e5e350b84d5f66a3db3171877d55",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/mod.rs": {
-    "mtime": 1794668858.9000597,
-    "seen": 1794674809.357248,
-    "ast_hash": "01838ae6affa878254068c811ff3c887",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/parse.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572493,
-    "ast_hash": "346569f9bb7bf08cc76ee4d3ad10abba",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/notifications.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.357256,
-    "ast_hash": "6d5f878bcbcc7ceb0bd49ba367db7b49",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/mod.rs": {
-    "mtime": 1794668025.8440466,
-    "seen": 1794674809.3572633,
-    "ast_hash": "7d05fc197bfa255192b6f0b3589ad89a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/parse.rs": {
-    "mtime": 1794670406.2200844,
-    "seen": 1794674809.357267,
-    "ast_hash": "a4587186e69ab8fccd73672097747f76",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/pdu.rs": {
-    "mtime": 1794670387.0200841,
-    "seen": 1794674809.3572707,
-    "ast_hash": "5faad40863a76c292d96dafe57c5e317",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/store.rs": {
-    "mtime": 1794670434.8000848,
-    "seen": 1794674809.357277,
-    "ast_hash": "b295153b01ae4b0fd6b6badb76cb3501",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/pkg.rs": {
-    "mtime": 1794669041.0800626,
-    "seen": 1794674809.3572848,
-    "ast_hash": "13c4eaa5a8701fab81f9cb96c3c134c6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/stats.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572943,
-    "ast_hash": "4356dfdbc8d128638263f6d0ea74bb94",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/volume.rs": {
-    "mtime": 1794672814.0361228,
-    "seen": 1794674809.3572967,
-    "ast_hash": "7dffdccd7b06c859479e4099c7b8ad0a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/vpn.rs": {
-    "mtime": 1794669558.120071,
-    "seen": 1794674809.3573005,
-    "ast_hash": "5ccf94aa2c4e6132a62d51bdea8c588a",
     "semantic_hash": ""
   },
   "crates/walpad-core/tests/bluetooth_ipc.rs": {
@@ -2073,216 +1683,6 @@
     "mtime": 1794409280.8720622,
     "seen": 1794498070.8527637,
     "ast_hash": "45dddfac6e2743c5d8465da290bfd89b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/lock_flow.rs": {
-    "mtime": 1794666948.5000293,
-    "seen": 1794674809.3574126,
-    "ast_hash": "92f23157822347b7a9061f061b83825a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/phone_flow.rs": {
-    "mtime": 1794666953.7320294,
-    "seen": 1794674809.3574162,
-    "ast_hash": "b6a121a0faae92e382e4a0d87ffa2616",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/bluetooth.rs": {
-    "mtime": 1794317702.8358934,
-    "seen": 1794498070.852768,
-    "ast_hash": "1bee0c2b68f7e60dcd0b04104c4210f8",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/gps.rs": {
-    "mtime": 1794595423.66824,
-    "seen": 1794674809.3574297,
-    "ast_hash": "3302870fdec074bcd1ca596107a3f2df",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/lock.rs": {
-    "mtime": 1794318745.9518733,
-    "seen": 1794498070.8527706,
-    "ast_hash": "62de3f05c33c62c88c86c88135ee3aed",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/media.rs": {
-    "mtime": 1794406342.5200155,
-    "seen": 1794498070.8527713,
-    "ast_hash": "6424718c440203163b98aeb906531d0b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/mobile.rs": {
-    "mtime": 1794666708.9160256,
-    "seen": 1794674809.3574343,
-    "ast_hash": "f26e28041dfa8d600f52fb6927625e59",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/store.rs": {
-    "mtime": 1794666710.0560255,
-    "seen": 1794674809.3574355,
-    "ast_hash": "6abdbd000e81766f88e8bc3512f22c19",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/topbar.rs": {
-    "mtime": 1794666711.1880255,
-    "seen": 1794674809.3574367,
-    "ast_hash": "59dc268f33538f1acffcf241421ad3fd",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/volume.rs": {
-    "mtime": 1794666754.0040262,
-    "seen": 1794674809.3574376,
-    "ast_hash": "95e7636e7d451e81579e1dea6b459cba",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tests/vpn.rs": {
-    "mtime": 1794319573.4358573,
-    "seen": 1794498070.8527749,
-    "ast_hash": "1c7e9dc565ffa65e8e6a5afc35c4953f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/bluetooth.rs": {
-    "mtime": 1794670174.3400807,
-    "seen": 1794674809.3574402,
-    "ast_hash": "95a3982cc853ed22effc4b71cbe5096d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/call_screen.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357445,
-    "ast_hash": "c080d34daf7c8b1c9f755dbf968f7a21",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/call_window.rs": {
-    "mtime": 1794672528.0881183,
-    "seen": 1794674809.3574493,
-    "ast_hash": "025926d8b1eeafff43f70ff866751471",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/clipboard.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357456,
-    "ast_hash": "a64209db3b6ee0ceb2568a14278117c1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/cursor.rs": {
-    "mtime": 1794549048.4520063,
-    "seen": 1794550791.9502983,
-    "ast_hash": "6c888f4a779486af1106c9b501c15e07",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/edge.rs": {
-    "mtime": 1794673910.8881402,
-    "seen": 1794674809.3574855,
-    "ast_hash": "8edb3c4020636395cd2c0255215e3e34",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/gps_screen.rs": {
-    "mtime": 1794672528.1121182,
-    "seen": 1794674809.3574896,
-    "ast_hash": "6f36836d3f52db817f01664b02caae6e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/ime.rs": {
-    "mtime": 1794670071.6320791,
-    "seen": 1794674809.3574946,
-    "ast_hash": "953376df3fe7afd9049e677b09bacaf0",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_screen.rs": {
-    "mtime": 1794669287.7920666,
-    "seen": 1794674809.3575044,
-    "ast_hash": "884169744f10979d4e5f47a7316c825f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_window.rs": {
-    "mtime": 1794672528.1281183,
-    "seen": 1794674809.357509,
-    "ast_hash": "9863efb14160a17419abc7c406e7faa6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media.rs": {
-    "mtime": 1794669327.9920673,
-    "seen": 1794674809.357512,
-    "ast_hash": "3e0063eb6e18cca6a81a053d98536456",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media_worker.rs": {
-    "mtime": 1794671637.0601041,
-    "seen": 1794674809.3575168,
-    "ast_hash": "a302c274281bee2b4c8c38cc5e120414",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mobile.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357519,
-    "ast_hash": "70540edd5603afd33b435c68510e5f5a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/nav.rs": {
-    "mtime": 1794672528.1481183,
-    "seen": 1794674809.3575282,
-    "ast_hash": "60fa10a23d73f8f188165b8694625c52",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/notifications_ui.rs": {
-    "mtime": 1794673918.7761405,
-    "seen": 1794674809.3575342,
-    "ast_hash": "c93aefea295b0c92ceb53d68d40a4b14",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui.rs": {
-    "mtime": 1794668137.4440484,
-    "seen": 1794674809.3575454,
-    "ast_hash": "c285cd49ffd07eacfebb52b0d8f110ef",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/recents.rs": {
-    "mtime": 1794672762.784122,
-    "seen": 1794674809.3575537,
-    "ast_hash": "3e7b7842f87bc647d9b925a383d21e30",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/seltools.rs": {
-    "mtime": 1794672732.8081214,
-    "seen": 1794674809.357557,
-    "ast_hash": "7504515b4b50abbc9322eb26b1bd651c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/store.rs": {
-    "mtime": 1794670252.480082,
-    "seen": 1794674809.3575728,
-    "ast_hash": "547bc198724572b56352830b3cb9eb90",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/topbar.rs": {
-    "mtime": 1794671637.0601041,
-    "seen": 1794674809.3575773,
-    "ast_hash": "80d70ceb68e7082d514b70e04e641151",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/volume_ui.rs": {
-    "mtime": 1794549048.4720066,
-    "seen": 1794550791.950326,
-    "ast_hash": "14de159a5bdde167fd6ad3a5c3fa2a56",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/vpn_screen.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575807,
-    "ast_hash": "b159082614f769ca2cbf34c08985af93",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/windows_ui.rs": {
-    "mtime": 1794673923.9121404,
-    "seen": 1794674809.3575845,
-    "ast_hash": "4c5d6f5ff3c3f9fa078bb3d124d9381b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar.rs": {
-    "mtime": 1794671767.076106,
-    "seen": 1794674809.3575861,
-    "ast_hash": "1df9805dc9ce124473313beea7871e78",
     "semantic_hash": ""
   },
   "crates/walpad-shell/tests/cursor.rs": {
@@ -2465,618 +1865,6 @@
     "ast_hash": "c0f9d417dd0435c9dd7806d871c11a94",
     "semantic_hash": ""
   },
-  "openspec/changes/app-catalogue-manager/.openspec.yaml": {
-    "mtime": 1794316402.1959186,
-    "seen": 1794498070.852982,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-catalogue-manager/README.md": {
-    "mtime": 1794316402.1959186,
-    "seen": 1794498070.8529828,
-    "ast_hash": "e9cab1a7c69b63a8c13f03538f4214ad",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-catalogue-manager/proposal.md": {
-    "mtime": 1794316403.1159186,
-    "seen": 1794498070.8529832,
-    "ast_hash": "74a4f2e96e7fcc0ace988ad5ba3c67c0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-catalogue-manager/specs/app-manager/spec.md": {
-    "mtime": 1794316403.1159186,
-    "seen": 1794498070.852984,
-    "ast_hash": "eebb564a645121eb29fb75b5ba2ab163",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-catalogue-manager/tasks.md": {
-    "mtime": 1794319058.7798672,
-    "seen": 1794498070.852985,
-    "ast_hash": "e68f5b83f539f6e55a867dba66041c00",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-switcher-navigation/.openspec.yaml": {
-    "mtime": 1794316385.495919,
-    "seen": 1794498070.8529856,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-switcher-navigation/README.md": {
-    "mtime": 1794316385.499919,
-    "seen": 1794498070.852986,
-    "ast_hash": "40f569ea1d18a6979b09cacc58ab0bbe",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-switcher-navigation/proposal.md": {
-    "mtime": 1794316386.4879189,
-    "seen": 1794498070.8529868,
-    "ast_hash": "7ed51ec70eeae7c75dffd6da2a6b9516",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-switcher-navigation/specs/navigation/spec.md": {
-    "mtime": 1794316386.4879189,
-    "seen": 1794498070.8529873,
-    "ast_hash": "0b180237871c38a0487fa188b7adfe2b",
-    "semantic_hash": ""
-  },
-  "openspec/changes/app-switcher-navigation/tasks.md": {
-    "mtime": 1794318412.3278797,
-    "seen": 1794498070.8529882,
-    "ast_hash": "a1095a37448e63d696a6106cfd55e0c3",
-    "semantic_hash": ""
-  },
-  "openspec/changes/battery-soc-time-left/proposal.md": {
-    "mtime": 1794416597.4241788,
-    "seen": 1794498070.8529887,
-    "ast_hash": "2ea435112b3de506d90d2852c9811e18",
-    "semantic_hash": ""
-  },
-  "openspec/changes/battery-soc-time-left/specs/battery/spec.md": {
-    "mtime": 1794416597.4241788,
-    "seen": 1794498070.8529916,
-    "ast_hash": "8a00a1cdd80a95df42d84d60193f8a8d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/battery-soc-time-left/tasks.md": {
-    "mtime": 1794416597.4241788,
-    "seen": 1794498070.8529923,
-    "ast_hash": "3c26e9ff439e984f51a05a44c6bf5899",
-    "semantic_hash": ""
-  },
-  "openspec/changes/bluetooth-ui/.openspec.yaml": {
-    "mtime": 1794316412.0759184,
-    "seen": 1794498070.8529928,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/bluetooth-ui/README.md": {
-    "mtime": 1794316412.0799184,
-    "seen": 1794498070.8529932,
-    "ast_hash": "e6528c8abc54a38e1beee16c54eff717",
-    "semantic_hash": ""
-  },
-  "openspec/changes/bluetooth-ui/proposal.md": {
-    "mtime": 1794316412.9999185,
-    "seen": 1794498070.852994,
-    "ast_hash": "49ca156df647fabc57c9d47947af7b03",
-    "semantic_hash": ""
-  },
-  "openspec/changes/bluetooth-ui/specs/bluetooth/spec.md": {
-    "mtime": 1794316412.9999185,
-    "seen": 1794498070.8529944,
-    "ast_hash": "234c19fdd67388e3390e781d44055214",
-    "semantic_hash": ""
-  },
-  "openspec/changes/bluetooth-ui/tasks.md": {
-    "mtime": 1794316412.9999185,
-    "seen": 1794498070.8529952,
-    "ast_hash": "852c639b1faa6f86c5c2e31559d2d97e",
-    "semantic_hash": ""
-  },
-  "openspec/changes/camera-bringup/.openspec.yaml": {
-    "mtime": 1794312738.2159894,
-    "seen": 1794498070.8529959,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/camera-bringup/proposal.md": {
-    "mtime": 1794312766.3879888,
-    "seen": 1794498070.8529963,
-    "ast_hash": "9218eba8a98cf027cab9cfea48fe059f",
-    "semantic_hash": ""
-  },
-  "openspec/changes/camera-bringup/specs/camera/spec.md": {
-    "mtime": 1794312774.3839886,
-    "seen": 1794498070.852997,
-    "ast_hash": "94e449e5bad47962d9cb673c603246e3",
-    "semantic_hash": ""
-  },
-  "openspec/changes/camera-bringup/tasks.md": {
-    "mtime": 1794318297.575882,
-    "seen": 1794498070.8529978,
-    "ast_hash": "71ea5c8ea7a1c23e9c50d80e5f22828b",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clipboard-selection/.openspec.yaml": {
-    "mtime": 1794316386.779919,
-    "seen": 1794498070.8529985,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clipboard-selection/README.md": {
-    "mtime": 1794316386.779919,
-    "seen": 1794498070.8529992,
-    "ast_hash": "6d463f17259fa0810cc7497333a84b4f",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clipboard-selection/proposal.md": {
-    "mtime": 1794316387.699919,
-    "seen": 1794498070.8529997,
-    "ast_hash": "3d2d82673ad4fc4e82313686fbd71038",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clipboard-selection/specs/clipboard/spec.md": {
-    "mtime": 1794316387.699919,
-    "seen": 1794498070.8530002,
-    "ast_hash": "dc400a38d0623fd44c13d1806f8ebce3",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clipboard-selection/tasks.md": {
-    "mtime": 1794316387.699919,
-    "seen": 1794498070.8530009,
-    "ast_hash": "329ba80f2dd579c6af54f0fb5e7a0d1f",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clock-alarms-productivity/.openspec.yaml": {
-    "mtime": 1794316410.8279185,
-    "seen": 1794498070.8530014,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clock-alarms-productivity/README.md": {
-    "mtime": 1794316410.8279185,
-    "seen": 1794498070.853002,
-    "ast_hash": "267a16393e4122b65e12340ccac60988",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clock-alarms-productivity/proposal.md": {
-    "mtime": 1794316411.7879183,
-    "seen": 1794498070.8530028,
-    "ast_hash": "4cbe7f15bf0a61c1b454014200b5bc88",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clock-alarms-productivity/specs/clock/spec.md": {
-    "mtime": 1794316411.7879183,
-    "seen": 1794498070.8530033,
-    "ast_hash": "98f6208e3c552d8bd480f29c3f4b21d1",
-    "semantic_hash": ""
-  },
-  "openspec/changes/clock-alarms-productivity/tasks.md": {
-    "mtime": 1794316411.7879183,
-    "seen": 1794498070.8530037,
-    "ast_hash": "7ff37d8c11bba699bf3789c689119d77",
-    "semantic_hash": ""
-  },
-  "openspec/changes/device-notifications/proposal.md": {
-    "mtime": 1794453621.9480255,
-    "seen": 1794498070.8530045,
-    "ast_hash": "24582f77b940cf620927297a5f233ba9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/device-notifications/tasks.md": {
-    "mtime": 1794453621.9480255,
-    "seen": 1794498070.8530054,
-    "ast_hash": "ae8d3bccbb31416f461afdc652087ed4",
-    "semantic_hash": ""
-  },
-  "openspec/changes/display-sound-settings/.openspec.yaml": {
-    "mtime": 1794316399.7839186,
-    "seen": 1794498070.853006,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/display-sound-settings/README.md": {
-    "mtime": 1794316399.7839186,
-    "seen": 1794498070.8530066,
-    "ast_hash": "e29657ab106a802f19ee0f01efb66a7c",
-    "semantic_hash": ""
-  },
-  "openspec/changes/display-sound-settings/proposal.md": {
-    "mtime": 1794316400.6999185,
-    "seen": 1794498070.853007,
-    "ast_hash": "3af783cc7045c09fb4c7618f03f3a8e9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/display-sound-settings/specs/display-sound/spec.md": {
-    "mtime": 1794316400.6999185,
-    "seen": 1794498070.8530076,
-    "ast_hash": "5b9cfe3a253e247ed3a6ae5f8da02fa4",
-    "semantic_hash": ""
-  },
-  "openspec/changes/display-sound-settings/tasks.md": {
-    "mtime": 1794316400.6999185,
-    "seen": 1794498070.8530083,
-    "ast_hash": "f09a26cf727c5e3582857d6f6d4bc6a7",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-mic-jack/.openspec.yaml": {
-    "mtime": 1794452136.3280046,
-    "seen": 1794498070.853009,
-    "ast_hash": "3d81d1267eddd749eda85fff90308b20",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-mic-jack/README.md": {
-    "mtime": 1794452136.3280046,
-    "seen": 1794498070.8530097,
-    "ast_hash": "1168d14214b20cf65d3a8dd98400b277",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-mic-jack/proposal.md": {
-    "mtime": 1794452136.3280046,
-    "seen": 1794498070.8530104,
-    "ast_hash": "59b13c5c106312a95fafc738105c025d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-mic-jack/specs/audio/spec.md": {
-    "mtime": 1794452136.3280046,
-    "seen": 1794498070.8530111,
-    "ast_hash": "43b3e6ddb25c0bc35547ecad5455ba06",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-mic-jack/tasks.md": {
-    "mtime": 1794452136.3280046,
-    "seen": 1794498070.853012,
-    "ast_hash": "f19de80485829d2f3574329d9d9c0736",
-    "semantic_hash": ""
-  },
-  "openspec/changes/kali-chroot-mode/.openspec.yaml": {
-    "mtime": 1794316420.7079182,
-    "seen": 1794498070.8530126,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/kali-chroot-mode/README.md": {
-    "mtime": 1794316420.7079182,
-    "seen": 1794498070.8530133,
-    "ast_hash": "afbb20f2aa5655f0ef261fcf08b53728",
-    "semantic_hash": ""
-  },
-  "openspec/changes/kali-chroot-mode/proposal.md": {
-    "mtime": 1794316421.6399183,
-    "seen": 1794498070.853014,
-    "ast_hash": "e747f187fc8b8a29aea454a727534793",
-    "semantic_hash": ""
-  },
-  "openspec/changes/kali-chroot-mode/specs/security-mode/spec.md": {
-    "mtime": 1794316421.6399183,
-    "seen": 1794498070.8530147,
-    "ast_hash": "2ee3f9be733bcfe0cb428e762c63dc89",
-    "semantic_hash": ""
-  },
-  "openspec/changes/kali-chroot-mode/tasks.md": {
-    "mtime": 1794316421.6399183,
-    "seen": 1794498070.8530152,
-    "ast_hash": "6ffa443f1a0d778c03f7b4f737d90bd0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/keyboard-languages-bangla/.openspec.yaml": {
-    "mtime": 1794316400.9759185,
-    "seen": 1794498070.8530161,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/keyboard-languages-bangla/README.md": {
-    "mtime": 1794316400.9759185,
-    "seen": 1794498070.8530166,
-    "ast_hash": "887b62cde7ceb833998ecfe48320ddc0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/keyboard-languages-bangla/proposal.md": {
-    "mtime": 1794316401.9039185,
-    "seen": 1794498070.8530173,
-    "ast_hash": "4f1ad9d005ad471340ecbd8078e256f0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/keyboard-languages-bangla/specs/keyboard-languages/spec.md": {
-    "mtime": 1794316401.9039185,
-    "seen": 1794498070.853018,
-    "ast_hash": "39b5d00ccd0b17efb98c721aafa5ad75",
-    "semantic_hash": ""
-  },
-  "openspec/changes/keyboard-languages-bangla/tasks.md": {
-    "mtime": 1794316401.9039185,
-    "seen": 1794498070.8530185,
-    "ast_hash": "6a2b3afa14db518d72c7f41b5aa55074",
-    "semantic_hash": ""
-  },
-  "openspec/changes/launcher-home-screen/.openspec.yaml": {
-    "mtime": 1794316414.4999185,
-    "seen": 1794498070.8530192,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/launcher-home-screen/README.md": {
-    "mtime": 1794316414.4999185,
-    "seen": 1794498070.85302,
-    "ast_hash": "a9a28380babb7913deb788daed455874",
-    "semantic_hash": ""
-  },
-  "openspec/changes/launcher-home-screen/proposal.md": {
-    "mtime": 1794316420.4319181,
-    "seen": 1794498070.8530204,
-    "ast_hash": "1c52b7a44032e533b3ce55af75be5f71",
-    "semantic_hash": ""
-  },
-  "openspec/changes/launcher-home-screen/specs/launcher/spec.md": {
-    "mtime": 1794316420.4319181,
-    "seen": 1794498070.8530211,
-    "ast_hash": "050cf0fc2147d89069704bec093cc04a",
-    "semantic_hash": ""
-  },
-  "openspec/changes/launcher-home-screen/tasks.md": {
-    "mtime": 1794316420.4319181,
-    "seen": 1794498070.8530216,
-    "ast_hash": "3abb04bff70d5ca8576aa8149abbd71a",
-    "semantic_hash": ""
-  },
-  "openspec/changes/lock-screen/.openspec.yaml": {
-    "mtime": 1794316389.1759188,
-    "seen": 1794498070.853022,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/lock-screen/README.md": {
-    "mtime": 1794316389.1759188,
-    "seen": 1794498070.853023,
-    "ast_hash": "9b0c16fd3369b151bda59034864e1586",
-    "semantic_hash": ""
-  },
-  "openspec/changes/lock-screen/proposal.md": {
-    "mtime": 1794316399.4959188,
-    "seen": 1794498070.8530235,
-    "ast_hash": "3c5bbced903db62468d8e0f58c98581c",
-    "semantic_hash": ""
-  },
-  "openspec/changes/lock-screen/specs/lock/spec.md": {
-    "mtime": 1794316399.4959188,
-    "seen": 1794498070.853024,
-    "ast_hash": "35a900843644f1901a160fe5439661ab",
-    "semantic_hash": ""
-  },
-  "openspec/changes/lock-screen/tasks.md": {
-    "mtime": 1794318745.9558733,
-    "seen": 1794498070.8530247,
-    "ast_hash": "a74090fc9a133e8aa9c397216e1b0d65",
-    "semantic_hash": ""
-  },
-  "openspec/changes/media-apps-capture/.openspec.yaml": {
-    "mtime": 1794316409.6199183,
-    "seen": 1794498070.8530252,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/media-apps-capture/README.md": {
-    "mtime": 1794316409.6199183,
-    "seen": 1794498070.8530257,
-    "ast_hash": "ebddde3e8ed9ff77b6e4d9dcb990e261",
-    "semantic_hash": ""
-  },
-  "openspec/changes/media-apps-capture/proposal.md": {
-    "mtime": 1794316410.5559185,
-    "seen": 1794498070.8530266,
-    "ast_hash": "d4e482cd55e4c6a453e5b4221a34b128",
-    "semantic_hash": ""
-  },
-  "openspec/changes/media-apps-capture/specs/media/spec.md": {
-    "mtime": 1794316410.5559185,
-    "seen": 1794498070.853027,
-    "ast_hash": "d82c84c1ec3e0db0d84b892b31286d2d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/media-apps-capture/tasks.md": {
-    "mtime": 1794368997.1800845,
-    "seen": 1794498070.8530276,
-    "ast_hash": "a711f8e301ea25fa51343f13fd51c42c",
-    "semantic_hash": ""
-  },
-  "openspec/changes/multitasking-windows/proposal.md": {
-    "mtime": 1794409303.6920626,
-    "seen": 1794498070.8530283,
-    "ast_hash": "708c538687618881b15d068bb48981c9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/multitasking-windows/specs/windows/spec.md": {
-    "mtime": 1794409303.6920626,
-    "seen": 1794498070.853029,
-    "ast_hash": "bb07be43db5b45dc7af9888c15245d7d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/multitasking-windows/tasks.md": {
-    "mtime": 1794409280.8720622,
-    "seen": 1794498070.8530297,
-    "ast_hash": "8dd64e212d5e2354925217f3a5c4c90d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/network-file-sharing/.openspec.yaml": {
-    "mtime": 1794316413.2799184,
-    "seen": 1794498070.8530304,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/network-file-sharing/README.md": {
-    "mtime": 1794316413.2839184,
-    "seen": 1794498070.853031,
-    "ast_hash": "4ac40114086fa263b3c9298a500b869a",
-    "semantic_hash": ""
-  },
-  "openspec/changes/network-file-sharing/proposal.md": {
-    "mtime": 1794316414.2159183,
-    "seen": 1794498070.8530314,
-    "ast_hash": "971a161c9bd14d25e515d79978b68ba5",
-    "semantic_hash": ""
-  },
-  "openspec/changes/network-file-sharing/specs/file-sharing/spec.md": {
-    "mtime": 1794316414.2159183,
-    "seen": 1794498070.853032,
-    "ast_hash": "dd93b2b957318764f9cb8b28ec94f6a0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/network-file-sharing/tasks.md": {
-    "mtime": 1794316414.2159183,
-    "seen": 1794498070.853033,
-    "ast_hash": "161e4ccef1f69c962161fd1fac0ab28c",
-    "semantic_hash": ""
-  },
-  "openspec/changes/notification-centre/.openspec.yaml": {
-    "mtime": 1794316387.9679189,
-    "seen": 1794498070.8530335,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/notification-centre/README.md": {
-    "mtime": 1794316387.9679189,
-    "seen": 1794498070.8530343,
-    "ast_hash": "2687101d907f28db9e79e5a2102f34a4",
-    "semantic_hash": ""
-  },
-  "openspec/changes/notification-centre/proposal.md": {
-    "mtime": 1794316388.9039187,
-    "seen": 1794498070.8530347,
-    "ast_hash": "403d9807ab1c1ac9022420c9d4a35e23",
-    "semantic_hash": ""
-  },
-  "openspec/changes/notification-centre/specs/notifications/spec.md": {
-    "mtime": 1794316388.9039187,
-    "seen": 1794498070.8530354,
-    "ast_hash": "f0c890a497de6cac26d8fc75aeccc4e0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/notification-centre/tasks.md": {
-    "mtime": 1794316388.9039187,
-    "seen": 1794498070.8530364,
-    "ast_hash": "0a8abfaf5faa92365aa2705dfc7c4265",
-    "semantic_hash": ""
-  },
-  "openspec/changes/top-bar-stats/proposal.md": {
-    "mtime": 1794409277.4000623,
-    "seen": 1794498070.853037,
-    "ast_hash": "f486e5472045602a3a13ec91356aa489",
-    "semantic_hash": ""
-  },
-  "openspec/changes/top-bar-stats/specs/topbar-stats/spec.md": {
-    "mtime": 1794409277.4000623,
-    "seen": 1794498070.8530378,
-    "ast_hash": "2457eb591db48671d6489996e4cbc1e2",
-    "semantic_hash": ""
-  },
-  "openspec/changes/top-bar-stats/tasks.md": {
-    "mtime": 1794409277.436062,
-    "seen": 1794498070.8530383,
-    "ast_hash": "6823597827b600f2f0b13268e2c3ad04",
-    "semantic_hash": ""
-  },
-  "openspec/changes/vpn-and-dns/.openspec.yaml": {
-    "mtime": 1794316403.3959186,
-    "seen": 1794498070.853039,
-    "ast_hash": "6ef4f7747aa531c58d589ea284dca8d9",
-    "semantic_hash": ""
-  },
-  "openspec/changes/vpn-and-dns/README.md": {
-    "mtime": 1794316403.3999186,
-    "seen": 1794498070.8530395,
-    "ast_hash": "9029687e784632d003cd981cf4c2d5ca",
-    "semantic_hash": ""
-  },
-  "openspec/changes/vpn-and-dns/proposal.md": {
-    "mtime": 1794316409.3319185,
-    "seen": 1794498070.8530405,
-    "ast_hash": "a1894e87cfce79dc62cb7754de95d53c",
-    "semantic_hash": ""
-  },
-  "openspec/changes/vpn-and-dns/specs/vpn/spec.md": {
-    "mtime": 1794316409.3319185,
-    "seen": 1794498070.853041,
-    "ast_hash": "e8f38dcb24f0568b495094cd9641843a",
-    "semantic_hash": ""
-  },
-  "openspec/changes/vpn-and-dns/tasks.md": {
-    "mtime": 1794319573.4558573,
-    "seen": 1794498070.8530414,
-    "ast_hash": "73af4ca9604e2b118c6608eeebbf2236",
-    "semantic_hash": ""
-  },
-  "openspec/changes/wifi-monitor-mode-driver/.openspec.yaml": {
-    "mtime": 1794423496.7802887,
-    "seen": 1794498070.8530421,
-    "ast_hash": "cd829b2bd6337d09dce7d2205b76983d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/wifi-monitor-mode-driver/README.md": {
-    "mtime": 1794423496.7802887,
-    "seen": 1794498070.8530426,
-    "ast_hash": "46f9d2bd135174c7e254024aa30dcf2e",
-    "semantic_hash": ""
-  },
-  "openspec/changes/wifi-monitor-mode-driver/proposal.md": {
-    "mtime": 1794423496.7802887,
-    "seen": 1794498070.8530433,
-    "ast_hash": "e9a0c10ea49e07f30cd627b210f55277",
-    "semantic_hash": ""
-  },
-  "openspec/changes/zt9101-usb-wifi-driver/.openspec.yaml": {
-    "mtime": 1794482387.2080667,
-    "seen": 1794498070.853044,
-    "ast_hash": "3b9605f0cabc386317dde8f289df36a0",
-    "semantic_hash": ""
-  },
-  "openspec/changes/zt9101-usb-wifi-driver/README.md": {
-    "mtime": 1794482387.2080667,
-    "seen": 1794498070.8530445,
-    "ast_hash": "f542429ad270190726557a2f2b6b5109",
-    "semantic_hash": ""
-  },
-  "openspec/changes/zt9101-usb-wifi-driver/proposal.md": {
-    "mtime": 1794482387.2080667,
-    "seen": 1794498070.853045,
-    "ast_hash": "ae5867854b81a0a74f2f2564e982b571",
-    "semantic_hash": ""
-  },
-  "openspec/changes/code-editor-app/proposal.md": {
-    "mtime": 1794499190.2640045,
-    "seen": 1794503484.754469,
-    "ast_hash": "fd5144463d23160fa6ae251afc2a1fd5",
-    "semantic_hash": ""
-  },
-  "openspec/changes/code-editor-app/specs/code-editor-app/spec.md": {
-    "mtime": 1794499190.2640045,
-    "seen": 1794503484.7544699,
-    "ast_hash": "cbf91dca35b4843cfd988420861a57f8",
-    "semantic_hash": ""
-  },
-  "openspec/changes/code-editor-app/tasks.md": {
-    "mtime": 1794499190.2640045,
-    "seen": 1794503484.754471,
-    "ast_hash": "8da971768d394a3b064690a1632123b3",
-    "semantic_hash": ""
-  },
-  "openspec/changes/terminal-tabs-and-autocomplete/proposal.md": {
-    "mtime": 1794499214.3160045,
-    "seen": 1794503484.7545297,
-    "ast_hash": "070e38b5117992056e35aeaad741138d",
-    "semantic_hash": ""
-  },
-  "openspec/changes/terminal-tabs-and-autocomplete/specs/terminal-shell/spec.md": {
-    "mtime": 1794499214.3160045,
-    "seen": 1794503484.7545307,
-    "ast_hash": "979d66806c6976a559b12085039edab8",
-    "semantic_hash": ""
-  },
-  "openspec/changes/terminal-tabs-and-autocomplete/tasks.md": {
-    "mtime": 1794499214.3160045,
-    "seen": 1794503484.7545316,
-    "ast_hash": "dd97c9c92609dab42818054e0e0b0f6e",
-    "semantic_hash": ""
-  },
   "config/rootfs/root/.config/lite-xl/init.lua": {
     "mtime": 1794506464.096015,
     "seen": 1794507369.7055457,
@@ -3093,18 +1881,6 @@
     "mtime": 1794548860.7160034,
     "seen": 1794550791.9503655,
     "ast_hash": "046ecf254e58f839719f79260851edad",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-impedance-muffled-audio/proposal.md": {
-    "mtime": 1794548860.7120035,
-    "seen": 1794550791.9505584,
-    "ast_hash": "122e81cafd9e427a565f1612aa71eabf",
-    "semantic_hash": ""
-  },
-  "openspec/changes/headphone-impedance-muffled-audio/tasks.md": {
-    "mtime": 1794548860.7160034,
-    "seen": 1794550791.9505594,
-    "ast_hash": "d4be1d300b00c1526c933a5f0354c396",
     "semantic_hash": ""
   },
   "config/rootfs/usr/local/sbin/walpad-vm": {
@@ -3147,588 +1923,6 @@
     "mtime": 1794670665.1240885,
     "seen": 1794674809.3571532,
     "ast_hash": "62c9dc8391bf9dfc681f231e96d874eb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/apps/process.rs": {
-    "mtime": 1794669489.4680698,
-    "seen": 1794674809.3571575,
-    "ast_hash": "7abaafc53fac1a455400fd55b8f8230a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/apps/registry.rs": {
-    "mtime": 1794669488.0560699,
-    "seen": 1794674809.357159,
-    "ast_hash": "6da56217968abc03483142138d4dde71",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/apps/tests.rs": {
-    "mtime": 1794669490.7440698,
-    "seen": 1794674809.3571603,
-    "ast_hash": "b42c4f402b8cdefefffe5af1dfe4f28f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/apps/tests_open.rs": {
-    "mtime": 1794669558.0160708,
-    "seen": 1794674809.357162,
-    "ast_hash": "8c74c82adbdb1328d6b37e32bdf39c15",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/commands.rs": {
-    "mtime": 1794669610.6400719,
-    "seen": 1794674809.3571634,
-    "ast_hash": "3efefd7cfdf2ef47b2161f20f1f6727f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/pair.rs": {
-    "mtime": 1794669627.544072,
-    "seen": 1794674809.357167,
-    "ast_hash": "6131253a7c3e0d5a61d1c3830d592c5d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/parse/tests.rs": {
-    "mtime": 1794671340.7440994,
-    "seen": 1794674809.3571715,
-    "ast_hash": "a80cb8420fc4b420694d61772113e3d4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/types.rs": {
-    "mtime": 1794669609.2720718,
-    "seen": 1794674809.3571727,
-    "ast_hash": "45e7e8212b6636c3d99c16f1315a84ee",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/bluetooth/worker.rs": {
-    "mtime": 1794669629.1920722,
-    "seen": 1794674809.3571742,
-    "ast_hash": "21aad300a9aa7ba7fe4365fff9cf378a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/brain/effect.rs": {
-    "mtime": 1794671489.4441016,
-    "seen": 1794674809.357177,
-    "ast_hash": "eef6b9976e3714f2da642714636d507f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/brain/tests.rs": {
-    "mtime": 1794671296.1840987,
-    "seen": 1794674809.3571782,
-    "ast_hash": "d7263dd072073e4ba7cd23d4c597301c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/actions.rs": {
-    "mtime": 1794667292.5760348,
-    "seen": 1794674809.3571804,
-    "ast_hash": "49eae11c0737e2e875661eda1ca75f2a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/client.rs": {
-    "mtime": 1794667285.8360348,
-    "seen": 1794674809.357181,
-    "ast_hash": "e405033275974c466b77aa86fbb483ed",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/errors.rs": {
-    "mtime": 1794673804.9041386,
-    "seen": 1794674809.3571825,
-    "ast_hash": "0d8b06551ba4ecf496997226dbe702d5",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/errors/tests.rs": {
-    "mtime": 1794673791.5881383,
-    "seen": 1794674809.3571835,
-    "ast_hash": "1024f1fc0b93df091691f599c4ff6230",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/execute.rs": {
-    "mtime": 1794667425.356037,
-    "seen": 1794674809.3571842,
-    "ast_hash": "af8b84686c5805d1a3c0bae72bf2f889",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/execute_net_phone.rs": {
-    "mtime": 1794667339.4360356,
-    "seen": 1794674809.3571851,
-    "ast_hash": "5ff5a2363b5b86d14b88bb3146c76dd7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/loop_step.rs": {
-    "mtime": 1794667385.7200363,
-    "seen": 1794674809.357186,
-    "ast_hash": "333a766085a90eb9ddcd16bee9b8f69b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/status.rs": {
-    "mtime": 1794667290.4720347,
-    "seen": 1794674809.357187,
-    "ast_hash": "2827179f0a4153801d1b7f121b205c36",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/system.rs": {
-    "mtime": 1794667335.0960355,
-    "seen": 1794674809.357188,
-    "ast_hash": "8619b93f29de70fc63abff011224ffae",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/tick.rs": {
-    "mtime": 1794667383.1280363,
-    "seen": 1794674809.357189,
-    "ast_hash": "dec990f724e8dd4bcceb85548050fbbd",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/windows_layout.rs": {
-    "mtime": 1794667490.468038,
-    "seen": 1794674809.3571906,
-    "ast_hash": "85ffc1043052c02c2214ba87fc9ab430",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/x11.rs": {
-    "mtime": 1794667487.160038,
-    "seen": 1794674809.3571916,
-    "ast_hash": "0ec7639582cb5efb184b27dd134fda37",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/daemon/x11_apps.rs": {
-    "mtime": 1794667489.020038,
-    "seen": 1794674809.3571925,
-    "ast_hash": "572e98b7763e85462240bd2f7811327f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/gnss/reading.rs": {
-    "mtime": 1794671391.6521,
-    "seen": 1794674809.3571963,
-    "ast_hash": "bfa45fdc3eea7975f124d691947f4f09",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/gnss/tests.rs": {
-    "mtime": 1794671591.8081033,
-    "seen": 1794674809.357197,
-    "ast_hash": "5d6ab3a510e89bf4568b2b1694e9ed63",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/gnss/tick.rs": {
-    "mtime": 1794671472.5641015,
-    "seen": 1794674809.357198,
-    "ast_hash": "f23619cbeed3d017878782ea0aa97027",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/hotspot/parse.rs": {
-    "mtime": 1794671375.7361,
-    "seen": 1794674809.3572001,
-    "ast_hash": "dd369772162bcdc0bf68a4efae292422",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/hotspot/tests.rs": {
-    "mtime": 1794671594.6641033,
-    "seen": 1794674809.357201,
-    "ast_hash": "77b2077dd0eee5d92239af0de20dae18",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/hotspot/tick.rs": {
-    "mtime": 1794671476.9641016,
-    "seen": 1794674809.3572025,
-    "ast_hash": "b0d108cb217be0c0786ad6d3752d3c41",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/inputs/tests.rs": {
-    "mtime": 1794673794.0401385,
-    "seen": 1794674809.357205,
-    "ast_hash": "6fb24998270643aeef0bd3786ec3033f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/jack/tests.rs": {
-    "mtime": 1794673795.8921385,
-    "seen": 1794674809.357207,
-    "ast_hash": "8652f03de0d5a2d8b9e33e3a27ef7ac7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/layout/tests.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.3572092,
-    "ast_hash": "f8a116232122f31b538fe874beee8c6e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/lock/storage.rs": {
-    "mtime": 1794669688.884073,
-    "seen": 1794674809.3572128,
-    "ast_hash": "08c12d177d7715ebbe221d98515ce0cb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/lock/tests.rs": {
-    "mtime": 1794669690.552073,
-    "seen": 1794674809.3572137,
-    "ast_hash": "203893b06b1c0501ddec140266b7d8fb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/battery/tests.rs": {
-    "mtime": 1794671250.7520978,
-    "seen": 1794674809.357216,
-    "ast_hash": "fdc0f44338992f351f84d1abe9086063",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/gesture/recogniser.rs": {
-    "mtime": 1794669431.628069,
-    "seen": 1794674809.357218,
-    "ast_hash": "bb90c2d31c526cd1c3812679820846eb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/gesture/scroll_fling.rs": {
-    "mtime": 1794669433.052069,
-    "seen": 1794674809.3572187,
-    "ast_hash": "6ba3049c445dd93a81605db455ac1a5d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/gesture/tests.rs": {
-    "mtime": 1794669435.272069,
-    "seen": 1794674809.3572197,
-    "ast_hash": "1a639a6983a1d9ed575f5d85a60fb33c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/gesture/tests_extra.rs": {
-    "mtime": 1794669437.144069,
-    "seen": 1794674809.3572206,
-    "ast_hash": "184b4c36e731c0f77f6d0b22b85dcdbc",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/jack/tests.rs": {
-    "mtime": 1794673797.5601385,
-    "seen": 1794674809.3572226,
-    "ast_hash": "55b264293766e26100e9eb808659d5f3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/key_gestures/tests.rs": {
-    "mtime": 1794671340.7880993,
-    "seen": 1794674809.357225,
-    "ast_hash": "d26424d447c90087d12175b80490b960",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/notifications/tests.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572292,
-    "ast_hash": "2c5cde1a788e377878b085f7a351018c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/power_key/tests.rs": {
-    "mtime": 1794673799.4401386,
-    "seen": 1794674809.3572311,
-    "ast_hash": "f6987c1c8c5f223043dd44c4c0ca29ec",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/rotation/tests.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.3572328,
-    "ast_hash": "44b52599959b5ed6cfe47794c6441144",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/screen_timeout/tests.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572352,
-    "ast_hash": "ebcb1d78a29de115c33733573f313805",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/soc/ocv.rs": {
-    "mtime": 1794671384.8481,
-    "seen": 1794674809.3572373,
-    "ast_hash": "e550f1240e82f3406c7562027e2599d1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/soc/tests.rs": {
-    "mtime": 1794671296.1840987,
-    "seen": 1794674809.357238,
-    "ast_hash": "c589db6f9e9fea53249c7185cd963cc2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/logic/touch_map/tests.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572404,
-    "ast_hash": "45af1398adbda89a131339c0759e4305",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/at/tests.rs": {
-    "mtime": 1794671537.4761024,
-    "seen": 1794674809.3572443,
-    "ast_hash": "9347b43ef05d7aa535d516b988d3906f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/at/worker.rs": {
-    "mtime": 1794671482.2521017,
-    "seen": 1794674809.3572452,
-    "ast_hash": "29235383e43b47cd24e4553fc1acf4b3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/commands.rs": {
-    "mtime": 1794668855.5560598,
-    "seen": 1794674809.357246,
-    "ast_hash": "4b858d7d5fba2b48297cc135e3bf0079",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/jobs.rs": {
-    "mtime": 1794668871.99606,
-    "seen": 1794674809.3572466,
-    "ast_hash": "f553e61e590db81ff8b2771153afcec6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/parse/tests.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.3572502,
-    "ast_hash": "988011d0374520a47f6553e11e7c8672",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/script.rs": {
-    "mtime": 1794668851.6520596,
-    "seen": 1794674809.3572512,
-    "ast_hash": "9171904ded0b5b0262710a4d50dfcb06",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/tests.rs": {
-    "mtime": 1794668857.2600598,
-    "seen": 1794674809.3572528,
-    "ast_hash": "d9bfab7af45f4df7480cecfae96bee04",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/modem/types.rs": {
-    "mtime": 1794668872.00406,
-    "seen": 1794674809.357254,
-    "ast_hash": "bf62dcb1cb94ca19f5fa076647fc9867",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/notifications/tests.rs": {
-    "mtime": 1794671250.760098,
-    "seen": 1794674809.3572578,
-    "ast_hash": "79c20af2f2015232e8c9ec0668a23eac",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/calls.rs": {
-    "mtime": 1794667866.768044,
-    "seen": 1794674809.3572595,
-    "ast_hash": "04f3b4a60a923dccd68eb73ebb16fb0e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/jobs.rs": {
-    "mtime": 1794667865.568044,
-    "seen": 1794674809.3572614,
-    "ast_hash": "9984a539c78bd21de4e474814fcc7182",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/ops.rs": {
-    "mtime": 1794667844.1560435,
-    "seen": 1794674809.357265,
-    "ast_hash": "1cd370c01606d0537550e8182eda8893",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/parse/tests.rs": {
-    "mtime": 1794670387.0200841,
-    "seen": 1794674809.3572688,
-    "ast_hash": "27f709287dd5d6cdbfb1e8e5f4d1d026",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/pdu/codec.rs": {
-    "mtime": 1794670387.0200841,
-    "seen": 1794674809.3572714,
-    "ast_hash": "282e599e3374c7e9e4ca954a8eda68a7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/pdu/deliver.rs": {
-    "mtime": 1794670440.052085,
-    "seen": 1794674809.3572729,
-    "ast_hash": "b010ecc8d8f8dae42cc4dbcdfaec191b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/pdu/submit.rs": {
-    "mtime": 1794670387.0200841,
-    "seen": 1794674809.357274,
-    "ast_hash": "c2a9812bacfca2f9ca5703b43a0afda0",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/pdu/tests.rs": {
-    "mtime": 1794670442.380085,
-    "seen": 1794674809.3572748,
-    "ast_hash": "83fb145772b7fca927e294a1cc2802b1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/sms.rs": {
-    "mtime": 1794667881.2560441,
-    "seen": 1794674809.3572757,
-    "ast_hash": "b88c06d64059bbdaf6d497108aec556c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/store/calls.rs": {
-    "mtime": 1794670432.1680849,
-    "seen": 1794674809.3572779,
-    "ast_hash": "4752a7a0ce3216062c9110731f4a7b35",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/store/contacts.rs": {
-    "mtime": 1794670429.6120849,
-    "seen": 1794674809.3572788,
-    "ast_hash": "1d9061a1b7d11f83cf1f6efe2018e365",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/store/sms.rs": {
-    "mtime": 1794670427.2280848,
-    "seen": 1794674809.3572795,
-    "ast_hash": "705f119d2859938d4c0f844cc55837dd",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/store/tests.rs": {
-    "mtime": 1794670482.9200857,
-    "seen": 1794674809.3572807,
-    "ast_hash": "9c3102f1a43003586a6e90f0bf010dcc",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/tests.rs": {
-    "mtime": 1794668027.3880465,
-    "seen": 1794674809.3572814,
-    "ast_hash": "30b8b5af445ca0529e6ccee679e5da5d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/tests_sms.rs": {
-    "mtime": 1794668028.8920465,
-    "seen": 1794674809.3572826,
-    "ast_hash": "1e660657fd54fac7165d207049149f7b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/phone/ussd_sim.rs": {
-    "mtime": 1794667882.7840443,
-    "seen": 1794674809.3572836,
-    "ast_hash": "4c93ac652ec4165863d4a82bfd627e59",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/pkg/catalogue.rs": {
-    "mtime": 1794669034.0160625,
-    "seen": 1794674809.357286,
-    "ast_hash": "e57754c032ce6f3b663121b4a59a72c2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/pkg/defaults.rs": {
-    "mtime": 1794669035.8880627,
-    "seen": 1794674809.357287,
-    "ast_hash": "b3a8f867b2eb4f9cfa100a578f383d15",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/pkg/jobs.rs": {
-    "mtime": 1794669037.7160625,
-    "seen": 1794674809.3572881,
-    "ast_hash": "20fdc489a63e9407a8eb61265b4d37cc",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/pkg/tests.rs": {
-    "mtime": 1794669039.4880626,
-    "seen": 1794674809.3572893,
-    "ast_hash": "dbf93c8827994d851b42008258736046",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/shadow/tests.rs": {
-    "mtime": 1794673961.576141,
-    "seen": 1794674809.3572915,
-    "ast_hash": "fc67c7c048fb6835483f4f055a983874",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/stats/tests.rs": {
-    "mtime": 1794671250.7560978,
-    "seen": 1794674809.357295,
-    "ast_hash": "8c62c85b24c2fac7aadf79a85535119a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/volume/parse.rs": {
-    "mtime": 1794671539.4681025,
-    "seen": 1794674809.3572974,
-    "ast_hash": "fb424cbb13ce2c73c23ad86aa1ad4069",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/volume/poll.rs": {
-    "mtime": 1794672673.2161205,
-    "seen": 1794674809.3572984,
-    "ast_hash": "359058e3f1bb7f552e26df2a2021e9aa",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/volume/tests.rs": {
-    "mtime": 1794672809.6081228,
-    "seen": 1794674809.3572996,
-    "ast_hash": "bd3a35fdbdf1c5c70a1cf2d6fe2b9b4c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/vpn/config.rs": {
-    "mtime": 1794669540.6280706,
-    "seen": 1794674809.3573012,
-    "ast_hash": "0f010e936c9ac3916327e71aa288c60a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/vpn/profiles.rs": {
-    "mtime": 1794669542.5840707,
-    "seen": 1794674809.3573022,
-    "ast_hash": "1b129484234a0eb653bcb6e3866e25d8",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/vpn/runner.rs": {
-    "mtime": 1794669544.4600706,
-    "seen": 1794674809.3573031,
-    "ast_hash": "36fa1d2d858382eabff26f92c7a0872c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/vpn/tests.rs": {
-    "mtime": 1794669558.120071,
-    "seen": 1794674809.3573039,
-    "ast_hash": "79048a342150018958a3598119c44462",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/fake/aps.rs": {
-    "mtime": 1794671433.2521007,
-    "seen": 1794674809.3573077,
-    "ast_hash": "09f5422e738f409322f7f15fb9127967",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/manager/poll.rs": {
-    "mtime": 1794671534.9321024,
-    "seen": 1794674809.3573093,
-    "ast_hash": "34c7a3fbda2bed3570664c2bcc2b2ff3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/manager/types.rs": {
-    "mtime": 1794671589.5921032,
-    "seen": 1794674809.3573103,
-    "ast_hash": "91f33cc24ea2dff1e4d08fd47629fc1e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/parse/tests.rs": {
-    "mtime": 1794671340.8560994,
-    "seen": 1794674809.357313,
-    "ast_hash": "c7d437b691ffcc14a9ac9d93108da8d4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/wpa/psk/tests.rs": {
-    "mtime": 1794673803.1561387,
-    "seen": 1794674809.3573153,
-    "ast_hash": "581f56add8428d951699cd693b03c15f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/xbridge/geometry.rs": {
-    "mtime": 1794668939.8240612,
-    "seen": 1794674809.357317,
-    "ast_hash": "badccafd182c3564266218dde0c41970",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/xbridge/input.rs": {
-    "mtime": 1794668937.324061,
-    "seen": 1794674809.357318,
-    "ast_hash": "909653c62c1ab0fd8011d35e1eac2d15",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/xbridge/keys.rs": {
-    "mtime": 1794668936.032061,
-    "seen": 1794674809.3573186,
-    "ast_hash": "bdad61ccf795f30f9854877d434acea1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/xbridge/tests.rs": {
-    "mtime": 1794668941.040061,
-    "seen": 1794674809.3573196,
-    "ast_hash": "bde6a81f5018a8cfa07622fd564e9e5a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-core/src/xbridge/windows.rs": {
-    "mtime": 1794668938.508061,
-    "seen": 1794674809.3573208,
-    "ast_hash": "169d28073500d33a7e9a3cbecde9d9b5",
     "semantic_hash": ""
   },
   "crates/walpad-ctl/src/request.rs": {
@@ -3897,786 +2091,6 @@
     "mtime": 1794670769.8320901,
     "seen": 1794674809.3574016,
     "ast_hash": "42cb4fc380e0263dd09f3fe46a1f03b4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/cmd.rs": {
-    "mtime": 1794666395.0920205,
-    "seen": 1794674809.357406,
-    "ast_hash": "8edfcc459f3f4a12b4602bcaf2a336da",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/cmd_request.rs": {
-    "mtime": 1794666397.5680206,
-    "seen": 1794674809.357407,
-    "ast_hash": "3ea5788ea1aea9ad115fce852c251957",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/config.rs": {
-    "mtime": 1794666389.2400205,
-    "seen": 1794674809.3574078,
-    "ast_hash": "547126999125cf94ef9d42d94e2af3df",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/core_events.rs": {
-    "mtime": 1794666861.788028,
-    "seen": 1794674809.3574085,
-    "ast_hash": "899a30316bfe4c7de7f55f2947021531",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/core_notices.rs": {
-    "mtime": 1794666858.7480278,
-    "seen": 1794674809.3574095,
-    "ast_hash": "e37fcb86f725b99d98572931acc91df3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/core_replies.rs": {
-    "mtime": 1794666457.8160214,
-    "seen": 1794674809.3574107,
-    "ast_hash": "5e2cc2c62f5d6194000b2726e5da4dd7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/gesture.rs": {
-    "mtime": 1794666669.520025,
-    "seen": 1794674809.3574116,
-    "ast_hash": "afcce2d344b0d5dd42cbaccff6e34ed0",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/lock_ops.rs": {
-    "mtime": 1794666946.4880292,
-    "seen": 1794674809.3574142,
-    "ast_hash": "29a37e78fa03817d3c99954174bf1266",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/model.rs": {
-    "mtime": 1794666400.1080205,
-    "seen": 1794674809.357415,
-    "ast_hash": "c9e2080a6cbffb6f885ee9533cbc6def",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/phone_tap.rs": {
-    "mtime": 1794666951.0280294,
-    "seen": 1794674809.357417,
-    "ast_hash": "34db9dd6c0f9b4532f7f440261f8e050",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/power_menu.rs": {
-    "mtime": 1794666579.5240235,
-    "seen": 1794674809.3574183,
-    "ast_hash": "35b8561d112c42e3bfbff5dac72d5d14",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/render.rs": {
-    "mtime": 1794666866.416028,
-    "seen": 1794674809.357419,
-    "ast_hash": "d7a3640ba6e93c034401cb42c7d6c6d3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/render_scrolled.rs": {
-    "mtime": 1794666864.272028,
-    "seen": 1794674809.35742,
-    "ast_hash": "27177a86ba3f9053d11084878c1ab102",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/setup.rs": {
-    "mtime": 1794666452.4040215,
-    "seen": 1794674809.3574207,
-    "ast_hash": "1e83cf1ce7f6bdc576be2365a8a49279",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/sheets.rs": {
-    "mtime": 1794666580.8480234,
-    "seen": 1794674809.3574216,
-    "ast_hash": "20b408d9b19391dfc31ea64f4fcc9b09",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tap.rs": {
-    "mtime": 1794666904.7560287,
-    "seen": 1794674809.3574224,
-    "ast_hash": "5915954dbc3283b252b7c8b104f117a9",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tap_connectivity.rs": {
-    "mtime": 1794666901.9680285,
-    "seen": 1794674809.357423,
-    "ast_hash": "57f7828027ddfd4d3136a3f96d7b3116",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tap_device.rs": {
-    "mtime": 1794666666.472025,
-    "seen": 1794674809.357424,
-    "ast_hash": "d70fd9f2c051c491e6302c5869c2a317",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tap_network.rs": {
-    "mtime": 1794666899.3840287,
-    "seen": 1794674809.357425,
-    "ast_hash": "4894b434370f652a7f3629e5572e2cfd",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/target.rs": {
-    "mtime": 1794666391.9480205,
-    "seen": 1794674809.357426,
-    "ast_hash": "16f0e87a008c230eb7cf426c9a5a947b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/app/tick.rs": {
-    "mtime": 1794666485.292022,
-    "seen": 1794674809.3574395,
-    "ast_hash": "94f104f04417b7e1979c1fb4e3f87d84",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/bluetooth/model.rs": {
-    "mtime": 1794670165.9240806,
-    "seen": 1794674809.3574412,
-    "ast_hash": "62b32671f2054dcfd3a8be53c467fe3d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/bluetooth/pair.rs": {
-    "mtime": 1794670168.8880806,
-    "seen": 1794674809.3574421,
-    "ast_hash": "15a32febf71c596c63791043d40fad2d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/bluetooth/render.rs": {
-    "mtime": 1794670167.2040806,
-    "seen": 1794674809.357443,
-    "ast_hash": "f9ea2e0d6fe2ff52a06fd7b10e20aef7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/bluetooth/tests.rs": {
-    "mtime": 1794670281.3040824,
-    "seen": 1794674809.357444,
-    "ast_hash": "f3e6e94a8ff026691fe8320da53fb82c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/call_screen/layout.rs": {
-    "mtime": 1794672065.7801108,
-    "seen": 1794674809.3574464,
-    "ast_hash": "8b3b259aaae4948c0b457d51e542375a",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/call_screen/render.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3574471,
-    "ast_hash": "eede4b4722b88a39dfe4890b12ad4901",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/call_screen/tests.rs": {
-    "mtime": 1794671667.8801045,
-    "seen": 1794674809.357448,
-    "ast_hash": "4082b1602918c85e1d5c5586cb0e8a7b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/call_window/x11.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.35745,
-    "ast_hash": "7957c496bfce28fd5dd3bc416d986929",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/chrome/header.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3574526,
-    "ast_hash": "b47728cf9fa44707f9d2d89e745a4081",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/chrome/sidebar.rs": {
-    "mtime": 1794672509.428118,
-    "seen": 1794674809.3574536,
-    "ast_hash": "54cb4aeff82eee7f2769881729f09820",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/chrome/tests.rs": {
-    "mtime": 1794672510.644118,
-    "seen": 1794674809.3574545,
-    "ast_hash": "7d976f0305cb4d90f399cc4c3d4f2c47",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/clipboard/history.rs": {
-    "mtime": 1794672065.7841108,
-    "seen": 1794674809.357457,
-    "ast_hash": "23d89357b71d6d9fbda4795253f7f530",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/clipboard/selection.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357468,
-    "ast_hash": "7d9a8dfd1daa8352e0a83580f3f2e5f4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/clipboard/tests.rs": {
-    "mtime": 1794671727.6841054,
-    "seen": 1794674809.3574688,
-    "ast_hash": "3584c74aedfe13d7961004f426eb8d25",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/config/tests.rs": {
-    "mtime": 1794673888.8601398,
-    "seen": 1794674809.357471,
-    "ast_hash": "4ce657bff3cbda657b635ba1133525ab",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/core_client/tests.rs": {
-    "mtime": 1794671637.0601041,
-    "seen": 1794674809.3574731,
-    "ast_hash": "81453d53ec842dbc86703f3fdfbdde69",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/device_screen/model.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3574762,
-    "ast_hash": "191cfda0f97b8ba90fd9f5f18fdf2bbe",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/device_screen/tests.rs": {
-    "mtime": 1794672550.6161187,
-    "seen": 1794674809.3574774,
-    "ast_hash": "99f4420d20fdd727ab6614889d7b8cea",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/events.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357479,
-    "ast_hash": "53f0e091538687bd83ae28fa24fae3ac",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/layout.rs": {
-    "mtime": 1794668567.2160552,
-    "seen": 1794674809.35748,
-    "ast_hash": "3cf8084c94e5dd896e230606d3a14fc8",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/render.rs": {
-    "mtime": 1794668568.5880551,
-    "seen": 1794674809.357481,
-    "ast_hash": "df4a1952f4fe1a41e0379e20a3dffb9f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/state.rs": {
-    "mtime": 1794668570.704055,
-    "seen": 1794674809.3574817,
-    "ast_hash": "5a2d7f7cb6728a1cba4a057a47b98e5d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/tests.rs": {
-    "mtime": 1794668575.8920553,
-    "seen": 1794674809.3574827,
-    "ast_hash": "24430c5506c2020a47f10383ddde25fa",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/window.rs": {
-    "mtime": 1794672528.1041183,
-    "seen": 1794674809.3574836,
-    "ast_hash": "3e6dc97b6181202b88ea2c9f041d077b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/dock/window_ops.rs": {
-    "mtime": 1794672507.704118,
-    "seen": 1794674809.3574843,
-    "ast_hash": "7ff015d6bbabbe331aee2e6607ff1072",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/edge/tests.rs": {
-    "mtime": 1794673891.50414,
-    "seen": 1794674809.3574862,
-    "ast_hash": "6cd105ddb87dadff6f39e291be6533be",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/gesture/tests.rs": {
-    "mtime": 1794673893.80814,
-    "seen": 1794674809.3574884,
-    "ast_hash": "45487612b0a6730188a14cae10beb832",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/gps_screen/model.rs": {
-    "mtime": 1794672484.0801175,
-    "seen": 1794674809.3574905,
-    "ast_hash": "2684d5d1b30850c3eb0cd1b923bbfabe",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/gps_screen/tests.rs": {
-    "mtime": 1794672513.068118,
-    "seen": 1794674809.3574913,
-    "ast_hash": "d9e1945dce28835a16509b04a3a55cf2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/home/tests.rs": {
-    "mtime": 1794673896.76014,
-    "seen": 1794674809.3574932,
-    "ast_hash": "c9d1d4549e2265ea96264fb7ff053d42",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/ime/focus.rs": {
-    "mtime": 1794669939.804077,
-    "seen": 1794674809.3574955,
-    "ast_hash": "431e4150027d3c38176da1cfab8a71ce",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/ime/handler.rs": {
-    "mtime": 1794669941.5080771,
-    "seen": 1794674809.3574963,
-    "ast_hash": "c57d2dc725ae3afd63807d8feb2993b6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/ime/tests.rs": {
-    "mtime": 1794669942.876077,
-    "seen": 1794674809.3574975,
-    "ast_hash": "76cc34a86e49c1dcd5d983c0ac3e29dc",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/keyboard/bottom_windows.rs": {
-    "mtime": 1794669239.2280657,
-    "seen": 1794674809.3574994,
-    "ast_hash": "f639a1f37fca8e4b380e1b6056dfee3e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/keyboard/events.rs": {
-    "mtime": 1794672668.4881206,
-    "seen": 1794674809.3575,
-    "ast_hash": "c3cd19c5d82398581543e04f7b38a0a9",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/keyboard/keymap.rs": {
-    "mtime": 1794669237.9200659,
-    "seen": 1794674809.357501,
-    "ast_hash": "0faca1361a8359ba42731491604a8ead",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/keyboard/tests.rs": {
-    "mtime": 1794672546.1281185,
-    "seen": 1794674809.3575017,
-    "ast_hash": "32bf8ad561996bdb61e6f8fcffa2a96f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_screen/input.rs": {
-    "mtime": 1794669293.4960668,
-    "seen": 1794674809.3575053,
-    "ast_hash": "ef2e3992e8f73f9c8f4f9f558481a9e0",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_screen/layout.rs": {
-    "mtime": 1794669290.4920666,
-    "seen": 1794674809.357506,
-    "ast_hash": "1247adffffc2076dbad8ee8f1c063a53",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_screen/render.rs": {
-    "mtime": 1794669295.6400666,
-    "seen": 1794674809.3575068,
-    "ast_hash": "d37b92da33f9d6b2d4a0f51d4b13dfb7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_screen/tests.rs": {
-    "mtime": 1794669298.0800667,
-    "seen": 1794674809.357508,
-    "ast_hash": "fb8e523752c713d7955eeb865810f39f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/lock_window/x11.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575096,
-    "ast_hash": "9a11adf9e43b5b7eb5170f62dc2a5617",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media/model.rs": {
-    "mtime": 1794669186.020065,
-    "seen": 1794674809.357513,
-    "ast_hash": "859fc6f8f42a83d6910b7eb18639abc2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media/render.rs": {
-    "mtime": 1794669188.896065,
-    "seen": 1794674809.357514,
-    "ast_hash": "a63cac8750a45dfb912dbff6c5846e67",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media/scan.rs": {
-    "mtime": 1794669327.9880672,
-    "seen": 1794674809.3575149,
-    "ast_hash": "d603c5b01d117a0a1d29a13ad181b96f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media/tests.rs": {
-    "mtime": 1794669327.9920673,
-    "seen": 1794674809.3575156,
-    "ast_hash": "395b46569b141b1b93a08a2e7decf2c1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/media_worker/tests.rs": {
-    "mtime": 1794671637.0601041,
-    "seen": 1794674809.3575177,
-    "ast_hash": "d0a7f323d8fa1878e60c98748f35589e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mobile/model.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575199,
-    "ast_hash": "28d52175413c8fd9e101b3dad265a722",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mobile/tests.rs": {
-    "mtime": 1794672543.1961186,
-    "seen": 1794674809.3575208,
-    "ast_hash": "b67ac564d6a5e4c0dd5fa0078f45a369",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad/events.rs": {
-    "mtime": 1794672669.7401204,
-    "seen": 1794674809.357523,
-    "ast_hash": "df3058cb2278eba04ff80ed7ff6a32df",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad/layout.rs": {
-    "mtime": 1794668425.6200528,
-    "seen": 1794674809.357524,
-    "ast_hash": "e05bd06196ab5bccb87026ee9b94d57b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad/marker.rs": {
-    "mtime": 1794668476.4320538,
-    "seen": 1794674809.357525,
-    "ast_hash": "6ac8aa01010d669d0bfcd0fc25001ea2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad/paint.rs": {
-    "mtime": 1794668428.6520529,
-    "seen": 1794674809.3575258,
-    "ast_hash": "602d7b5cf5038d3ccd006131a1be9386",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad/state.rs": {
-    "mtime": 1794668426.8200529,
-    "seen": 1794674809.3575265,
-    "ast_hash": "aa76b35c0507ba96c957c5a847fadf85",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/mousepad/tests.rs": {
-    "mtime": 1794672547.5921185,
-    "seen": 1794674809.3575273,
-    "ast_hash": "5ec5869523649b372186ffb513432443",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/nav/strip.rs": {
-    "mtime": 1794672528.1441183,
-    "seen": 1794674809.3575292,
-    "ast_hash": "9644158a9bf6b54083af8d14d7271b4e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/nav/x11.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.35753,
-    "ast_hash": "ad94e652fe21ce8f57c5b9cefadafcdb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/network/model.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575325,
-    "ast_hash": "e2cca2e24cfc14921055d72b85039e3f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/network/tests.rs": {
-    "mtime": 1794672544.6961186,
-    "seen": 1794674809.3575332,
-    "ast_hash": "632a6529c28cb477684fb051bbb0d28f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/notifications_ui/tests.rs": {
-    "mtime": 1794673899.2961402,
-    "seen": 1794674809.357535,
-    "ast_hash": "aa8e45e10621e7f1a862c08344a87692",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/overlay/render.rs": {
-    "mtime": 1794670212.1040814,
-    "seen": 1794674809.3575368,
-    "ast_hash": "f6edb9f10f2a944860198beeeda78810",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/overlay/sheet.rs": {
-    "mtime": 1794670209.2120812,
-    "seen": 1794674809.3575377,
-    "ast_hash": "2cc834c242f4b4fb28ff3611b68fb3df",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/overlay/tests.rs": {
-    "mtime": 1794670299.7720828,
-    "seen": 1794674809.3575387,
-    "ast_hash": "bc6e10755dd8a33f04b2fdb5370ee836",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/overlay/types.rs": {
-    "mtime": 1794670206.0160813,
-    "seen": 1794674809.3575397,
-    "ast_hash": "f72c8ba7c5989a94a6ee43625a3cd4de",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/panels/apps_panel.rs": {
-    "mtime": 1794669992.524078,
-    "seen": 1794674809.3575416,
-    "ast_hash": "342eae0d5c4d0eae64b1c26d84e489f5",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/panels/qs_model.rs": {
-    "mtime": 1794669989.5680778,
-    "seen": 1794674809.3575425,
-    "ast_hash": "5787d106861812910f434f7bb0632df6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/panels/qs_render.rs": {
-    "mtime": 1794669990.8640778,
-    "seen": 1794674809.3575432,
-    "ast_hash": "0b5b2b295875fd0caedcf379b291af86",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/panels/tests.rs": {
-    "mtime": 1794669993.9240777,
-    "seen": 1794674809.3575442,
-    "ast_hash": "8cfca387422544dc8adb1c60c6737baf",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui/geom.rs": {
-    "mtime": 1794668086.5520475,
-    "seen": 1794674809.3575463,
-    "ast_hash": "219f72c3312e0430d859b8cbd02fde00",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui/messages.rs": {
-    "mtime": 1794668112.388048,
-    "seen": 1794674809.357547,
-    "ast_hash": "d2ccbc985336b907879159c6d2f4e065",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui/parse.rs": {
-    "mtime": 1794668085.0720475,
-    "seen": 1794674809.357548,
-    "ast_hash": "7f607416d5fcf188480104e5d2e6df4e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui/render.rs": {
-    "mtime": 1794668111.0120478,
-    "seen": 1794674809.3575487,
-    "ast_hash": "d2863ce6defcb68124b5dbd94339255b",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui/sheet.rs": {
-    "mtime": 1794668114.016048,
-    "seen": 1794674809.35755,
-    "ast_hash": "9666ecdc09e802c2e5d3435d4a99e5a7",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/phone_ui/tests.rs": {
-    "mtime": 1794668136.0800483,
-    "seen": 1794674809.3575506,
-    "ast_hash": "51dfa5eba932b72240d343ff0783e0fe",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/present/tests.rs": {
-    "mtime": 1794673901.78414,
-    "seen": 1794674809.3575523,
-    "ast_hash": "96f97df7b8d070a1a1d54ac83ef3e2da",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/recents/layout.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575544,
-    "ast_hash": "819207da3439820f8e1d0976568878e3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/recents/render.rs": {
-    "mtime": 1794672807.9841228,
-    "seen": 1794674809.3575552,
-    "ast_hash": "03ce4d71e9da608837a0b4246e0d0889",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/recents/tests.rs": {
-    "mtime": 1794672897.3761241,
-    "seen": 1794674809.3575556,
-    "ast_hash": "62f3d9fe566773328cc63306009978d4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/seltools/events.rs": {
-    "mtime": 1794670037.2480786,
-    "seen": 1794674809.3575578,
-    "ast_hash": "9b75d5a0d9ccdd524d014a6a93a6c6bb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/seltools/list.rs": {
-    "mtime": 1794672674.6561205,
-    "seen": 1794674809.3575585,
-    "ast_hash": "b803f9eec0b83a9e782b53109a314740",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/seltools/model.rs": {
-    "mtime": 1794670033.5760784,
-    "seen": 1794674809.3575592,
-    "ast_hash": "32b78a410623570ffcf58e62afb88c96",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/seltools/tests.rs": {
-    "mtime": 1794670039.4400785,
-    "seen": 1794674809.3575602,
-    "ast_hash": "cd6efa00ce16944878f199fdcfca11a6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/seltools/windows.rs": {
-    "mtime": 1794672819.1441228,
-    "seen": 1794674809.357561,
-    "ast_hash": "1fa743dc21a94b7732797df8d274e5b6",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/settings_screen/pages.rs": {
-    "mtime": 1794669130.9000642,
-    "seen": 1794674809.357563,
-    "ast_hash": "d751aa3ececcd3ecc5327e8879d71fa1",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/settings_screen/pages_power_net.rs": {
-    "mtime": 1794669132.7000642,
-    "seen": 1794674809.357564,
-    "ast_hash": "cad3b751482eed7c2828d8b321d48151",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/settings_screen/render.rs": {
-    "mtime": 1794669346.3960676,
-    "seen": 1794674809.3575647,
-    "ast_hash": "d5ba20e32e90ade5b5bfcab041e01d8f",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/settings_screen/sysinfo.rs": {
-    "mtime": 1794669129.6280642,
-    "seen": 1794674809.3575654,
-    "ast_hash": "01a7a9aad8acb9b48e67b1f6f3827cbc",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/settings_screen/tests.rs": {
-    "mtime": 1794669135.3440642,
-    "seen": 1794674809.357566,
-    "ast_hash": "c7f491f7f5edccf21440e5a352596c10",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell/commands.rs": {
-    "mtime": 1794668664.0040567,
-    "seen": 1794674809.3575683,
-    "ast_hash": "64cdd44c75cb3136e64d6a0182bcb799",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell/init.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357569,
-    "ast_hash": "34f26c9e0ec63ac0be417751eab0d6d9",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell/input_overlays.rs": {
-    "mtime": 1794668662.3160567,
-    "seen": 1794674809.3575697,
-    "ast_hash": "9c24b3bc4e28af39b54a73fd2d9532b2",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell/lock_call.rs": {
-    "mtime": 1794668688.472057,
-    "seen": 1794674809.3575706,
-    "ast_hash": "bc264730568036af1a2797166105b3af",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell/poll.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575714,
-    "ast_hash": "fe01ae3f2e4ba5a314ee3b2875465517",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/shell/step.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.357572,
-    "ast_hash": "99361508120eb302c395d4e631704393",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/store/layout.rs": {
-    "mtime": 1794670248.2520819,
-    "seen": 1794674809.3575737,
-    "ast_hash": "9108acd7088d5b269fac3612ab78339d",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/store/model.rs": {
-    "mtime": 1794670246.7720819,
-    "seen": 1794674809.3575747,
-    "ast_hash": "f176a9c55b382566091f9fb6cc36a23e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/store/render.rs": {
-    "mtime": 1794670249.6600819,
-    "seen": 1794674809.3575754,
-    "ast_hash": "2ccd12a8703a76d3bf4a7e05fb63c0a4",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/store/tests.rs": {
-    "mtime": 1794670281.4160824,
-    "seen": 1794674809.3575761,
-    "ast_hash": "6a54f057f87a0d54e3cf52c3aff4c1bb",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/topbar/tests.rs": {
-    "mtime": 1794672065.8961108,
-    "seen": 1794674809.357578,
-    "ast_hash": "1464dd336b34551a4cd26602cb7bba52",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/vpn_screen/model.rs": {
-    "mtime": 1794672484.0841177,
-    "seen": 1794674809.3575814,
-    "ast_hash": "3aa97402be81b770025fed66d4b37ac9",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/vpn_screen/tests.rs": {
-    "mtime": 1794672517.144118,
-    "seen": 1794674809.357582,
-    "ast_hash": "2f231e98358e741807396e382d5f78b9",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/windows_ui/tests.rs": {
-    "mtime": 1794673905.3081403,
-    "seen": 1794674809.3575854,
-    "ast_hash": "2753e8cf3a021ea2fdb3e9d8e959a14c",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/events.rs": {
-    "mtime": 1794672549.1481185,
-    "seen": 1794674809.3575869,
-    "ast_hash": "e956ddcaf69fdef81a4913d3d6b94071",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/model.rs": {
-    "mtime": 1794668752.384058,
-    "seen": 1794674809.3575878,
-    "ast_hash": "1397589bd1bd5767fed375d3f7ebec4e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/refresh.rs": {
-    "mtime": 1794668787.7240586,
-    "seen": 1794674809.3575885,
-    "ast_hash": "c12a9e2d71685ae2b4764303f87b6941",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/render.rs": {
-    "mtime": 1794668759.1520581,
-    "seen": 1794674809.3575892,
-    "ast_hash": "83bfd30817f9f844ad90a12a204a35c8",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/tests.rs": {
-    "mtime": 1794668767.0320582,
-    "seen": 1794674809.35759,
-    "ast_hash": "7e453eee692ef68dd6ffec59859df4d3",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/window.rs": {
-    "mtime": 1794672467.8161173,
-    "seen": 1794674809.3575907,
-    "ast_hash": "5aec6e77fb897d6c06d6e2820756ff0e",
-    "semantic_hash": ""
-  },
-  "crates/walpad-shell/src/wmbar/window_ops.rs": {
-    "mtime": 1794672435.0081167,
-    "seen": 1794674809.3575916,
-    "ast_hash": "81a91c5b9f236bdcb0f906bc215ddcc3",
     "semantic_hash": ""
   },
   "crates/walpad-ui/src/art/coffee.rs": {
@@ -4979,22 +2393,2116 @@
     "ast_hash": "7736429605bf9400a3b0fd3f24a9e91a",
     "semantic_hash": ""
   },
-  "openspec/changes/bangladesh-sim-ussd-contacts/proposal.md": {
-    "mtime": 1794637262.536015,
-    "seen": 1794674809.3579838,
-    "ast_hash": "08eb47c91fe41b54f1e0cb7b42810c4a",
+  "crates/walpad-core/src/adapters/mod.rs": {
+    "mtime": 1794675049.9681585,
+    "seen": 1794676725.3164706,
+    "ast_hash": "839db831fd92b5f02fe4a2c26b810f9e",
     "semantic_hash": ""
   },
-  "openspec/changes/bangladesh-sim-ussd-contacts/specs/phone/spec.md": {
-    "mtime": 1794637265.4880152,
-    "seen": 1794674809.3579853,
-    "ast_hash": "62e88971fc6adfd6ffad04065594492d",
+  "crates/walpad-core/src/adapters/shadow.rs": {
+    "mtime": 1794673815.6401389,
+    "seen": 1794676725.3164742,
+    "ast_hash": "398c1a6aa8e305cfb60900b8f34c107c",
     "semantic_hash": ""
   },
-  "openspec/changes/bangladesh-sim-ussd-contacts/tasks.md": {
-    "mtime": 1794638368.5000486,
-    "seen": 1794674809.3579862,
-    "ast_hash": "ecf616685354ce476756064b17298bf9",
+  "crates/walpad-core/src/adapters/shadow/tests.rs": {
+    "mtime": 1794673961.576141,
+    "seen": 1794676725.3164759,
+    "ast_hash": "fc67c7c048fb6835483f4f055a983874",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/shadow_live.rs": {
+    "mtime": 1794229736.9200659,
+    "seen": 1794676725.3164785,
+    "ast_hash": "fe0d2f2089c38cf6053213321a5e11ed",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/xbridge.rs": {
+    "mtime": 1794668974.7160616,
+    "seen": 1794676725.3164809,
+    "ast_hash": "86a1f5b60f10413ec38db8b6dcab90ca",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/xbridge/geometry.rs": {
+    "mtime": 1794668939.8240612,
+    "seen": 1794676725.3164828,
+    "ast_hash": "badccafd182c3564266218dde0c41970",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/xbridge/input.rs": {
+    "mtime": 1794668937.324061,
+    "seen": 1794676725.3164845,
+    "ast_hash": "909653c62c1ab0fd8011d35e1eac2d15",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/xbridge/keys.rs": {
+    "mtime": 1794668936.032061,
+    "seen": 1794676725.3164861,
+    "ast_hash": "bdad61ccf795f30f9854877d434acea1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/xbridge/tests.rs": {
+    "mtime": 1794668941.040061,
+    "seen": 1794676725.3164883,
+    "ast_hash": "bde6a81f5018a8cfa07622fd564e9e5a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/adapters/xbridge/windows.rs": {
+    "mtime": 1794668938.508061,
+    "seen": 1794676725.3164902,
+    "ast_hash": "169d28073500d33a7e9a3cbecde9d9b5",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon.rs": {
+    "mtime": 1794667578.7200394,
+    "seen": 1794676725.3164926,
+    "ast_hash": "8d256d185cbc06bb455b26fb7df8e633",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/actions.rs": {
+    "mtime": 1794667292.5760348,
+    "seen": 1794676725.3164947,
+    "ast_hash": "49eae11c0737e2e875661eda1ca75f2a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/client.rs": {
+    "mtime": 1794667285.8360348,
+    "seen": 1794676725.3164964,
+    "ast_hash": "e405033275974c466b77aa86fbb483ed",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/errors.rs": {
+    "mtime": 1794673804.9041386,
+    "seen": 1794676725.3164985,
+    "ast_hash": "0d8b06551ba4ecf496997226dbe702d5",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/errors/tests.rs": {
+    "mtime": 1794673791.5881383,
+    "seen": 1794676725.3165002,
+    "ast_hash": "1024f1fc0b93df091691f599c4ff6230",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/execute.rs": {
+    "mtime": 1794667425.356037,
+    "seen": 1794676725.3165028,
+    "ast_hash": "af8b84686c5805d1a3c0bae72bf2f889",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/execute_net_phone.rs": {
+    "mtime": 1794667339.4360356,
+    "seen": 1794676725.3165045,
+    "ast_hash": "5ff5a2363b5b86d14b88bb3146c76dd7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/loop_step.rs": {
+    "mtime": 1794667385.7200363,
+    "seen": 1794676725.3165066,
+    "ast_hash": "333a766085a90eb9ddcd16bee9b8f69b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/status.rs": {
+    "mtime": 1794667290.4720347,
+    "seen": 1794676725.3165085,
+    "ast_hash": "2827179f0a4153801d1b7f121b205c36",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/system.rs": {
+    "mtime": 1794667335.0960355,
+    "seen": 1794676725.3165102,
+    "ast_hash": "8619b93f29de70fc63abff011224ffae",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/tick.rs": {
+    "mtime": 1794667383.1280363,
+    "seen": 1794676725.316512,
+    "ast_hash": "dec990f724e8dd4bcceb85548050fbbd",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/windows.rs": {
+    "mtime": 1794667535.5160387,
+    "seen": 1794676725.3165143,
+    "ast_hash": "8476672d5d9827796ff4f04d9f9cd36a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/windows_layout.rs": {
+    "mtime": 1794667490.468038,
+    "seen": 1794676725.3165157,
+    "ast_hash": "85ffc1043052c02c2214ba87fc9ab430",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/x11.rs": {
+    "mtime": 1794667487.160038,
+    "seen": 1794676725.3165174,
+    "ast_hash": "0ec7639582cb5efb184b27dd134fda37",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/daemon/x11_apps.rs": {
+    "mtime": 1794667489.020038,
+    "seen": 1794676725.3165195,
+    "ast_hash": "572e98b7763e85462240bd2f7811327f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/app/mod.rs": {
+    "mtime": 1794675037.4361582,
+    "seen": 1794676725.316521,
+    "ast_hash": "0444066e5771132f2dc2864d4b0622fc",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/brain.rs": {
+    "mtime": 1794671486.9361017,
+    "seen": 1794676725.3165226,
+    "ast_hash": "6fd20ba73e7919c95d5147f9b0312525",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/brain/effect.rs": {
+    "mtime": 1794671489.4441016,
+    "seen": 1794676725.316524,
+    "ast_hash": "eef6b9976e3714f2da642714636d507f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/brain/tests.rs": {
+    "mtime": 1794671296.1840987,
+    "seen": 1794676725.316526,
+    "ast_hash": "d7263dd072073e4ba7cd23d4c597301c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/battery.rs": {
+    "mtime": 1794671250.7520978,
+    "seen": 1794676725.316528,
+    "ast_hash": "d577b6199b7ca77737dce9414987c275",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/battery/tests.rs": {
+    "mtime": 1794671250.7520978,
+    "seen": 1794676725.31653,
+    "ast_hash": "fdc0f44338992f351f84d1abe9086063",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/gesture.rs": {
+    "mtime": 1794669429.868069,
+    "seen": 1794676725.3165321,
+    "ast_hash": "abcf7234dfd320ceaf9fefbc01f6b9b5",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/gesture/recogniser.rs": {
+    "mtime": 1794669431.628069,
+    "seen": 1794676725.316534,
+    "ast_hash": "bb90c2d31c526cd1c3812679820846eb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/gesture/scroll_fling.rs": {
+    "mtime": 1794669433.052069,
+    "seen": 1794676725.3165357,
+    "ast_hash": "6ba3049c445dd93a81605db455ac1a5d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/gesture/tests.rs": {
+    "mtime": 1794669435.272069,
+    "seen": 1794676725.3165374,
+    "ast_hash": "1a639a6983a1d9ed575f5d85a60fb33c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/gesture/tests_extra.rs": {
+    "mtime": 1794669437.144069,
+    "seen": 1794676725.31654,
+    "ast_hash": "184b4c36e731c0f77f6d0b22b85dcdbc",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/jack.rs": {
+    "mtime": 1794673811.3601387,
+    "seen": 1794676725.3165421,
+    "ast_hash": "89d3be54169b2da5c7e9175d5cdddf62",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/jack/tests.rs": {
+    "mtime": 1794673797.5601385,
+    "seen": 1794676725.3165445,
+    "ast_hash": "55b264293766e26100e9eb808659d5f3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/key_gestures.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165467,
+    "ast_hash": "1029459e3e6821ebeb6911000eb3a000",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/key_gestures/tests.rs": {
+    "mtime": 1794671340.7880993,
+    "seen": 1794676725.3165488,
+    "ast_hash": "d26424d447c90087d12175b80490b960",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/mod.rs": {
+    "mtime": 1794453621.9280255,
+    "seen": 1794676725.3165512,
+    "ast_hash": "c2e5fa8c4375f7bc87dfd2b27bb659c4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/notifications.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165534,
+    "ast_hash": "65359bd3840624dc9bd4eb287aed3f7b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/notifications/tests.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165553,
+    "ast_hash": "2c5cde1a788e377878b085f7a351018c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/power_key.rs": {
+    "mtime": 1794673813.5201387,
+    "seen": 1794676725.3165574,
+    "ast_hash": "415ad0ef472c6cea1858c4b1093a20f1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/power_key/tests.rs": {
+    "mtime": 1794673799.4401386,
+    "seen": 1794676725.3165596,
+    "ast_hash": "f6987c1c8c5f223043dd44c4c0ca29ec",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/rotation.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.3165615,
+    "ast_hash": "a88506af50e7c450ca0948e447faeed1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/rotation/tests.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.316563,
+    "ast_hash": "44b52599959b5ed6cfe47794c6441144",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/screen_timeout.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165648,
+    "ast_hash": "e680a08a6b6e2cc5e6b6692d4c6bee28",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/screen_timeout/tests.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165667,
+    "ast_hash": "ebcb1d78a29de115c33733573f313805",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/soc.rs": {
+    "mtime": 1794671386.2881,
+    "seen": 1794676725.3165686,
+    "ast_hash": "50ec2c9d84131d57890c90e76a170fb2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/soc/ocv.rs": {
+    "mtime": 1794671384.8481,
+    "seen": 1794676725.31657,
+    "ast_hash": "e550f1240e82f3406c7562027e2599d1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/soc/tests.rs": {
+    "mtime": 1794671296.1840987,
+    "seen": 1794676725.316572,
+    "ast_hash": "c589db6f9e9fea53249c7185cd963cc2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/touch_map.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165736,
+    "ast_hash": "7ef26bf3166f1d5e008f48a25d3d95e0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/logic/touch_map/tests.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165758,
+    "ast_hash": "45af1398adbda89a131339c0759e4305",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/domain/mod.rs": {
+    "mtime": 1794675039.5001583,
+    "seen": 1794676725.3165777,
+    "ast_hash": "57db91fc4b7d76f3a691c9ff4c8bc7a0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/commands.rs": {
+    "mtime": 1794669610.6400719,
+    "seen": 1794676725.3165796,
+    "ast_hash": "3efefd7cfdf2ef47b2161f20f1f6727f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/mod.rs": {
+    "mtime": 1794669630.900072,
+    "seen": 1794676725.3165815,
+    "ast_hash": "c7dbd4fcf3d868f4c7c3e92fd6d3db40",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/pair.rs": {
+    "mtime": 1794669627.544072,
+    "seen": 1794676725.3165834,
+    "ast_hash": "6131253a7c3e0d5a61d1c3830d592c5d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/parse.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3165846,
+    "ast_hash": "6715ffcb27d6683a7626e3be72163a7e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/parse/tests.rs": {
+    "mtime": 1794671340.7440994,
+    "seen": 1794676725.3165865,
+    "ast_hash": "a80cb8420fc4b420694d61772113e3d4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/types.rs": {
+    "mtime": 1794669609.2720718,
+    "seen": 1794676725.3165877,
+    "ast_hash": "45e7e8212b6636c3d99c16f1315a84ee",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/bluetooth/worker.rs": {
+    "mtime": 1794669629.1920722,
+    "seen": 1794676725.31659,
+    "ast_hash": "21aad300a9aa7ba7fe4365fff9cf378a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/hotspot.rs": {
+    "mtime": 1794671573.020103,
+    "seen": 1794676725.316592,
+    "ast_hash": "931d41a74a67bd42174cd8e102196731",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/hotspot/parse.rs": {
+    "mtime": 1794671375.7361,
+    "seen": 1794676725.3165936,
+    "ast_hash": "dd369772162bcdc0bf68a4efae292422",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/hotspot/tests.rs": {
+    "mtime": 1794671594.6641033,
+    "seen": 1794676725.3165958,
+    "ast_hash": "77b2077dd0eee5d92239af0de20dae18",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/hotspot/tick.rs": {
+    "mtime": 1794671476.9641016,
+    "seen": 1794676725.3165977,
+    "ast_hash": "b0d108cb217be0c0786ad6d3752d3c41",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/mod.rs": {
+    "mtime": 1794675042.9121583,
+    "seen": 1794676725.3165994,
+    "ast_hash": "7a35ffce49c2bfa9b1bb3cca267b7477",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/vpn.rs": {
+    "mtime": 1794669558.120071,
+    "seen": 1794676725.3166008,
+    "ast_hash": "5ccf94aa2c4e6132a62d51bdea8c588a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/vpn/config.rs": {
+    "mtime": 1794669540.6280706,
+    "seen": 1794676725.316603,
+    "ast_hash": "0f010e936c9ac3916327e71aa288c60a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/vpn/profiles.rs": {
+    "mtime": 1794669542.5840707,
+    "seen": 1794676725.3166046,
+    "ast_hash": "1b129484234a0eb653bcb6e3866e25d8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/vpn/runner.rs": {
+    "mtime": 1794669544.4600706,
+    "seen": 1794676725.3166065,
+    "ast_hash": "36fa1d2d858382eabff26f92c7a0872c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/vpn/tests.rs": {
+    "mtime": 1794669558.120071,
+    "seen": 1794676725.3166084,
+    "ast_hash": "79048a342150018958a3598119c44462",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/ctrl.rs": {
+    "mtime": 1794230305.2200751,
+    "seen": 1794676725.31661,
+    "ast_hash": "75c4d71cf5674787cf946a7927be63f3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/fake.rs": {
+    "mtime": 1794671468.4001014,
+    "seen": 1794676725.3166118,
+    "ast_hash": "7f914f2e4ec5797878744fcec334d71d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/fake/aps.rs": {
+    "mtime": 1794671433.2521007,
+    "seen": 1794676725.3166134,
+    "ast_hash": "09f5422e738f409322f7f15fb9127967",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/manager.rs": {
+    "mtime": 1794671532.4881024,
+    "seen": 1794676725.316615,
+    "ast_hash": "3bb0f770025ac0d375e56d67857e3f62",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/manager/poll.rs": {
+    "mtime": 1794671534.9321024,
+    "seen": 1794676725.316617,
+    "ast_hash": "34c7a3fbda2bed3570664c2bcc2b2ff3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/manager/types.rs": {
+    "mtime": 1794671589.5921032,
+    "seen": 1794676725.316619,
+    "ast_hash": "91f33cc24ea2dff1e4d08fd47629fc1e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/mod.rs": {
+    "mtime": 1794230187.1720731,
+    "seen": 1794676725.316621,
+    "ast_hash": "38b3e337c08c7e56f9764d4683938d85",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/parse.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.3166234,
+    "ast_hash": "90d5883e55187091a987931bcdc0f7da",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/parse/tests.rs": {
+    "mtime": 1794671340.8560994,
+    "seen": 1794676725.316625,
+    "ast_hash": "c7d437b691ffcc14a9ac9d93108da8d4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/psk.rs": {
+    "mtime": 1794673816.7961388,
+    "seen": 1794676725.316627,
+    "ast_hash": "b12fabad77471e76204a6f5ea3478bc3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/connectivity/wpa/psk/tests.rs": {
+    "mtime": 1794673803.1561387,
+    "seen": 1794676725.3166282,
+    "ast_hash": "581f56add8428d951699cd693b03c15f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/apps.rs": {
+    "mtime": 1794669486.6440697,
+    "seen": 1794676725.3166296,
+    "ast_hash": "2272f6c295f9c8a1461cbf3bb3812e39",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/apps/process.rs": {
+    "mtime": 1794669489.4680698,
+    "seen": 1794676725.3166316,
+    "ast_hash": "7abaafc53fac1a455400fd55b8f8230a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/apps/registry.rs": {
+    "mtime": 1794669488.0560699,
+    "seen": 1794676725.316633,
+    "ast_hash": "6da56217968abc03483142138d4dde71",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/apps/tests.rs": {
+    "mtime": 1794669490.7440698,
+    "seen": 1794676725.3166347,
+    "ast_hash": "b42c4f402b8cdefefffe5af1dfe4f28f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/apps/tests_open.rs": {
+    "mtime": 1794669558.0160708,
+    "seen": 1794676725.3166358,
+    "ast_hash": "8c74c82adbdb1328d6b37e32bdf39c15",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/inputs.rs": {
+    "mtime": 1794673807.4241385,
+    "seen": 1794676725.3166378,
+    "ast_hash": "f09f83cf489e559e52bb2a8120590a2c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/inputs/tests.rs": {
+    "mtime": 1794673794.0401385,
+    "seen": 1794676725.3166392,
+    "ast_hash": "6fb24998270643aeef0bd3786ec3033f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/jack.rs": {
+    "mtime": 1794673809.6161387,
+    "seen": 1794676725.3166409,
+    "ast_hash": "06b64fe54499d90602e3160364116a03",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/jack/tests.rs": {
+    "mtime": 1794673795.8921385,
+    "seen": 1794676725.3166428,
+    "ast_hash": "8652f03de0d5a2d8b9e33e3a27ef7ac7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/layout.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.3166444,
+    "ast_hash": "3a4a85ff99683563ec1e66958741eea5",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/layout/tests.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.316646,
+    "ast_hash": "f8a116232122f31b538fe874beee8c6e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/lock.rs": {
+    "mtime": 1794669728.9360735,
+    "seen": 1794676725.3166482,
+    "ast_hash": "e4eb76585c4dc797b1fe40f488626e59",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/lock/storage.rs": {
+    "mtime": 1794669688.884073,
+    "seen": 1794676725.31665,
+    "ast_hash": "08c12d177d7715ebbe221d98515ce0cb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/lock/tests.rs": {
+    "mtime": 1794669690.552073,
+    "seen": 1794676725.3166518,
+    "ast_hash": "203893b06b1c0501ddec140266b7d8fb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/mod.rs": {
+    "mtime": 1794675044.7761583,
+    "seen": 1794676725.3166535,
+    "ast_hash": "1bf0dfc5f75a6b391d193961a80e85b8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/notifications.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.3166554,
+    "ast_hash": "6d5f878bcbcc7ceb0bd49ba367db7b49",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/notifications/tests.rs": {
+    "mtime": 1794671250.760098,
+    "seen": 1794676725.3166568,
+    "ast_hash": "79c20af2f2015232e8c9ec0668a23eac",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/pkg.rs": {
+    "mtime": 1794669041.0800626,
+    "seen": 1794676725.3166585,
+    "ast_hash": "13c4eaa5a8701fab81f9cb96c3c134c6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/pkg/catalogue.rs": {
+    "mtime": 1794669034.0160625,
+    "seen": 1794676725.3166606,
+    "ast_hash": "e57754c032ce6f3b663121b4a59a72c2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/pkg/defaults.rs": {
+    "mtime": 1794669035.8880627,
+    "seen": 1794676725.3166623,
+    "ast_hash": "b3a8f867b2eb4f9cfa100a578f383d15",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/pkg/jobs.rs": {
+    "mtime": 1794669037.7160625,
+    "seen": 1794676725.3166642,
+    "ast_hash": "20fdc489a63e9407a8eb61265b4d37cc",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/pkg/tests.rs": {
+    "mtime": 1794675084.936159,
+    "seen": 1794676725.3166666,
+    "ast_hash": "15cef8e7f881de8e0a14bcbc823a23e4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/stats.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3166687,
+    "ast_hash": "4356dfdbc8d128638263f6d0ea74bb94",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/stats/tests.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3166704,
+    "ast_hash": "8c62c85b24c2fac7aadf79a85535119a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/volume.rs": {
+    "mtime": 1794672814.0361228,
+    "seen": 1794676725.3166718,
+    "ast_hash": "7dffdccd7b06c859479e4099c7b8ad0a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/volume/parse.rs": {
+    "mtime": 1794671539.4681025,
+    "seen": 1794676725.316674,
+    "ast_hash": "fb424cbb13ce2c73c23ad86aa1ad4069",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/volume/poll.rs": {
+    "mtime": 1794672673.2161205,
+    "seen": 1794676725.3166757,
+    "ast_hash": "359058e3f1bb7f552e26df2a2021e9aa",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/device/volume/tests.rs": {
+    "mtime": 1794672809.6081228,
+    "seen": 1794676725.316678,
+    "ast_hash": "bd3a35fdbdf1c5c70a1cf2d6fe2b9b4c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/location/gnss.rs": {
+    "mtime": 1794671554.7761028,
+    "seen": 1794676725.3166797,
+    "ast_hash": "17b1137b7236d3ec23206616529439aa",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/location/gnss/reading.rs": {
+    "mtime": 1794671391.6521,
+    "seen": 1794676725.3166814,
+    "ast_hash": "bfa45fdc3eea7975f124d691947f4f09",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/location/gnss/tests.rs": {
+    "mtime": 1794671591.8081033,
+    "seen": 1794676725.3166833,
+    "ast_hash": "5d6ab3a510e89bf4568b2b1694e9ed63",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/location/gnss/tick.rs": {
+    "mtime": 1794671472.5641015,
+    "seen": 1794676725.316685,
+    "ast_hash": "f23619cbeed3d017878782ea0aa97027",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/location/mod.rs": {
+    "mtime": 1794675046.6681583,
+    "seen": 1794676725.3166869,
+    "ast_hash": "e9651ea93e466a47613a349596f7211e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/mod.rs": {
+    "mtime": 1794675041.3681583,
+    "seen": 1794676725.3166885,
+    "ast_hash": "16bf56fca1974c15794492596db927de",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/mod.rs": {
+    "mtime": 1794675048.1001585,
+    "seen": 1794676725.31669,
+    "ast_hash": "41f4a136bcc398689c59fad4a1f546af",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/at.rs": {
+    "mtime": 1794671530.4081023,
+    "seen": 1794676725.3166919,
+    "ast_hash": "5e95e5e350b84d5f66a3db3171877d55",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/at/tests.rs": {
+    "mtime": 1794671537.4761024,
+    "seen": 1794676725.3166933,
+    "ast_hash": "9347b43ef05d7aa535d516b988d3906f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/at/worker.rs": {
+    "mtime": 1794671482.2521017,
+    "seen": 1794676725.316695,
+    "ast_hash": "29235383e43b47cd24e4553fc1acf4b3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/commands.rs": {
+    "mtime": 1794668855.5560598,
+    "seen": 1794676725.316697,
+    "ast_hash": "4b858d7d5fba2b48297cc135e3bf0079",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/jobs.rs": {
+    "mtime": 1794668871.99606,
+    "seen": 1794676725.3166983,
+    "ast_hash": "f553e61e590db81ff8b2771153afcec6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/mod.rs": {
+    "mtime": 1794668858.9000597,
+    "seen": 1794676725.3167,
+    "ast_hash": "01838ae6affa878254068c811ff3c887",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/parse.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3167014,
+    "ast_hash": "346569f9bb7bf08cc76ee4d3ad10abba",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/parse/tests.rs": {
+    "mtime": 1794671250.7560978,
+    "seen": 1794676725.3167033,
+    "ast_hash": "988011d0374520a47f6553e11e7c8672",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/script.rs": {
+    "mtime": 1794668851.6520596,
+    "seen": 1794676725.316705,
+    "ast_hash": "9171904ded0b5b0262710a4d50dfcb06",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/tests.rs": {
+    "mtime": 1794668857.2600598,
+    "seen": 1794676725.3167064,
+    "ast_hash": "d9bfab7af45f4df7480cecfae96bee04",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/modem/types.rs": {
+    "mtime": 1794668872.00406,
+    "seen": 1794676725.3167078,
+    "ast_hash": "bf62dcb1cb94ca19f5fa076647fc9867",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/calls.rs": {
+    "mtime": 1794667866.768044,
+    "seen": 1794676725.3167102,
+    "ast_hash": "04f3b4a60a923dccd68eb73ebb16fb0e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/jobs.rs": {
+    "mtime": 1794667865.568044,
+    "seen": 1794676725.3167121,
+    "ast_hash": "9984a539c78bd21de4e474814fcc7182",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/mod.rs": {
+    "mtime": 1794668025.8440466,
+    "seen": 1794676725.3167138,
+    "ast_hash": "7d05fc197bfa255192b6f0b3589ad89a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/ops.rs": {
+    "mtime": 1794667844.1560435,
+    "seen": 1794676725.3167152,
+    "ast_hash": "1cd370c01606d0537550e8182eda8893",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/parse.rs": {
+    "mtime": 1794670406.2200844,
+    "seen": 1794676725.3167171,
+    "ast_hash": "a4587186e69ab8fccd73672097747f76",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/parse/tests.rs": {
+    "mtime": 1794670387.0200841,
+    "seen": 1794676725.316719,
+    "ast_hash": "27f709287dd5d6cdbfb1e8e5f4d1d026",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/pdu.rs": {
+    "mtime": 1794670387.0200841,
+    "seen": 1794676725.3167207,
+    "ast_hash": "5faad40863a76c292d96dafe57c5e317",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/pdu/codec.rs": {
+    "mtime": 1794670387.0200841,
+    "seen": 1794676725.3167229,
+    "ast_hash": "282e599e3374c7e9e4ca954a8eda68a7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/pdu/deliver.rs": {
+    "mtime": 1794670440.052085,
+    "seen": 1794676725.3167243,
+    "ast_hash": "b010ecc8d8f8dae42cc4dbcdfaec191b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/pdu/submit.rs": {
+    "mtime": 1794670387.0200841,
+    "seen": 1794676725.316726,
+    "ast_hash": "c2a9812bacfca2f9ca5703b43a0afda0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/pdu/tests.rs": {
+    "mtime": 1794670442.380085,
+    "seen": 1794676725.3167286,
+    "ast_hash": "83fb145772b7fca927e294a1cc2802b1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/sms.rs": {
+    "mtime": 1794667881.2560441,
+    "seen": 1794676725.3167312,
+    "ast_hash": "b88c06d64059bbdaf6d497108aec556c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/store.rs": {
+    "mtime": 1794670434.8000848,
+    "seen": 1794676725.3167324,
+    "ast_hash": "b295153b01ae4b0fd6b6badb76cb3501",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/store/calls.rs": {
+    "mtime": 1794670432.1680849,
+    "seen": 1794676725.3167343,
+    "ast_hash": "4752a7a0ce3216062c9110731f4a7b35",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/store/contacts.rs": {
+    "mtime": 1794670429.6120849,
+    "seen": 1794676725.3167367,
+    "ast_hash": "1d9061a1b7d11f83cf1f6efe2018e365",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/store/sms.rs": {
+    "mtime": 1794670427.2280848,
+    "seen": 1794676725.316739,
+    "ast_hash": "705f119d2859938d4c0f844cc55837dd",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/store/tests.rs": {
+    "mtime": 1794670482.9200857,
+    "seen": 1794676725.3167405,
+    "ast_hash": "9c3102f1a43003586a6e90f0bf010dcc",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/tests.rs": {
+    "mtime": 1794668027.3880465,
+    "seen": 1794676725.3167424,
+    "ast_hash": "30b8b5af445ca0529e6ccee679e5da5d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/tests_sms.rs": {
+    "mtime": 1794668028.8920465,
+    "seen": 1794676725.316744,
+    "ast_hash": "1e660657fd54fac7165d207049149f7b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/features/telephony/phone/ussd_sim.rs": {
+    "mtime": 1794667882.7840443,
+    "seen": 1794676725.3167458,
+    "ast_hash": "4c93ac652ec4165863d4a82bfd627e59",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/shared/fake.rs": {
+    "mtime": 1794227627.8160324,
+    "seen": 1794676725.3167546,
+    "ast_hash": "86522d841b11ad6bfc70fd8be35ce3ae",
+    "semantic_hash": ""
+  },
+  "crates/walpad-core/src/shared/mod.rs": {
+    "mtime": 1794675051.6081583,
+    "seen": 1794676725.3167567,
+    "ast_hash": "548d69aa4c97cf42902a20e4bffb3ac8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/mod.rs": {
+    "mtime": 1794675420.4721644,
+    "seen": 1794676725.3169756,
+    "ast_hash": "d67522f45611ece3bc4cebbe4e87b6f1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/nav.rs": {
+    "mtime": 1794672528.1481183,
+    "seen": 1794676725.3169782,
+    "ast_hash": "60fa10a23d73f8f188165b8694625c52",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/nav/strip.rs": {
+    "mtime": 1794672528.1441183,
+    "seen": 1794676725.3169796,
+    "ast_hash": "9644158a9bf6b54083af8d14d7271b4e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/nav/x11.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3169825,
+    "ast_hash": "ad94e652fe21ce8f57c5b9cefadafcdb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3169851,
+    "ast_hash": "25ea38cc7ad145fa6e09b61619f062f7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell/commands.rs": {
+    "mtime": 1794668664.0040567,
+    "seen": 1794676725.3169868,
+    "ast_hash": "64cdd44c75cb3136e64d6a0182bcb799",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell/init.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.316989,
+    "ast_hash": "34f26c9e0ec63ac0be417751eab0d6d9",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell/input_overlays.rs": {
+    "mtime": 1794668662.3160567,
+    "seen": 1794676725.3169906,
+    "ast_hash": "9c24b3bc4e28af39b54a73fd2d9532b2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell/lock_call.rs": {
+    "mtime": 1794668688.472057,
+    "seen": 1794676725.3169928,
+    "ast_hash": "bc264730568036af1a2797166105b3af",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell/poll.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3169942,
+    "ast_hash": "fe01ae3f2e4ba5a314ee3b2875465517",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/shell/step.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3169963,
+    "ast_hash": "99361508120eb302c395d4e631704393",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state.rs": {
+    "mtime": 1794666956.6320295,
+    "seen": 1794676725.3169985,
+    "ast_hash": "70555859ff0ed63a89209ac62d7144e8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/cmd.rs": {
+    "mtime": 1794666395.0920205,
+    "seen": 1794676725.317,
+    "ast_hash": "8edfcc459f3f4a12b4602bcaf2a336da",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/cmd_request.rs": {
+    "mtime": 1794666397.5680206,
+    "seen": 1794676725.3170018,
+    "ast_hash": "3ea5788ea1aea9ad115fce852c251957",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/config.rs": {
+    "mtime": 1794666389.2400205,
+    "seen": 1794676725.3170035,
+    "ast_hash": "547126999125cf94ef9d42d94e2af3df",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/core_events.rs": {
+    "mtime": 1794666861.788028,
+    "seen": 1794676725.3170054,
+    "ast_hash": "899a30316bfe4c7de7f55f2947021531",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/core_notices.rs": {
+    "mtime": 1794666858.7480278,
+    "seen": 1794676725.3170068,
+    "ast_hash": "e37fcb86f725b99d98572931acc91df3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/core_replies.rs": {
+    "mtime": 1794666457.8160214,
+    "seen": 1794676725.3170092,
+    "ast_hash": "5e2cc2c62f5d6194000b2726e5da4dd7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/gesture.rs": {
+    "mtime": 1794666669.520025,
+    "seen": 1794676725.3170106,
+    "ast_hash": "afcce2d344b0d5dd42cbaccff6e34ed0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/lock_flow.rs": {
+    "mtime": 1794666948.5000293,
+    "seen": 1794676725.3170125,
+    "ast_hash": "92f23157822347b7a9061f061b83825a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/lock_ops.rs": {
+    "mtime": 1794666946.4880292,
+    "seen": 1794676725.317014,
+    "ast_hash": "29a37e78fa03817d3c99954174bf1266",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/model.rs": {
+    "mtime": 1794666400.1080205,
+    "seen": 1794676725.317016,
+    "ast_hash": "c9e2080a6cbffb6f885ee9533cbc6def",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/phone_flow.rs": {
+    "mtime": 1794666953.7320294,
+    "seen": 1794676725.3170178,
+    "ast_hash": "b6a121a0faae92e382e4a0d87ffa2616",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/phone_tap.rs": {
+    "mtime": 1794666951.0280294,
+    "seen": 1794676725.3170197,
+    "ast_hash": "34db9dd6c0f9b4532f7f440261f8e050",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/power_menu.rs": {
+    "mtime": 1794666579.5240235,
+    "seen": 1794676725.3170214,
+    "ast_hash": "35b8561d112c42e3bfbff5dac72d5d14",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/render.rs": {
+    "mtime": 1794666866.416028,
+    "seen": 1794676725.3170233,
+    "ast_hash": "d7a3640ba6e93c034401cb42c7d6c6d3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/render_scrolled.rs": {
+    "mtime": 1794666864.272028,
+    "seen": 1794676725.317025,
+    "ast_hash": "27177a86ba3f9053d11084878c1ab102",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/setup.rs": {
+    "mtime": 1794666452.4040215,
+    "seen": 1794676725.317027,
+    "ast_hash": "1e83cf1ce7f6bdc576be2365a8a49279",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/sheets.rs": {
+    "mtime": 1794666580.8480234,
+    "seen": 1794676725.3170288,
+    "ast_hash": "20b408d9b19391dfc31ea64f4fcc9b09",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tap.rs": {
+    "mtime": 1794666904.7560287,
+    "seen": 1794676725.3170304,
+    "ast_hash": "5915954dbc3283b252b7c8b104f117a9",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tap_connectivity.rs": {
+    "mtime": 1794666901.9680285,
+    "seen": 1794676725.317032,
+    "ast_hash": "57f7828027ddfd4d3136a3f96d7b3116",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tap_device.rs": {
+    "mtime": 1794666666.472025,
+    "seen": 1794676725.317034,
+    "ast_hash": "d70fd9f2c051c491e6302c5869c2a317",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tap_network.rs": {
+    "mtime": 1794666899.3840287,
+    "seen": 1794676725.317036,
+    "ast_hash": "4894b434370f652a7f3629e5572e2cfd",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/target.rs": {
+    "mtime": 1794666391.9480205,
+    "seen": 1794676725.3170378,
+    "ast_hash": "16f0e87a008c230eb7cf426c9a5a947b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests.rs": {
+    "mtime": 1794666705.7200255,
+    "seen": 1794676725.31704,
+    "ast_hash": "fe3274640f0190735d3b782cfb56ebdb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/bluetooth.rs": {
+    "mtime": 1794317702.8358934,
+    "seen": 1794676725.3170419,
+    "ast_hash": "1bee0c2b68f7e60dcd0b04104c4210f8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/gps.rs": {
+    "mtime": 1794595423.66824,
+    "seen": 1794676725.3170438,
+    "ast_hash": "3302870fdec074bcd1ca596107a3f2df",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/hotspot.rs": {
+    "mtime": 1794666707.4800255,
+    "seen": 1794676725.3170455,
+    "ast_hash": "3defd6399970cc7a57dad1fa6f83b09a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/lock.rs": {
+    "mtime": 1794318745.9518733,
+    "seen": 1794676725.3170478,
+    "ast_hash": "62de3f05c33c62c88c86c88135ee3aed",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/media.rs": {
+    "mtime": 1794406342.5200155,
+    "seen": 1794676725.3170502,
+    "ast_hash": "6424718c440203163b98aeb906531d0b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/mobile.rs": {
+    "mtime": 1794666708.9160256,
+    "seen": 1794676725.3170521,
+    "ast_hash": "f26e28041dfa8d600f52fb6927625e59",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/store.rs": {
+    "mtime": 1794666710.0560255,
+    "seen": 1794676725.3170543,
+    "ast_hash": "6abdbd000e81766f88e8bc3512f22c19",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/topbar.rs": {
+    "mtime": 1794666711.1880255,
+    "seen": 1794676725.3170557,
+    "ast_hash": "59dc268f33538f1acffcf241421ad3fd",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/volume.rs": {
+    "mtime": 1794666754.0040262,
+    "seen": 1794676725.3170578,
+    "ast_hash": "95e7636e7d451e81579e1dea6b459cba",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tests/vpn.rs": {
+    "mtime": 1794319573.4358573,
+    "seen": 1794676725.3170598,
+    "ast_hash": "1c7e9dc565ffa65e8e6a5afc35c4953f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/app/state/tick.rs": {
+    "mtime": 1794666485.292022,
+    "seen": 1794676725.3170621,
+    "ast_hash": "94f104f04417b7e1979c1fb4e3f87d84",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/bluetooth/mod.rs": {
+    "mtime": 1794670174.3400807,
+    "seen": 1794676725.3170643,
+    "ast_hash": "95a3982cc853ed22effc4b71cbe5096d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/bluetooth/model.rs": {
+    "mtime": 1794670165.9240806,
+    "seen": 1794676725.3170664,
+    "ast_hash": "62b32671f2054dcfd3a8be53c467fe3d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/bluetooth/pair.rs": {
+    "mtime": 1794670168.8880806,
+    "seen": 1794676725.3170686,
+    "ast_hash": "15a32febf71c596c63791043d40fad2d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/bluetooth/render.rs": {
+    "mtime": 1794670167.2040806,
+    "seen": 1794676725.3170705,
+    "ast_hash": "f9ea2e0d6fe2ff52a06fd7b10e20aef7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/bluetooth/tests.rs": {
+    "mtime": 1794670281.3040824,
+    "seen": 1794676725.3170722,
+    "ast_hash": "f3e6e94a8ff026691fe8320da53fb82c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/call_screen.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.317074,
+    "ast_hash": "c080d34daf7c8b1c9f755dbf968f7a21",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/call_screen/layout.rs": {
+    "mtime": 1794672065.7801108,
+    "seen": 1794676725.3170757,
+    "ast_hash": "8b3b259aaae4948c0b457d51e542375a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/call_screen/render.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3170772,
+    "ast_hash": "eede4b4722b88a39dfe4890b12ad4901",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/call_screen/tests.rs": {
+    "mtime": 1794671667.8801045,
+    "seen": 1794676725.3170793,
+    "ast_hash": "4082b1602918c85e1d5c5586cb0e8a7b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/call_window.rs": {
+    "mtime": 1794672528.0881183,
+    "seen": 1794676725.317081,
+    "ast_hash": "025926d8b1eeafff43f70ff866751471",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/call_window/x11.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3170826,
+    "ast_hash": "7957c496bfce28fd5dd3bc416d986929",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/call/mod.rs": {
+    "mtime": 1794675155.24016,
+    "seen": 1794676725.3170843,
+    "ast_hash": "5698cc3919e5b1ab23fce9f07fce9ffa",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/clipboard/history.rs": {
+    "mtime": 1794672065.7841108,
+    "seen": 1794676725.317087,
+    "ast_hash": "23d89357b71d6d9fbda4795253f7f530",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/clipboard/mod.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3170888,
+    "ast_hash": "a64209db3b6ee0ceb2568a14278117c1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/clipboard/selection.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3170905,
+    "ast_hash": "7d9a8dfd1daa8352e0a83580f3f2e5f4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/clipboard/tests.rs": {
+    "mtime": 1794671727.6841054,
+    "seen": 1794676725.3170927,
+    "ast_hash": "3584c74aedfe13d7961004f426eb8d25",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/device/device_screen.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3170943,
+    "ast_hash": "d29abdf840ed44cff3a7002ae7414200",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/device/device_screen/model.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3170962,
+    "ast_hash": "191cfda0f97b8ba90fd9f5f18fdf2bbe",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/device/device_screen/tests.rs": {
+    "mtime": 1794672550.6161187,
+    "seen": 1794676725.3170984,
+    "ast_hash": "99f4420d20fdd727ab6614889d7b8cea",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/device/mod.rs": {
+    "mtime": 1794675158.76816,
+    "seen": 1794676725.3171005,
+    "ast_hash": "81567d230a8912fd974f4675b423b0e1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/events.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3171027,
+    "ast_hash": "53f0e091538687bd83ae28fa24fae3ac",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/layout.rs": {
+    "mtime": 1794668567.2160552,
+    "seen": 1794676725.317104,
+    "ast_hash": "3cf8084c94e5dd896e230606d3a14fc8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/mod.rs": {
+    "mtime": 1794671764.712106,
+    "seen": 1794676725.3171062,
+    "ast_hash": "8d4d864af96c2f382f5746762cc93112",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/render.rs": {
+    "mtime": 1794668568.5880551,
+    "seen": 1794676725.3171084,
+    "ast_hash": "df4a1952f4fe1a41e0379e20a3dffb9f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/state.rs": {
+    "mtime": 1794668570.704055,
+    "seen": 1794676725.3171108,
+    "ast_hash": "5a2d7f7cb6728a1cba4a057a47b98e5d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/tests.rs": {
+    "mtime": 1794668575.8920553,
+    "seen": 1794676725.317113,
+    "ast_hash": "24430c5506c2020a47f10383ddde25fa",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/window.rs": {
+    "mtime": 1794672528.1041183,
+    "seen": 1794676725.3171146,
+    "ast_hash": "3e6dc97b6181202b88ea2c9f041d077b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/dock/window_ops.rs": {
+    "mtime": 1794672507.704118,
+    "seen": 1794676725.3171165,
+    "ast_hash": "7ff015d6bbabbe331aee2e6607ff1072",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/gps/gps_screen.rs": {
+    "mtime": 1794672528.1121182,
+    "seen": 1794676725.3171184,
+    "ast_hash": "6f36836d3f52db817f01664b02caae6e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/gps/gps_screen/model.rs": {
+    "mtime": 1794672484.0801175,
+    "seen": 1794676725.3171198,
+    "ast_hash": "2684d5d1b30850c3eb0cd1b923bbfabe",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/gps/gps_screen/tests.rs": {
+    "mtime": 1794672513.068118,
+    "seen": 1794676725.317121,
+    "ast_hash": "d9e1945dce28835a16509b04a3a55cf2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/gps/mod.rs": {
+    "mtime": 1794675162.2961602,
+    "seen": 1794676725.3171232,
+    "ast_hash": "469813ca2436bfcd6dbe659ba66916d8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/home/mod.rs": {
+    "mtime": 1794673915.8361404,
+    "seen": 1794676725.3171248,
+    "ast_hash": "453a63094d5ec25bb07516da5bf9c999",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/home/tests.rs": {
+    "mtime": 1794673896.76014,
+    "seen": 1794676725.317127,
+    "ast_hash": "c9d1d4549e2265ea96264fb7ff053d42",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/keyboard/bottom_windows.rs": {
+    "mtime": 1794669239.2280657,
+    "seen": 1794676725.317129,
+    "ast_hash": "f639a1f37fca8e4b380e1b6056dfee3e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/keyboard/events.rs": {
+    "mtime": 1794672668.4881206,
+    "seen": 1794676725.317131,
+    "ast_hash": "c3cd19c5d82398581543e04f7b38a0a9",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/keyboard/keymap.rs": {
+    "mtime": 1794669237.9200659,
+    "seen": 1794676725.3171337,
+    "ast_hash": "0faca1361a8359ba42731491604a8ead",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/keyboard/mod.rs": {
+    "mtime": 1794672816.2041228,
+    "seen": 1794676725.3171358,
+    "ast_hash": "dadfff85756fa7af3b9a1c9eba43abe2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/keyboard/tests.rs": {
+    "mtime": 1794672546.1281185,
+    "seen": 1794676725.3171372,
+    "ast_hash": "32bf8ad561996bdb61e6f8fcffa2a96f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_screen.rs": {
+    "mtime": 1794669287.7920666,
+    "seen": 1794676725.3171394,
+    "ast_hash": "884169744f10979d4e5f47a7316c825f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_screen/input.rs": {
+    "mtime": 1794669293.4960668,
+    "seen": 1794676725.317141,
+    "ast_hash": "ef2e3992e8f73f9c8f4f9f558481a9e0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_screen/layout.rs": {
+    "mtime": 1794669290.4920666,
+    "seen": 1794676725.3171432,
+    "ast_hash": "1247adffffc2076dbad8ee8f1c063a53",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_screen/render.rs": {
+    "mtime": 1794669295.6400666,
+    "seen": 1794676725.3171449,
+    "ast_hash": "d37b92da33f9d6b2d4a0f51d4b13dfb7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_screen/tests.rs": {
+    "mtime": 1794669298.0800667,
+    "seen": 1794676725.3171463,
+    "ast_hash": "fb8e523752c713d7955eeb865810f39f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_window.rs": {
+    "mtime": 1794672528.1281183,
+    "seen": 1794676725.3171482,
+    "ast_hash": "9863efb14160a17419abc7c406e7faa6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/lock_window/x11.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3171513,
+    "ast_hash": "9a11adf9e43b5b7eb5170f62dc2a5617",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/lock/mod.rs": {
+    "mtime": 1794675165.9601603,
+    "seen": 1794676725.3171532,
+    "ast_hash": "2b9eefb3fd24603d5d80e325446ca582",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/mod.rs": {
+    "mtime": 1794675455.4041648,
+    "seen": 1794676725.3171554,
+    "ast_hash": "b40f3de6d49ab387f4551133a4337d0a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/model.rs": {
+    "mtime": 1794669186.020065,
+    "seen": 1794676725.3171577,
+    "ast_hash": "859fc6f8f42a83d6910b7eb18639abc2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/render.rs": {
+    "mtime": 1794669188.896065,
+    "seen": 1794676725.3171597,
+    "ast_hash": "a63cac8750a45dfb912dbff6c5846e67",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/scan.rs": {
+    "mtime": 1794669327.9880672,
+    "seen": 1794676725.3171616,
+    "ast_hash": "d603c5b01d117a0a1d29a13ad181b96f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/tests.rs": {
+    "mtime": 1794669327.9920673,
+    "seen": 1794676725.3171635,
+    "ast_hash": "395b46569b141b1b93a08a2e7decf2c1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/worker.rs": {
+    "mtime": 1794671637.0601041,
+    "seen": 1794676725.3171659,
+    "ast_hash": "a302c274281bee2b4c8c38cc5e120414",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/media/worker/tests.rs": {
+    "mtime": 1794671637.0601041,
+    "seen": 1794676725.3171673,
+    "ast_hash": "d0a7f323d8fa1878e60c98748f35589e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mobile/mod.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3171697,
+    "ast_hash": "70540edd5603afd33b435c68510e5f5a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mobile/model.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3171716,
+    "ast_hash": "28d52175413c8fd9e101b3dad265a722",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mobile/tests.rs": {
+    "mtime": 1794672543.1961186,
+    "seen": 1794676725.317173,
+    "ast_hash": "b67ac564d6a5e4c0dd5fa0078f45a369",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mod.rs": {
+    "mtime": 1794675137.4641597,
+    "seen": 1794676725.3171756,
+    "ast_hash": "199d47940876f12ee3c823c6a627bdf0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/events.rs": {
+    "mtime": 1794672669.7401204,
+    "seen": 1794676725.317177,
+    "ast_hash": "df3058cb2278eba04ff80ed7ff6a32df",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/layout.rs": {
+    "mtime": 1794668425.6200528,
+    "seen": 1794676725.3171787,
+    "ast_hash": "e05bd06196ab5bccb87026ee9b94d57b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/marker.rs": {
+    "mtime": 1794668476.4320538,
+    "seen": 1794676725.3171804,
+    "ast_hash": "6ac8aa01010d669d0bfcd0fc25001ea2",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/mod.rs": {
+    "mtime": 1794672854.7401235,
+    "seen": 1794676725.3171823,
+    "ast_hash": "bc713542e8982e5046fb1bd98fb49e9b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/paint.rs": {
+    "mtime": 1794668428.6520529,
+    "seen": 1794676725.317184,
+    "ast_hash": "602d7b5cf5038d3ccd006131a1be9386",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/state.rs": {
+    "mtime": 1794668426.8200529,
+    "seen": 1794676725.3171859,
+    "ast_hash": "aa76b35c0507ba96c957c5a847fadf85",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/mousepad/tests.rs": {
+    "mtime": 1794672547.5921185,
+    "seen": 1794676725.3171878,
+    "ast_hash": "5ec5869523649b372186ffb513432443",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/network/mod.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.31719,
+    "ast_hash": "d923f041f956fa34ca8c043b35514b41",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/network/model.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3171918,
+    "ast_hash": "e2cca2e24cfc14921055d72b85039e3f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/network/tests.rs": {
+    "mtime": 1794672544.6961186,
+    "seen": 1794676725.317194,
+    "ast_hash": "632a6529c28cb477684fb051bbb0d28f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/notifications/mod.rs": {
+    "mtime": 1794675210.020161,
+    "seen": 1794676725.317196,
+    "ast_hash": "6f790649cc4b4270651131d0a9c1dfc8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/notifications/notifications_ui.rs": {
+    "mtime": 1794673918.7761405,
+    "seen": 1794676725.3171978,
+    "ast_hash": "c93aefea295b0c92ceb53d68d40a4b14",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/notifications/notifications_ui/tests.rs": {
+    "mtime": 1794673899.2961402,
+    "seen": 1794676725.3172002,
+    "ast_hash": "aa8e45e10621e7f1a862c08344a87692",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/panels/apps_panel.rs": {
+    "mtime": 1794669992.524078,
+    "seen": 1794676725.3172019,
+    "ast_hash": "342eae0d5c4d0eae64b1c26d84e489f5",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/panels/mod.rs": {
+    "mtime": 1794669995.276078,
+    "seen": 1794676725.317204,
+    "ast_hash": "dba45aeb40a85b1ce18f12c9e0810044",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/panels/qs_model.rs": {
+    "mtime": 1794669989.5680778,
+    "seen": 1794676725.3172057,
+    "ast_hash": "5787d106861812910f434f7bb0632df6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/panels/qs_render.rs": {
+    "mtime": 1794669990.8640778,
+    "seen": 1794676725.317207,
+    "ast_hash": "0b5b2b295875fd0caedcf379b291af86",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/panels/tests.rs": {
+    "mtime": 1794669993.9240777,
+    "seen": 1794676725.3172085,
+    "ast_hash": "8cfca387422544dc8adb1c60c6737baf",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/mod.rs": {
+    "mtime": 1794675212.768161,
+    "seen": 1794676725.3172104,
+    "ast_hash": "4586fb2030660f6d01c5a6ce1f54fb36",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui.rs": {
+    "mtime": 1794668137.4440484,
+    "seen": 1794676725.317212,
+    "ast_hash": "c285cd49ffd07eacfebb52b0d8f110ef",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui/geom.rs": {
+    "mtime": 1794668086.5520475,
+    "seen": 1794676725.317214,
+    "ast_hash": "219f72c3312e0430d859b8cbd02fde00",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui/messages.rs": {
+    "mtime": 1794668112.388048,
+    "seen": 1794676725.317216,
+    "ast_hash": "d2ccbc985336b907879159c6d2f4e065",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui/parse.rs": {
+    "mtime": 1794668085.0720475,
+    "seen": 1794676725.3172176,
+    "ast_hash": "7f607416d5fcf188480104e5d2e6df4e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui/render.rs": {
+    "mtime": 1794668111.0120478,
+    "seen": 1794676725.3172195,
+    "ast_hash": "d2863ce6defcb68124b5dbd94339255b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui/sheet.rs": {
+    "mtime": 1794668114.016048,
+    "seen": 1794676725.3172216,
+    "ast_hash": "9666ecdc09e802c2e5d3435d4a99e5a7",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/phone/phone_ui/tests.rs": {
+    "mtime": 1794668136.0800483,
+    "seen": 1794676725.3172233,
+    "ast_hash": "51dfa5eba932b72240d343ff0783e0fe",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/recents/layout.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.317225,
+    "ast_hash": "819207da3439820f8e1d0976568878e3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/recents/mod.rs": {
+    "mtime": 1794672762.784122,
+    "seen": 1794676725.3172266,
+    "ast_hash": "3e7b7842f87bc647d9b925a383d21e30",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/recents/render.rs": {
+    "mtime": 1794672807.9841228,
+    "seen": 1794676725.3172286,
+    "ast_hash": "03ce4d71e9da608837a0b4246e0d0889",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/recents/tests.rs": {
+    "mtime": 1794672897.3761241,
+    "seen": 1794676725.3172426,
+    "ast_hash": "62f3d9fe566773328cc63306009978d4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/seltools/events.rs": {
+    "mtime": 1794670037.2480786,
+    "seen": 1794676725.317245,
+    "ast_hash": "9b75d5a0d9ccdd524d014a6a93a6c6bb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/seltools/list.rs": {
+    "mtime": 1794672674.6561205,
+    "seen": 1794676725.317247,
+    "ast_hash": "b803f9eec0b83a9e782b53109a314740",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/seltools/mod.rs": {
+    "mtime": 1794672732.8081214,
+    "seen": 1794676725.317249,
+    "ast_hash": "7504515b4b50abbc9322eb26b1bd651c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/seltools/model.rs": {
+    "mtime": 1794670033.5760784,
+    "seen": 1794676725.317252,
+    "ast_hash": "32b78a410623570ffcf58e62afb88c96",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/seltools/tests.rs": {
+    "mtime": 1794670039.4400785,
+    "seen": 1794676725.3172538,
+    "ast_hash": "cd6efa00ce16944878f199fdcfca11a6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/seltools/windows.rs": {
+    "mtime": 1794672819.1441228,
+    "seen": 1794676725.317256,
+    "ast_hash": "1fa743dc21a94b7732797df8d274e5b6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/mod.rs": {
+    "mtime": 1794675216.212161,
+    "seen": 1794676725.3172574,
+    "ast_hash": "3fbf5689c0030fe9913474bc5d77c206",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/settings_screen.rs": {
+    "mtime": 1794669128.3880641,
+    "seen": 1794676725.3172593,
+    "ast_hash": "d43fae808686fb6489c10b393778a19f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/settings_screen/pages.rs": {
+    "mtime": 1794669130.9000642,
+    "seen": 1794676725.3172607,
+    "ast_hash": "d751aa3ececcd3ecc5327e8879d71fa1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/settings_screen/pages_power_net.rs": {
+    "mtime": 1794669132.7000642,
+    "seen": 1794676725.3172626,
+    "ast_hash": "cad3b751482eed7c2828d8b321d48151",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/settings_screen/render.rs": {
+    "mtime": 1794669346.3960676,
+    "seen": 1794676725.3172643,
+    "ast_hash": "d5ba20e32e90ade5b5bfcab041e01d8f",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/settings_screen/sysinfo.rs": {
+    "mtime": 1794669129.6280642,
+    "seen": 1794676725.317266,
+    "ast_hash": "01a7a9aad8acb9b48e67b1f6f3827cbc",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/settings/settings_screen/tests.rs": {
+    "mtime": 1794669135.3440642,
+    "seen": 1794676725.3172674,
+    "ast_hash": "c7f491f7f5edccf21440e5a352596c10",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/store/layout.rs": {
+    "mtime": 1794670248.2520819,
+    "seen": 1794676725.317269,
+    "ast_hash": "9108acd7088d5b269fac3612ab78339d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/store/mod.rs": {
+    "mtime": 1794670252.480082,
+    "seen": 1794676725.3172705,
+    "ast_hash": "547bc198724572b56352830b3cb9eb90",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/store/model.rs": {
+    "mtime": 1794670246.7720819,
+    "seen": 1794676725.317273,
+    "ast_hash": "f176a9c55b382566091f9fb6cc36a23e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/store/render.rs": {
+    "mtime": 1794670249.6600819,
+    "seen": 1794676725.3172746,
+    "ast_hash": "2ccd12a8703a76d3bf4a7e05fb63c0a4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/store/tests.rs": {
+    "mtime": 1794670281.4160824,
+    "seen": 1794676725.3172762,
+    "ast_hash": "6a54f057f87a0d54e3cf52c3aff4c1bb",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/volume/mod.rs": {
+    "mtime": 1794675218.748161,
+    "seen": 1794676725.3172781,
+    "ast_hash": "beaae5fa6ab28061b7bfcc4db614f5f5",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/volume/volume_ui.rs": {
+    "mtime": 1794549048.4720066,
+    "seen": 1794676725.3172798,
+    "ast_hash": "14de159a5bdde167fd6ad3a5c3fa2a56",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/vpn/mod.rs": {
+    "mtime": 1794675220.044161,
+    "seen": 1794676725.3172815,
+    "ast_hash": "bd63c460a0549165128f4911c52e8582",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/vpn/vpn_screen.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3172834,
+    "ast_hash": "b159082614f769ca2cbf34c08985af93",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/vpn/vpn_screen/model.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3172848,
+    "ast_hash": "3aa97402be81b770025fed66d4b37ac9",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/vpn/vpn_screen/tests.rs": {
+    "mtime": 1794672517.144118,
+    "seen": 1794676725.317287,
+    "ast_hash": "2f231e98358e741807396e382d5f78b9",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/windows/mod.rs": {
+    "mtime": 1794675221.0161612,
+    "seen": 1794676725.3172886,
+    "ast_hash": "9d4c902bc795f7c1f651130d91f9847d",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/windows/windows_ui.rs": {
+    "mtime": 1794673923.9121404,
+    "seen": 1794676725.3172905,
+    "ast_hash": "4c5d6f5ff3c3f9fa078bb3d124d9381b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/windows/windows_ui/tests.rs": {
+    "mtime": 1794673905.3081403,
+    "seen": 1794676725.3172922,
+    "ast_hash": "2753e8cf3a021ea2fdb3e9d8e959a14c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/events.rs": {
+    "mtime": 1794672549.1481185,
+    "seen": 1794676725.3172941,
+    "ast_hash": "e956ddcaf69fdef81a4913d3d6b94071",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/mod.rs": {
+    "mtime": 1794671767.076106,
+    "seen": 1794676725.3172956,
+    "ast_hash": "1df9805dc9ce124473313beea7871e78",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/model.rs": {
+    "mtime": 1794668752.384058,
+    "seen": 1794676725.3172975,
+    "ast_hash": "1397589bd1bd5767fed375d3f7ebec4e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/refresh.rs": {
+    "mtime": 1794668787.7240586,
+    "seen": 1794676725.3172991,
+    "ast_hash": "c12a9e2d71685ae2b4764303f87b6941",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/render.rs": {
+    "mtime": 1794668759.1520581,
+    "seen": 1794676725.3173008,
+    "ast_hash": "83bfd30817f9f844ad90a12a204a35c8",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/tests.rs": {
+    "mtime": 1794668767.0320582,
+    "seen": 1794676725.3173022,
+    "ast_hash": "7e453eee692ef68dd6ffec59859df4d3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/window.rs": {
+    "mtime": 1794672467.8161173,
+    "seen": 1794676725.3173041,
+    "ast_hash": "5aec6e77fb897d6c06d6e2820756ff0e",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/features/wmbar/window_ops.rs": {
+    "mtime": 1794672435.0081167,
+    "seen": 1794676725.3173058,
+    "ast_hash": "81a91c5b9f236bdcb0f906bc215ddcc3",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/config/mod.rs": {
+    "mtime": 1794673907.8681402,
+    "seen": 1794676725.3173125,
+    "ast_hash": "78e76d08db81bf7285baefd292300cba",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/config/tests.rs": {
+    "mtime": 1794673888.8601398,
+    "seen": 1794676725.3173144,
+    "ast_hash": "4ce657bff3cbda657b635ba1133525ab",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/input/edge.rs": {
+    "mtime": 1794673910.8881402,
+    "seen": 1794676725.3173163,
+    "ast_hash": "8edb3c4020636395cd2c0255215e3e34",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/input/edge/tests.rs": {
+    "mtime": 1794673891.50414,
+    "seen": 1794676725.317318,
+    "ast_hash": "6cd105ddb87dadff6f39e291be6533be",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/input/gesture.rs": {
+    "mtime": 1794673913.4161403,
+    "seen": 1794676725.3173196,
+    "ast_hash": "e98be5c52658c619941e7157b21d7825",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/input/gesture/tests.rs": {
+    "mtime": 1794673893.80814,
+    "seen": 1794676725.317322,
+    "ast_hash": "45487612b0a6730188a14cae10beb832",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/input/mod.rs": {
+    "mtime": 1794675142.2881598,
+    "seen": 1794676725.3173237,
+    "ast_hash": "b6f4dd778ea555cf140ad03273c7549b",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ipc/core_client.rs": {
+    "mtime": 1794671637.0601041,
+    "seen": 1794676725.3173254,
+    "ast_hash": "d485ef08c1c5207607a3b62fa82366b1",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ipc/core_client/tests.rs": {
+    "mtime": 1794671637.0601041,
+    "seen": 1794676725.3173268,
+    "ast_hash": "81453d53ec842dbc86703f3fdfbdde69",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ipc/mod.rs": {
+    "mtime": 1794675143.9401598,
+    "seen": 1794676725.3173287,
+    "ast_hash": "f394fd43e7a4a0207510900e3d566383",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/mod.rs": {
+    "mtime": 1794675139.1121597,
+    "seen": 1794676725.3173301,
+    "ast_hash": "fa82648c7e5f01369657949ea09781f4",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/chrome.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.317332,
+    "ast_hash": "6b721c28ea7365fc66e5e4ced4c0198c",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/chrome/header.rs": {
+    "mtime": 1794672484.0841177,
+    "seen": 1794676725.3173335,
+    "ast_hash": "b47728cf9fa44707f9d2d89e745a4081",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/chrome/sidebar.rs": {
+    "mtime": 1794672509.428118,
+    "seen": 1794676725.317335,
+    "ast_hash": "54cb4aeff82eee7f2769881729f09820",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/chrome/tests.rs": {
+    "mtime": 1794672510.644118,
+    "seen": 1794676725.3173366,
+    "ast_hash": "7d976f0305cb4d90f399cc4c3d4f2c47",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/mod.rs": {
+    "mtime": 1794675145.82016,
+    "seen": 1794676725.3173382,
+    "ast_hash": "c7aff4faa542485f80733b1c86708dc0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/overlay.rs": {
+    "mtime": 1794670217.3880813,
+    "seen": 1794676725.3173397,
+    "ast_hash": "a742a9b372e812ab664e50c4682d7720",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/overlay/render.rs": {
+    "mtime": 1794670212.1040814,
+    "seen": 1794676725.317341,
+    "ast_hash": "f6edb9f10f2a944860198beeeda78810",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/overlay/sheet.rs": {
+    "mtime": 1794670209.2120812,
+    "seen": 1794676725.3173432,
+    "ast_hash": "2cc834c242f4b4fb28ff3611b68fb3df",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/overlay/tests.rs": {
+    "mtime": 1794670299.7720828,
+    "seen": 1794676725.3173454,
+    "ast_hash": "bc6e10755dd8a33f04b2fdb5370ee836",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/overlay/types.rs": {
+    "mtime": 1794670206.0160813,
+    "seen": 1794676725.3173473,
+    "ast_hash": "f72c8ba7c5989a94a6ee43625a3cd4de",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/topbar.rs": {
+    "mtime": 1794671637.0601041,
+    "seen": 1794676725.317349,
+    "ast_hash": "80d70ceb68e7082d514b70e04e641151",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/ui/topbar/tests.rs": {
+    "mtime": 1794672065.8961108,
+    "seen": 1794676725.3173504,
+    "ast_hash": "1464dd336b34551a4cd26602cb7bba52",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/cursor.rs": {
+    "mtime": 1794549048.4520063,
+    "seen": 1794676725.3173525,
+    "ast_hash": "6c888f4a779486af1106c9b501c15e07",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/ime.rs": {
+    "mtime": 1794670071.6320791,
+    "seen": 1794676725.317354,
+    "ast_hash": "953376df3fe7afd9049e677b09bacaf0",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/ime/focus.rs": {
+    "mtime": 1794669939.804077,
+    "seen": 1794676725.3173559,
+    "ast_hash": "431e4150027d3c38176da1cfab8a71ce",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/ime/handler.rs": {
+    "mtime": 1794669941.5080771,
+    "seen": 1794676725.3173578,
+    "ast_hash": "c57d2dc725ae3afd63807d8feb2993b6",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/ime/tests.rs": {
+    "mtime": 1794669942.876077,
+    "seen": 1794676725.3173594,
+    "ast_hash": "76cc34a86e49c1dcd5d983c0ac3e29dc",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/mod.rs": {
+    "mtime": 1794675147.16416,
+    "seen": 1794676725.3173609,
+    "ast_hash": "de7f33e0425a5186ee7c1abb68633c8a",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/present.rs": {
+    "mtime": 1794673921.2521405,
+    "seen": 1794676725.3173628,
+    "ast_hash": "5306bb1bcb06731e79418d5185498acf",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/present/tests.rs": {
+    "mtime": 1794673901.78414,
+    "seen": 1794676725.3173642,
+    "ast_hash": "96f97df7b8d070a1a1d54ac83ef3e2da",
+    "semantic_hash": ""
+  },
+  "crates/walpad-shell/src/shared/x11/window.rs": {
+    "mtime": 1794549048.4720066,
+    "seen": 1794676725.3173654,
+    "ast_hash": "907310ca8378855ba89ea1951e3ecc64",
     "semantic_hash": ""
   }
 }
