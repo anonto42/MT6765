@@ -1567,6 +1567,18 @@ impl Daemon {
                 .modem
                 .phone_op(Instant::now(), |p, n| p.dial(number.expose(), n))
                 .map_err(mobile_err),
+            Command::PhoneUssd { code } => self
+                .modem
+                .phone_op(Instant::now(), |p, n| p.ussd(code.expose(), n))
+                .map_err(mobile_err),
+            Command::PhoneUssdCancel => self
+                .modem
+                .phone_op(Instant::now(), |p, _| p.ussd_cancel())
+                .map_err(mobile_err),
+            Command::PhoneSimContacts => self
+                .modem
+                .phone_op(Instant::now(), |p, _| p.sim_contacts())
+                .map_err(mobile_err),
             Command::PhoneAnswer => self.modem.phone_op(Instant::now(), |p, n| p.answer(n)).map_err(mobile_err),
             Command::PhoneHangup => self.modem.phone_op(Instant::now(), |p, n| p.hangup(n)).map_err(mobile_err),
             Command::PhoneDtmf { digit } => {

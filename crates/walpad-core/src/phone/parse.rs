@@ -162,6 +162,86 @@ pub fn csca(lines: &[String]) -> Option<String> {
         .then(|| n.to_string())
 }
 
+fn decode_ucs2_hex(s: &str) -> Option<String> {
+    if s.is_empty() || !s.len().is_multiple_of(4) || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let units: Vec<u16> = s
+        .as_bytes()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter_map(|c| {
+            std::str::from_utf8(c)
+                .ok()
+                .and_then(|h| u16::from_str_radix(h, 16).ok())
+        })
+        .collect();
+    Some(String::from_utf16_lossy(&units))
+}
+
+/// One `+CUSD: <m>[,"<str>"[,<dcs>]]` USSD response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cusd {
+    pub m: u8,
+    pub text: Option<String>,
+    pub dcs: u8,
+}
+
+pub fn cusd(lines: &[String]) -> Option<Cusd> {
+    let p = lines.iter().rev().find_map(|l| l.strip_prefix("+CUSD:"))?;
+    let f = fields(p);
+    let m: u8 = f.first()?.parse().ok()?;
+    let dcs: u8 = f.get(2).and_then(|d| d.parse().ok()).unwrap_or(15);
+    let text = f
+        .get(1)
+        .map(|s| {
+            if dcs == 72 || dcs == 8 {
+                decode_ucs2_hex(s).unwrap_or_else(|| s.clone())
+            } else {
+                s.clone()
+            }
+        })
+        .filter(|s| !s.is_empty());
+    Some(Cusd { m, text, dcs })
+}
+
+/// Range from `AT+CPBR=?` (`+CPBR: (1-250),...`), clamped to `1..=500`.
+pub fn cpbr_range(lines: &[String]) -> Option<(u16, u16)> {
+    let p = lines.iter().find_map(|l| l.strip_prefix("+CPBR:"))?;
+    let first = fields(p).into_iter().next()?;
+    let inner = first.trim().trim_start_matches('(').trim_end_matches(')');
+    let (a, b) = inner.split_once('-')?;
+    let lo: u16 = a.trim().parse().ok()?;
+    let hi: u16 = b.trim().parse().ok()?;
+    (lo >= 1 && hi >= lo).then(|| (lo, hi.min(500)))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SimContact {
+    pub name: String,
+    pub number: String,
+}
+
+/// Entries from `+CPBR: <idx>,"<number>",<type>,"<name>"`.
+pub fn cpbr(lines: &[String]) -> Vec<SimContact> {
+    lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("+CPBR:"))
+        .filter_map(|p| {
+            let f = fields(p);
+            let num = clean_number(f.get(1)?);
+            if num.is_empty() {
+                return None;
+            }
+            let raw_name = f.get(3).map(String::as_str).unwrap_or("").trim();
+            let name = decode_ucs2_hex(raw_name).unwrap_or_else(|| raw_name.to_string());
+            let name = if name.is_empty() { num.clone() } else { name };
+            Some(SimContact { name, number: num })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,5 +335,40 @@ mod tests {
         assert_eq!(csca(&l(&["+CSCA: \"\",128"])), None);
         assert_eq!(csca(&l(&["+CSCA: \"12;rm\",128"])), None);
         assert_eq!(csca(&l(&[])), None);
+    }
+
+    #[test]
+    fn cusd_parses_ascii_and_ucs2() {
+        let a = cusd(&l(&["+CUSD: 0,\"Balance: 45.50 Tk\",15"])).unwrap();
+        assert_eq!(
+            (a.m, a.text.as_deref(), a.dcs),
+            (0, Some("Balance: 45.50 Tk"), 15)
+        );
+        let u = cusd(&l(&["+CUSD: 1,\"098609A809C1\",72"])).unwrap();
+        assert_eq!((u.m, u.text.as_deref(), u.dcs), (1, Some("আনু"), 72));
+    }
+
+    #[test]
+    fn cpbr_parses_range_and_contacts() {
+        assert_eq!(cpbr_range(&l(&["+CPBR: (1-250),40,14"])), Some((1, 250)));
+        assert_eq!(cpbr_range(&l(&["+CPBR: (1-999),40,14"])), Some((1, 500)));
+        let list = cpbr(&l(&[
+            "+CPBR: 1,\"+8801711234567\",145,\"Rahim\"",
+            "+CPBR: 2,\"01811000000\",129,\"\"",
+            "+CPBR: 3,\"01911000000\",129,\"0041006D0069\"",
+        ]));
+        assert_eq!(list.len(), 3);
+        assert_eq!(
+            (list[0].name.as_str(), list[0].number.as_str()),
+            ("Rahim", "+8801711234567")
+        );
+        assert_eq!(
+            (list[1].name.as_str(), list[1].number.as_str()),
+            ("01811000000", "01811000000")
+        );
+        assert_eq!(
+            (list[2].name.as_str(), list[2].number.as_str()),
+            ("Ami", "01911000000")
+        );
     }
 }

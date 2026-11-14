@@ -118,6 +118,8 @@ pub enum PhoneTarget {
     ClearLog,
     Search,
     AddContact,
+    SimContacts,
+    UssdDismiss,
     /// Contact in the filtered list.
     Contact(usize),
     NewMessage,
@@ -692,6 +694,18 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 Some(Icon::Phone),
             );
             hits.push((g.call, pt(PhoneTarget::Call)));
+            if let Some(u) = v.st.as_ref().and_then(|s| s.phone.ussd.as_ref()) {
+                let r = Rect::new(c.x, g.call.bottom() + SP_3, c.w, ROW);
+                p.card(r, pr(PhoneTarget::UssdDismiss));
+                let msg = u.text.as_deref().unwrap_or("Running USSD...");
+                p.text(
+                    msg,
+                    Style::new(Face::Regular, SIZE_BODY, text()),
+                    Rect::new(r.x + SP_4, r.y, r.w - 2 * SP_4, r.h),
+                    Align::Left,
+                );
+                hits.push((r, pt(PhoneTarget::UssdDismiss)));
+            }
         }
         PhoneView::Recents => {
             let recents = m.recents();
@@ -757,7 +771,8 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
             }
         }
         PhoneView::Contacts => {
-            let search = Rect::new(c.x, y0, c.w - 120 - SP_3, SEG_H);
+            let search = Rect::new(c.x, y0, c.w - 210 - SP_3, SEG_H);
+            let sim_btn = Rect::new(c.right() - 210, y0, 82, SEG_H);
             let add = Rect::new(c.right() - 120, y0, 120, SEG_H);
             p.outline_box(search, 0, pr(PhoneTarget::Search), false, false);
             let (txt, col) = if m.search.is_empty() {
@@ -772,6 +787,20 @@ pub fn render(p: &mut Painter, frame: &Frame, v: &View) -> Vec<(Rect, Target)> {
                 Align::Left,
             );
             hits.push((search, pt(PhoneTarget::Search)));
+            p.button(
+                sim_btn,
+                "SIM",
+                ButtonKind::Secondary,
+                if !v.online {
+                    ButtonState::Disabled
+                } else if pr(PhoneTarget::SimContacts) {
+                    ButtonState::Pressed
+                } else {
+                    ButtonState::Default
+                },
+                None,
+            );
+            hits.push((sim_btn, pt(PhoneTarget::SimContacts)));
             p.button(
                 add,
                 "Add",

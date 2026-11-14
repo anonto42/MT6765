@@ -407,8 +407,8 @@ fn an_outgoing_call_runs_through_every_state() {
         assert_eq!(r["error"]["code"], "invalid_args", "{bad:?}: {r}");
     }
     assert_eq!(
-        c.call("phone_dial", json!({"number": "*121#"}))["error"]["code"],
-        "refused"
+        c.call("phone_dial", json!({"number": "*121#"}))["data"]["state"],
+        "running"
     );
     assert!(!fake.log().iter().any(|l| l.starts_with("ATD")));
 

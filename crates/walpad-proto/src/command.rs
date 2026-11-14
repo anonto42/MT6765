@@ -71,6 +71,9 @@ pub const COMMAND_NAMES: &[&str] = &[
     "pkg_remove",
     "default_app",
     "phone_dial",
+    "phone_ussd",
+    "phone_ussd_cancel",
+    "phone_sim_contacts",
     "phone_answer",
     "phone_hangup",
     "phone_dtmf",
@@ -550,10 +553,18 @@ pub enum Command {
     },
     /// Place a voice call (owner request 2026-11-11, `phone-dialer`): `ATD<number>;` over the modem's
     /// AT channel. `number` is 1-32 characters of `0-9 + * # ,` (emergency numbers included).
-    /// Private: never logged.
+    /// USSD codes (`*121#`, `#...#`) are routed to `AT+CUSD`. Private: never logged.
     PhoneDial {
         number: Secret,
     },
+    /// Send a USSD code (`AT+CUSD=1,"<code>",15`). Private: never logged.
+    PhoneUssd {
+        code: Secret,
+    },
+    /// Cancel/dismiss the active USSD session (`AT+CUSD=2`).
+    PhoneUssdCancel,
+    /// Load contacts from the SIM phonebook (`AT+CPBS="SM"` / `AT+CPBR`).
+    PhoneSimContacts,
     /// Answer the ringing call (`ATA`).
     PhoneAnswer,
     /// End the call, or reject the ringing one (`AT+CHUP`).
@@ -829,6 +840,9 @@ impl Command {
             }
             Command::PhoneDial { number } if !valid_dial_number(number.expose()) => {
                 Err("number must be 1-32 characters of 0-9 + * # ,".into())
+            }
+            Command::PhoneUssd { code } if !valid_dial_number(code.expose()) => {
+                Err("code must be 1-32 characters of 0-9 + * # ,".into())
             }
             Command::PhoneDtmf { digit } if !valid_dtmf(digit) => {
                 Err("digit must be one of 0-9 * #".into())

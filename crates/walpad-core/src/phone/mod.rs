@@ -27,7 +27,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 use store::{CallLog, CallRec, ContactStore, Sms, SmsStore};
 use walpad_hw::Root;
-use walpad_proto::{CallState, PhoneStatus};
+use walpad_proto::{CallState, PhoneStatus, UssdStatus};
 
 pub const CALLAUDIO: &str = "/usr/local/sbin/walpad-callaudio";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
@@ -79,6 +79,9 @@ pub enum PhoneKind {
     Setup,
     Clcc,
     Dial,
+    Ussd,
+    UssdCancel,
+    SimContacts,
     Answer,
     Hangup,
     Dtmf,
@@ -92,6 +95,10 @@ enum Op {
     Setup,
     Clcc,
     Dial(String),
+    Ussd(String),
+    UssdCancel,
+    SimContactsRange,
+    SimContactsRead(u16, u16),
     Answer,
     Hangup { ath: bool },
     Dtmf(char),
@@ -107,6 +114,9 @@ impl Op {
             Op::Setup => PhoneKind::Setup,
             Op::Clcc => PhoneKind::Clcc,
             Op::Dial(_) => PhoneKind::Dial,
+            Op::Ussd(_) => PhoneKind::Ussd,
+            Op::UssdCancel => PhoneKind::UssdCancel,
+            Op::SimContactsRange | Op::SimContactsRead(..) => PhoneKind::SimContacts,
             Op::Answer => PhoneKind::Answer,
             Op::Hangup { .. } => PhoneKind::Hangup,
             Op::Dtmf(_) => PhoneKind::Dtmf,
@@ -131,6 +141,17 @@ impl Op {
             .collect(),
             Op::Clcc => vec![AtCmd::new("AT+CLCC")],
             Op::Dial(n) => vec![AtCmd::secret(format!("ATD{n};"))],
+            Op::Ussd(code) => {
+                vec![AtCmd::secret(format!("AT+CUSD=1,\"{code}\",15"))
+                    .timeout(Duration::from_secs(20))]
+            }
+            Op::UssdCancel => vec![AtCmd::new("AT+CUSD=2")],
+            Op::SimContactsRange => {
+                vec![AtCmd::new("AT+CPBS=\"SM\""), AtCmd::new("AT+CPBR=?")]
+            }
+            Op::SimContactsRead(a, b) => {
+                vec![AtCmd::new(format!("AT+CPBR={a},{b}")).timeout(Duration::from_secs(10))]
+            }
             Op::Answer => vec![AtCmd::new("ATA")],
             Op::Hangup { ath: false } => vec![AtCmd::new("AT+CHUP")],
             Op::Hangup { ath: true } => vec![AtCmd::new("ATH")],
@@ -199,6 +220,7 @@ pub struct Phone {
     next_sms: Instant,
     call: Option<Call>,
     ended: Option<Ended>,
+    ussd: Option<UssdStatus>,
     muted: bool,
     speaker: bool,
     smsc: Option<String>,
@@ -244,6 +266,7 @@ impl Phone {
             next_sms: now,
             call: None,
             ended: None,
+            ussd: None,
             muted: false,
             speaker: false,
             smsc: None,
@@ -417,6 +440,25 @@ impl Phone {
         if op.kind() != kind {
             return;
         }
+        let mut got_cusd = false;
+        for r in results.iter().flatten() {
+            if let Some(c) = parse::cusd(&r.lines) {
+                got_cusd = true;
+                let state = if matches!(c.m, 2..=5) {
+                    "failed"
+                } else {
+                    "done"
+                };
+                self.ussd = Some(UssdStatus {
+                    state: state.into(),
+                    text: c
+                        .text
+                        .or_else(|| (state == "failed").then(|| "USSD request failed".into())),
+                    interactive: c.m == 1,
+                });
+                self.dirty = true;
+            }
+        }
         let first = results.first();
         match op {
             Op::Setup => {
@@ -437,6 +479,45 @@ impl Phone {
                 }
             }
             Op::Dial(_) => self.dial_result(first, now),
+            Op::Ussd(_) => {
+                if !got_cusd && !ok_final(first) {
+                    self.ussd = Some(UssdStatus {
+                        state: "failed".into(),
+                        text: Some("USSD request failed".into()),
+                        interactive: false,
+                    });
+                    self.dirty = true;
+                }
+            }
+            Op::UssdCancel => {}
+            Op::SimContactsRange => {
+                let (lo, hi) = results
+                    .last()
+                    .and_then(|o| o.as_ref().ok())
+                    .and_then(|r| parse::cpbr_range(&r.lines))
+                    .unwrap_or((1, 50));
+                let mut start = lo;
+                while start <= hi {
+                    let end = (start + 49).min(hi);
+                    self.queue.push_back(Op::SimContactsRead(start, end));
+                    start = end + 1;
+                }
+            }
+            Op::SimContactsRead(..) => {
+                if let Some(r) = reply(first).filter(|r| r.fin == Final::Ok) {
+                    let cards: Vec<(String, Vec<String>)> = parse::cpbr(&r.lines)
+                        .into_iter()
+                        .map(|c| (c.name, vec![c.number]))
+                        .collect();
+                    if !cards.is_empty() {
+                        let added = self.contacts.import(cards);
+                        if added > 0 {
+                            self.dirty = true;
+                            self.notice(json!({"kind": "sim_contacts", "added": added}));
+                        }
+                    }
+                }
+            }
             Op::Answer => {
                 if !ok_final(first) {
                     self.notice(json!({"kind": "phone_error", "what": "answer"}));
@@ -657,7 +738,7 @@ impl Phone {
         Ok(())
     }
 
-    /// `phone_dial`: strict number check, then `ATD<number>;`.
+    /// `phone_dial`: strict number check, then `ATD<number>;` (or `AT+CUSD` for `*...#` USSD).
     pub fn dial(&mut self, number: &str, now: Instant) -> Result<Value, MobileError> {
         if !walpad_proto::valid_dial_number(number) {
             return Err(MobileError::Invalid(
@@ -665,9 +746,7 @@ impl Phone {
             ));
         }
         if (number.starts_with('*') || number.starts_with('#')) && number.ends_with('#') {
-            return Err(MobileError::Refused(
-                "USSD codes (like *123#) are not supported yet".into(),
-            ));
+            return self.ussd(number, now);
         }
         self.need_line(is_emergency(number))?;
         if self.call.is_some() {
@@ -690,6 +769,40 @@ impl Phone {
         self.dirty = true;
         eprintln!("walpad-core: dialling");
         Ok(json!({"state": "dialing"}))
+    }
+
+    /// `phone_ussd`: send a USSD code (`AT+CUSD=1,"<code>",15`).
+    pub fn ussd(&mut self, code: &str, _now: Instant) -> Result<Value, MobileError> {
+        if !walpad_proto::valid_dial_number(code) {
+            return Err(MobileError::Invalid(
+                "code must be 1-32 characters of 0-9 + * # ,".into(),
+            ));
+        }
+        self.need_line(false)?;
+        self.ussd = Some(UssdStatus {
+            state: "running".into(),
+            text: None,
+            interactive: false,
+        });
+        self.queue.push_front(Op::Ussd(code.to_string()));
+        self.dirty = true;
+        Ok(json!({"state": "running"}))
+    }
+
+    pub fn ussd_cancel(&mut self) -> Result<Value, MobileError> {
+        self.ussd = None;
+        if self.gate.ready {
+            self.queue.push_front(Op::UssdCancel);
+        }
+        self.dirty = true;
+        Ok(json!({"cancelled": true}))
+    }
+
+    /// `phone_sim_contacts`: read SIM phonebook entries (`AT+CPBS="SM"` / `AT+CPBR`).
+    pub fn sim_contacts(&mut self) -> Result<Value, MobileError> {
+        self.need_line(false)?;
+        self.queue.push_back(Op::SimContactsRange);
+        Ok(json!({"state": "loading"}))
     }
 
     pub fn answer(&mut self, _now: Instant) -> Result<Value, MobileError> {
@@ -1029,6 +1142,7 @@ impl Phone {
             unread: self.sms.unread(),
             speaker: self.speaker,
             audio: "experimental".into(),
+            ussd: self.ussd.clone(),
             ..Default::default()
         };
         if let Some(c) = &self.call {
@@ -1321,16 +1435,46 @@ mod tests {
                 "{bad}"
             );
         }
-        assert!(matches!(q.dial("*121#", now), Err(MobileError::Refused(_))));
+        assert!(q.dial("*121#", now).is_ok());
+        let j = q.next_job(now).unwrap();
+        assert_eq!(j.kind, JobKind::Phone(PhoneKind::Ussd));
+        q.handle(
+            PhoneKind::Ussd,
+            &[ok(&["+CUSD: 0,\"Balance: 50 Tk\",15"])],
+            now,
+        );
+        let u = q.status(now).ussd.unwrap();
+        assert_eq!(u.state, "done");
+        assert_eq!(u.text.as_deref(), Some("Balance: 50 Tk"));
         for ok_number in ["112", "199", "+8801711234567", "*21#0171", "123,4"] {
             let mut r = Phone::new(&root());
             r.set_gate(ready(), now);
             let res = r.dial(ok_number, now);
-            // `*21#0171` is not USSD (does not start with * and end with #)
             assert!(res.is_ok(), "{ok_number}: {res:?}");
         }
         assert!(is_emergency("112") && is_emergency("999") && is_emergency("199"));
         assert!(!is_emergency("1999"));
+    }
+
+    #[test]
+    fn sim_contacts_load_in_batches() {
+        let (mut p, now) = phone();
+        assert!(p.sim_contacts().is_ok());
+        let j = p.next_job(now).unwrap();
+        assert_eq!(j.kind, JobKind::Phone(PhoneKind::SimContacts));
+        p.handle(
+            PhoneKind::SimContacts,
+            &[ok(&[]), ok(&["+CPBR: (1-2),40,14"])],
+            now,
+        );
+        let j2 = p.next_job(now).unwrap();
+        assert_eq!(j2.kind, JobKind::Phone(PhoneKind::SimContacts));
+        p.handle(
+            PhoneKind::SimContacts,
+            &[ok(&["+CPBR: 1,\"+8801711234567\",145,\"GP Help\""])],
+            now,
+        );
+        assert_eq!(p.contacts.name_of("01711234567"), Some("GP Help"));
     }
 
     #[test]

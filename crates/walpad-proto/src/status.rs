@@ -386,6 +386,18 @@ pub enum CallState {
     Ended,
 }
 
+/// USSD session state (`AT+CUSD`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UssdStatus {
+    /// `running` | `done` | `failed`
+    pub state: String,
+    /// Decoded network reply or short error message.
+    pub text: Option<String>,
+    /// True when the network requested a menu reply (`+CUSD: 1,...`).
+    pub interactive: bool,
+}
+
 /// Calls and messages. The number and name of the party are private to the shell: never logged.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -410,6 +422,8 @@ pub struct PhoneStatus {
     pub unread: u32,
     /// Call audio is experimental until verified on the device (see walpad-callaudio).
     pub audio: String,
+    /// Latest USSD request/response (`AT+CUSD`), if any.
+    pub ussd: Option<UssdStatus>,
 }
 
 /// Output volume (owner request 2026-11-10). `available` = something can change the volume (the

@@ -54,10 +54,10 @@ static long gate_sleep_ms(const fbgate *g) { return g->paused ? GATE_PAUSE_SLEEP
  * copy do not fit the cache).  After IDLE_AFTER_TICKS unchanged polls (~1 s) poll every IDLE_SLEEP_MS
  * instead; the first change brings the normal rate back at once. */
 #define IDLE_AFTER_TICKS 25
-#define IDLE_SLEEP_MS 100
+#define IDLE_SLEEP_MS 200
 /* wait for a frame to stop changing before presenting it (no half-painted frames), at most this long */
 #define SETTLE_STEP_MS 8
-#define SETTLE_MAX_MS 16   /* short: a long settle made continuous scrolling run at ~12 frames/s */
+#define SETTLE_MAX_MS 32   /* enough for a full 4 MB Xvfb PutImage batch without sluggish scrolling */
 static long idle_sleep_ms(long normal, int idle_ticks) { return idle_ticks >= IDLE_AFTER_TICKS && normal < IDLE_SLEEP_MS ? IDLE_SLEEP_MS : normal; }
 
 #endif

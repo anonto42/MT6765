@@ -436,6 +436,8 @@ pub enum Cmd {
     /// Phone (owner request 2026-11-11): numbers and texts are `Secret`s, so a Debug print of a
     /// command can never leak them.
     PhoneDial(Secret),
+    PhoneUssdCancel,
+    PhoneSimContacts,
     SmsSend {
         number: Secret,
         text: Secret,
@@ -680,6 +682,8 @@ impl Cmd {
                 "phone_dial",
                 json!({"number": serde_json::to_value(n).unwrap_or(Value::Null)}),
             ),
+            Cmd::PhoneUssdCancel => ("phone_ussd_cancel", Value::Null),
+            Cmd::PhoneSimContacts => ("phone_sim_contacts", Value::Null),
             Cmd::SmsSend { number, text } => (
                 "sms_send",
                 json!({"number": serde_json::to_value(number).unwrap_or(Value::Null),

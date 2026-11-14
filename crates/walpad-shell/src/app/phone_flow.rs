@@ -199,6 +199,8 @@ impl App {
                 });
                 self.open_text_sheet(SheetPurpose::PhoneContactName, "New contact", "");
             }
+            PhoneTarget::SimContacts => out.cmd(Cmd::PhoneSimContacts),
+            PhoneTarget::UssdDismiss => out.cmd(Cmd::PhoneUssdCancel),
             PhoneTarget::Contact(i) => {
                 let id = self
                     .model

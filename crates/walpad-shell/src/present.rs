@@ -70,6 +70,9 @@ pub fn present<C: Connection>(
         y = end;
     }
     conn.flush()?;
+    // Wait for Xvfb to finish rasterizing all PutImage chunks into Xvfb_screen0 before
+    // waking fbmirror, so fast scrolls never present a torn half-frame.
+    let _ = conn.get_input_focus().map(|c| c.reply());
     wake_fbmirror();
     Ok(())
 }

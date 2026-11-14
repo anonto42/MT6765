@@ -102,6 +102,9 @@ impl Fonts {
     }
 
     fn glyph(&mut self, face: Face, ch: char, px: f32) -> &Glyph {
+        if self.cache.len() >= 2048 {
+            self.cache.clear();
+        }
         let key = (face.index(), ch, px.to_bits());
         let fonts = &self.fonts;
         self.cache.entry(key).or_insert_with(|| {
