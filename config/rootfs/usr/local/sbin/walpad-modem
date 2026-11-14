@@ -273,14 +273,22 @@ case ${1:-status} in
     sleep 1
     vendor_daemon ccci_mdinit 0
     i=0; while [ $i -lt 60 ]; do
-      [ -c /dev/ttyC0 ] && grep -q "ready" /sys/kernel/ccci/md_en 2>/dev/null && break
+      [ -c /dev/ttyC0 ] && {
+        grep -q "md1:4" /sys/kernel/ccci/boot 2>/dev/null ||
+          grep -q "^vendor.mtk.md1.status=ready" $PROPS 2>/dev/null
+      } && break
       sleep 1; i=$((i+1))
     done
     say "after ${i}s: md1 status $(grep "^vendor.mtk.md1.status=" $PROPS | tail -1)"
     # AT channels: gsm0710muxd multiplexes /dev/ttyC0 into /dev/radio/pttycmd1.. (pseudo-terminals)
     mkdir -p /dev/radio
+    running gsm0710muxd || rm -f /dev/radio/*
     vendor_daemon gsm0710muxd -s /dev/ttyC0 -f 512 -n 8 -m basic
     i=0; while [ $i -lt 20 ] && [ ! -e /dev/radio/pttycmd1 ]; do sleep 1; i=$((i+1)); done
+    if [ ! -e /dev/radio/pttycmd1 ]; then
+      say "gsm0710muxd failed to open /dev/radio/pttycmd1 (modem may need a reboot)"
+      exit 1
+    fi
     say "AT channels: $(ls /dev/radio 2>/dev/null | tr '\n' ' ')"
     radio_on
     ;;
