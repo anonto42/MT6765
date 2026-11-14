@@ -444,19 +444,7 @@ impl Phone {
         for r in results.iter().flatten() {
             if let Some(c) = parse::cusd(&r.lines) {
                 got_cusd = true;
-                let state = if matches!(c.m, 2..=5) {
-                    "failed"
-                } else {
-                    "done"
-                };
-                self.ussd = Some(UssdStatus {
-                    state: state.into(),
-                    text: c
-                        .text
-                        .or_else(|| (state == "failed").then(|| "USSD request failed".into())),
-                    interactive: c.m == 1,
-                });
-                self.dirty = true;
+                self.on_cusd(c);
             }
         }
         let first = results.first();
@@ -769,6 +757,21 @@ impl Phone {
         self.dirty = true;
         eprintln!("walpad-core: dialling");
         Ok(json!({"state": "dialing"}))
+    }
+
+    /// Apply a `+CUSD:` USSD response (from either the AT reply or the `/dev/radio/pttynoti` URC).
+    pub fn on_cusd(&mut self, c: parse::Cusd) {
+        // On MediaTek/3GPP, m=2 ("terminated by network") often carries the final USSD text.
+        let failed = matches!(c.m, 4 | 5) || (matches!(c.m, 2 | 3) && c.text.is_none());
+        let state = if failed { "failed" } else { "done" };
+        self.ussd = Some(UssdStatus {
+            state: state.into(),
+            text: c
+                .text
+                .or_else(|| failed.then(|| "USSD request failed".into())),
+            interactive: c.m == 1,
+        });
+        self.dirty = true;
     }
 
     /// `phone_ussd`: send a USSD code (`AT+CUSD=1,"<code>",15`).
@@ -1141,7 +1144,12 @@ impl Phone {
             reason: reason.map(String::from),
             unread: self.sms.unread(),
             speaker: self.speaker,
-            audio: "experimental".into(),
+            audio: if self.script.exists() {
+                "ready"
+            } else {
+                "unavailable"
+            }
+            .into(),
             ussd: self.ussd.clone(),
             ..Default::default()
         };

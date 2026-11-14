@@ -49,9 +49,28 @@ speaker_path() {
 }
 
 earpiece_path() {
-  # handset / receiver amplifier of the MT6357 codec (names as in the legacy mt-soc driver)
+  # handset / receiver amplifier of the MT6357 codec
   set_ctl Voice_Amp_Switch "$1"
   set_ctl Handset_Amp_Switch "$1"
+  if [ "$1" = "On" ]; then
+    set_ctl Receiver_Speaker_Switch 1
+    set_ctl Handset_PGA_GAIN 8
+  else
+    set_ctl Receiver_Speaker_Switch 0
+  fi
+}
+
+speech_bridge() {
+  set_ctl Speech_MD_Active "$1"
+  if [ "$1" = "On" ]; then
+    set_ctl Speech_DL_Mute Off
+    set_ctl Speech_UL_Mute Off
+    set_ctl Speech_Mic_Mute Off
+    set_ctl Audio_ADC_1_Switch On
+    set_ctl Audio_ADC_2_Switch On
+    set_ctl Audio_Preamp1_Switch On
+    set_ctl Audio_Preamp2_Switch On
+  fi
 }
 
 cmd=${1:-}
@@ -60,6 +79,7 @@ case "$cmd" in
     route=${2:-earpiece}
     case "$route" in speaker | earpiece) ;; *) echo "walpad-callaudio: route must be speaker or earpiece"; exit 2 ;; esac
     have_card || { echo "walpad-callaudio: no sound card"; exit 0; }
+    speech_bridge On
     if [ "$route" = speaker ]; then
       earpiece_path Off
       speaker_path On
@@ -71,10 +91,11 @@ case "$cmd" in
     fi
     mkdir -p "$(dirname "$STATE")" 2>/dev/null
     echo "$route" > "$STATE" 2>/dev/null
-    echo "walpad-callaudio: call audio routed to $route (experimental)"
+    echo "walpad-callaudio: call audio routed to $route"
     ;;
   stop)
     have_card || { echo "walpad-callaudio: no sound card"; exit 0; }
+    speech_bridge Off
     earpiece_path Off
     speaker_path On
     rm -f "$STATE" 2>/dev/null

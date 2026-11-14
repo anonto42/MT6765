@@ -399,7 +399,7 @@ fn an_outgoing_call_runs_through_every_state() {
     let rig = Rig::start(&root("out", &fake));
     let mut c = Conn::new(&rig.root);
     c.wait("line usable", |p| p["available"] == true);
-    assert_eq!(c.phone()["audio"], "experimental");
+    assert_eq!(c.phone()["audio"], "ready");
 
     // strict number validation: nothing odd reaches the modem
     for bad in ["", "abc", "012;ATH", "0171 123", "01711234567\r"] {

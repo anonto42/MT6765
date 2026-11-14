@@ -347,11 +347,12 @@ impl CallScreen {
                 Align::Center,
             );
         }
-        // the honest line
-        if matches!(
-            call,
-            CallState::Ringing | CallState::Dialing | CallState::Active | CallState::Held
-        ) {
+        if self.st.audio == "experimental"
+            && matches!(
+                call,
+                CallState::Ringing | CallState::Dialing | CallState::Active | CallState::Held
+            )
+        {
             p.text(
                 "Call audio is experimental: it may be silent",
                 Style::new(Face::Regular, SIZE_CAPTION, warning()),

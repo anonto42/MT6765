@@ -171,6 +171,35 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     std::fs::rename(&tmp, path)
 }
 
+/// Keep `/root/.config/gtk-3.0/settings.ini` in sync with the device dark/light theme.
+fn sync_gtk_theme(root: &Root, light: bool) {
+    let path = root.p("/root/.config/gtk-3.0/settings.ini");
+    if let Some(d) = path.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let val = if light { "0" } else { "1" };
+    let key = "gtk-application-prefer-dark-theme";
+    let existing = std::fs::read_to_string(&path).unwrap_or_else(|_| "[Settings]\n".to_string());
+    let mut found = false;
+    let mut lines: Vec<String> = existing
+        .lines()
+        .map(|l| {
+            if l.trim_start().starts_with(key) {
+                found = true;
+                format!("{key}={val}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    if !found {
+        lines.push(format!("{key}={val}"));
+    }
+    let mut out = lines.join("\n");
+    out.push('\n');
+    let _ = write_atomic(&path, out.as_bytes());
+}
+
 /// Milliseconds since the epoch: the screen lock's clock (its rate-limit state is persisted).
 fn wall_ms() -> u64 {
     std::time::SystemTime::now()
@@ -1034,6 +1063,10 @@ impl Daemon {
         let bytes = serde_json::to_vec_pretty(&obj).map_err(internal)?;
         write_atomic(&path, &bytes)
             .map_err(|e| (ErrorCode::Internal, format!("cannot write {virt}: {e}")))?;
+        if key == "theme" {
+            let light = value.as_str() == Some("light");
+            sync_gtk_theme(&self.root, light);
+        }
         if key == "net_hostname" {
             if let Some(hn) = value.as_str().filter(|s| !s.is_empty()) {
                 let line = format!("{hn}\n");

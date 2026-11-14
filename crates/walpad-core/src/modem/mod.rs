@@ -25,6 +25,7 @@ use walpad_proto::{
 
 pub const SCRIPT: &str = "/usr/local/sbin/walpad-modem";
 pub const TTY: &str = "/dev/radio/pttycmd1";
+pub const NOTI_TTY: &str = "/dev/radio/pttynoti";
 pub const CONF: &str = "/etc/walpad/mobile.conf";
 /// The owner's radio switch: `0` = off (airplane), anything else or missing = on.
 pub const RADIO_FILE: &str = "/var/lib/walpad/mobile-radio";
@@ -113,6 +114,9 @@ pub struct Modem {
     root: Root,
     script: PathBuf,
     tty: PathBuf,
+    noti_tty: PathBuf,
+    noti: Option<std::fs::File>,
+    noti_buf: String,
     conf: PathBuf,
     radio_file: PathBuf,
     start_mark: PathBuf,
@@ -166,6 +170,9 @@ impl Modem {
             root: root.clone(),
             script: root.p(SCRIPT),
             tty: root.p(TTY),
+            noti_tty: root.p(NOTI_TTY),
+            noti: None,
+            noti_buf: String::new(),
             conf: root.p(CONF),
             radio_file: root.p(RADIO_FILE),
             start_mark: root.p(START_MARK),
@@ -676,6 +683,70 @@ impl Modem {
     }
 
     /// Advance the worker and the script. Returns true when the status changed.
+    fn poll_noti(&mut self) {
+        use std::io::Read;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        if self.st.modem != ModemState::Ready {
+            self.noti = None;
+            self.noti_buf.clear();
+            return;
+        }
+        if self.noti.is_none() && self.noti_tty.exists() {
+            if let Ok(f) = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+                .open(&self.noti_tty)
+            {
+                if let Ok(mut t) = rustix::termios::tcgetattr(&f) {
+                    t.make_raw();
+                    let _ =
+                        rustix::termios::tcsetattr(&f, rustix::termios::OptionalActions::Now, &t);
+                }
+                self.noti = Some(f);
+            }
+        }
+        let Some(f) = self.noti.as_mut() else {
+            return;
+        };
+        let mut buf = [0u8; 1024];
+        loop {
+            match f.read(&mut buf) {
+                Ok(0) => {
+                    self.noti = None;
+                    break;
+                }
+                Ok(n) => {
+                    self.noti_buf.push_str(&String::from_utf8_lossy(&buf[..n]));
+                    if self.noti_buf.len() > 8192 {
+                        let cut = self.noti_buf.len() - 4096;
+                        self.noti_buf.drain(..cut);
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(_) => {
+                    self.noti = None;
+                    break;
+                }
+            }
+        }
+        // Drain complete lines once any quoted +CUSD: payload has balanced quotes.
+        if let Some(end) = self.noti_buf.rfind('\n') {
+            let chunk = &self.noti_buf[..=end];
+            if chunk.bytes().filter(|&b| b == b'"').count() % 2 == 0 {
+                let lines: Vec<String> = chunk
+                    .split(['\n', '\r'])
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if let Some(c) = crate::phone::parse::cusd(&lines) {
+                    self.phone.on_cusd(c);
+                }
+                self.noti_buf.drain(..=end);
+            }
+        }
+    }
+
     pub fn tick(&mut self, now: Instant) -> bool {
         let before = self.st.clone();
         while let Some(r) = self.worker.as_ref().map(|w| w.try_recv()) {
@@ -693,6 +764,7 @@ impl Modem {
             }
         }
         self.tick_run(now);
+        self.poll_noti();
         if matches!(self.st.modem, ModemState::Present | ModemState::Failed)
             && self.run.is_none()
             && now >= self.next_check

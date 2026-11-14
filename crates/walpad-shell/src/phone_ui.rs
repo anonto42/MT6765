@@ -462,11 +462,11 @@ pub fn notice_line(st: &Option<Status>, online: bool) -> (String, Color) {
                 .unwrap_or_else(|| "Phone unavailable".into()),
             warning(),
         ),
-        // the honest part: signalling works, call sound is not verified on this device
-        Some(_) => (
+        Some(p) if p.audio == "experimental" => (
             "Call audio is experimental: it may be silent".into(),
             text_secondary(),
         ),
+        Some(_) => (String::new(), text_secondary()),
     }
 }
 
@@ -1363,7 +1363,10 @@ mod tests {
         off.as_mut().unwrap().phone.reason = Some("No usable SIM card".into());
         assert!(!can_call(&off, true, "999"));
         assert_eq!(notice_line(&off, true).0, "No usable SIM card");
-        assert!(notice_line(&st, true).0.contains("experimental"));
+        assert_eq!(notice_line(&st, true).0, "");
+        let mut exp = st.clone();
+        exp.as_mut().unwrap().phone.audio = "experimental".into();
+        assert!(notice_line(&exp, true).0.contains("experimental"));
         assert_eq!(notice_line(&st, false).1, DANGER);
     }
 

@@ -209,6 +209,27 @@ impl Apps {
         self.proxy = proxy.map(str::to_string);
     }
 
+    /// GTK theme env var matching the device theme in `/etc/walpad/shell.json`.
+    fn theme_env(root: &Root) -> (&'static str, &'static str) {
+        let light = std::fs::read_to_string(root.p("/etc/walpad/shell.json"))
+            .ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| {
+                v.get("theme")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t == "light")
+            })
+            .unwrap_or(false);
+        (
+            "GTK_THEME",
+            if light {
+                "Adwaita:light"
+            } else {
+                "Adwaita:dark"
+            },
+        )
+    }
+
     /// The proxy variables an app gets (lower and upper case, as tools differ).
     fn proxy_env(&self) -> Vec<(&'static str, String)> {
         match &self.proxy {
@@ -466,10 +487,12 @@ impl Apps {
                 .map(Stdio::from)
                 .unwrap_or_else(|_| Stdio::null())
         };
+        let (theme_k, theme_v) = Self::theme_env(root);
         let child = Command::new(&argv[0])
             .args(&argv[1..])
             .envs(CONTRACT_ENV.iter().copied())
             .envs(self.proxy_env())
+            .env(theme_k, theme_v)
             .envs(d.env.iter())
             .stdin(Stdio::null())
             .stdout(errlog())
@@ -857,5 +880,25 @@ mod tests {
             std::fs::read_to_string(&out).unwrap(),
             "--\n/root/Pictures/a.png\n"
         );
+    }
+
+    #[test]
+    fn spawned_apps_receive_gtk_theme_from_shell_json() {
+        let r = media_root();
+        let out = r.p("/gtk-theme-seen");
+        let json = serde_json::json!([
+            {"id":"probe","exec":["sh","-c","printf '%s' \"$GTK_THEME\" > \"$OUT\""],"env":{"OUT":out.to_string_lossy()}}
+        ]);
+        std::fs::write(r.p("/etc/walpad/apps.json"), json.to_string()).unwrap();
+
+        let mut a = Apps::load(&r);
+        a.spawn("probe", &r).unwrap();
+        reap_all(&mut a, 1);
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "Adwaita:dark");
+
+        std::fs::write(r.p("/etc/walpad/shell.json"), r#"{"theme":"light"}"#).unwrap();
+        a.spawn("probe", &r).unwrap();
+        reap_all(&mut a, 1);
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "Adwaita:light");
     }
 }

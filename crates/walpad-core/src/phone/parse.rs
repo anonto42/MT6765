@@ -189,8 +189,16 @@ pub struct Cusd {
 }
 
 pub fn cusd(lines: &[String]) -> Option<Cusd> {
-    let p = lines.iter().rev().find_map(|l| l.strip_prefix("+CUSD:"))?;
-    let f = fields(p);
+    let idx = lines.iter().rposition(|l| l.starts_with("+CUSD:"))?;
+    let mut joined = lines[idx].strip_prefix("+CUSD:")?.to_string();
+    // Multi-line USSD text (e.g. "+CUSD: 2, \"MSISDN:\n88013...\", 15"): join until quotes balance.
+    let mut i = idx + 1;
+    while joined.bytes().filter(|&b| b == b'"').count() % 2 == 1 && i < lines.len() {
+        joined.push('\n');
+        joined.push_str(&lines[i]);
+        i += 1;
+    }
+    let f = fields(&joined);
     let m: u8 = f.first()?.parse().ok()?;
     let dcs: u8 = f.get(2).and_then(|d| d.parse().ok()).unwrap_or(15);
     let text = f
@@ -346,6 +354,11 @@ mod tests {
         );
         let u = cusd(&l(&["+CUSD: 1,\"098609A809C1\",72"])).unwrap();
         assert_eq!((u.m, u.text.as_deref(), u.dcs), (1, Some("আনু"), 72));
+        let m = cusd(&l(&["+CUSD: 2, \"MSISDN:", "8801305408813\", 15"])).unwrap();
+        assert_eq!(
+            (m.m, m.text.as_deref(), m.dcs),
+            (2, Some("MSISDN:\n8801305408813"), 15)
+        );
     }
 
     #[test]
