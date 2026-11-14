@@ -14,6 +14,8 @@ pub const CONTRACT_ENV: &[(&str, &str)] = &[
     ("HOME", "/root"),
     ("XDG_RUNTIME_DIR", "/run/walpad"),
     ("LIBGL_ALWAYS_SOFTWARE", "1"),
+    ("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe"),
+    ("EGL_PLATFORM", "x11"),
     ("MOZ_DISABLE_CONTENT_SANDBOX", "1"),
     ("MOZ_DISABLE_GMP_SANDBOX", "1"),
     ("MOZ_DISABLE_RDD_SANDBOX", "1"),
