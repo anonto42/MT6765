@@ -49,7 +49,7 @@ run() { : > "$T_CALLS"; PATH=$B:$PATH sh "$A" "$@" 2>&1; }
 # --- default (no args): speaker + headset path on
 OUT=$(run)
 echo "$OUT" | grep -q 'speaker on' && ok "default: speaker on" || bad "default: speaker on" "$OUT" "speaker on"
-grep -q "name=Headset_Speaker_Amp_Switch On" "$T_CALLS" && ok "default: speaker amp on" || bad "default: speaker amp on" "$(cat "$T_CALLS")" set
+grep -q "name=Speaker_Amp_Switch On" "$T_CALLS" && ok "default: speaker amp on" || bad "default: speaker amp on" "$(cat "$T_CALLS")" set
 
 # --- jack headphone + headset mic: speaker off, headset amp on, ADC2/preamp2 path, mic source ADC2
 OUT=$(run jack headphone headset)
@@ -67,7 +67,7 @@ echo "$OUT" | grep -q 'jack route=headphone mic=headset' && ok "headphone+headse
 # --- jack speaker + builtin mic: back to normal
 OUT=$(run jack speaker builtin)
 echo "$OUT" | grep -q 'Audio_Amp_L_Switch = Off' && ok "speaker: headset L amp off" || bad "speaker: headset L amp off" "$OUT" Off
-echo "$OUT" | grep -q 'Headset_Speaker_Amp_Switch = On' && ok "speaker: headset+speaker amp on" || bad "speaker: headset+speaker amp on" "$OUT" On
+echo "$OUT" | grep -q 'Speaker_Amp_Switch = On' && ok "speaker: speaker amp on" || bad "speaker: speaker amp on" "$OUT" On
 echo "$OUT" | grep -q 'Ext_Speaker_Amp_Switch = On' && ok "speaker: ext speaker amp on" || bad "speaker: ext speaker amp on" "$OUT" On
 echo "$OUT" | grep -q 'Audio_ADC_1_Switch = On' && ok "builtin mic: ADC1 on" || bad "builtin mic: ADC1 on" "$OUT" On
 echo "$OUT" | grep -q 'Audio_MicSource1_Setting = ADC1' && ok "builtin mic: MicSource1 -> ADC1" || bad "builtin mic: MicSource1" "$OUT" ADC1
