@@ -1,14 +1,18 @@
-//! walpad-btbridge: joins the MediaTek CONNSYS Bluetooth char device (`/dev/stpbt`, H:4 byte
-//! stream, opened = BT function powered on) to the kernel's virtual HCI driver (`/dev/vhci`, one
-//! packet per read/write), so BlueZ sees an ordinary `hci0`.
+//! walpad-btbridge: Hexagonal architecture joining `/dev/stpbt` (H:4) to `/dev/vhci`.
+//! - `domain`: pure H:4 packet framing and MTK controller init sequence
+//! - `adapters`: VHCI and char-device fd I/O
+//! - `app`: bridge event loop
 //!
 //! Logging never contains packet payloads: only types, lengths and counters.
 
-pub mod h4;
-pub mod init;
+pub mod adapters;
+pub mod app;
+pub mod domain;
 
-mod bridge;
-mod io;
+pub use adapters::io;
+pub use app::bridge;
+pub use domain::{h4, init};
+
 #[cfg(test)]
 mod tests;
 

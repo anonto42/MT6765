@@ -1,8 +1,8 @@
 /// The owner's coffee wallpaper ("Grey and White Coffee Desktop Wallpaper", 2026-11-10): charcoal
 /// (`BG`) with sketched iced coffees and beans along the bottom, prepared for the panel in both
 /// orientations.
-pub const WALLPAPER_LANDSCAPE: &[u8] = include_bytes!("../../assets/wallpaper/landscape.png");
-pub const WALLPAPER_PORTRAIT: &[u8] = include_bytes!("../../assets/wallpaper/portrait.png");
+pub const WALLPAPER_LANDSCAPE: &[u8] = include_bytes!("../../../assets/wallpaper/landscape.png");
+pub const WALLPAPER_PORTRAIT: &[u8] = include_bytes!("../../../assets/wallpaper/portrait.png");
 
 /// Decoded wallpaper for a frame of `w` x `h` (landscape when wider than tall).
 pub fn wallpaper(w: i32, h: i32) -> Option<crate::canvas::Canvas> {

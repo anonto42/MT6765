@@ -2,13 +2,11 @@
 //! Newline-delimited JSON over /run/walpad/control.sock (see docs/rust/PLAN section 6).
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod appdefs;
-mod codec;
-mod command;
-mod devd;
-mod secret;
-mod status;
-pub mod wm;
+pub mod adapters;
+pub mod domain;
+
+pub use adapters::codec;
+pub use domain::{appdefs, command, devd, secret, status, wm};
 
 pub use codec::{encode_line, LineDecoder, LineError, MAX_LINE};
 pub use command::{

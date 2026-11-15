@@ -4,7 +4,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
-pub(super) fn rpc(sock: &Path, cmd: &str, args: Value) -> Result<Value, String> {
+pub(crate) fn rpc(sock: &Path, cmd: &str, args: Value) -> Result<Value, String> {
     let s = UnixStream::connect(sock).map_err(|e| format!("connect: {e}"))?;
     let t = Some(Duration::from_secs(5));
     s.set_read_timeout(t).map_err(|e| e.to_string())?;
@@ -32,7 +32,7 @@ pub(super) fn rpc(sock: &Path, cmd: &str, args: Value) -> Result<Value, String> 
 }
 
 /// Legacy fallback: translate back to a devd.cmd line (only the commands the Python daemon knew).
-pub(super) fn legacy_line(args: &[String]) -> Option<String> {
+pub(crate) fn legacy_line(args: &[String]) -> Option<String> {
     match args.first().map(String::as_str) {
         Some("screen" | "rotate" | "brightness") if args.len() > 1 => Some(args.join(" ")),
         Some("keyboard") => Some("keyboard".into()),
@@ -41,7 +41,7 @@ pub(super) fn legacy_line(args: &[String]) -> Option<String> {
 }
 
 /// Request that finishes with a `wifi` event of `kind` (scan, connect). Waits up to `wait`.
-pub(super) fn rpc_wifi(
+pub(crate) fn rpc_wifi(
     sock: &Path,
     cmd: &str,
     args: Value,
@@ -88,7 +88,7 @@ pub(super) fn rpc_wifi(
     }
 }
 
-pub(super) fn wifi_scan_text(data: &Value) -> String {
+pub(crate) fn wifi_scan_text(data: &Value) -> String {
     let mut out = String::new();
     for n in data["networks"].as_array().unwrap_or(&Vec::new()) {
         out.push_str(&format!(
@@ -101,6 +101,6 @@ pub(super) fn wifi_scan_text(data: &Value) -> String {
     out.trim_end().to_string()
 }
 
-pub(super) fn walpad_hex(b: &[u8]) -> String {
+pub(crate) fn walpad_hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }

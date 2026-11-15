@@ -3,14 +3,11 @@
 //! Every read returns Option/Result: a missing sensor is "unavailable", never guessed.
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-pub mod battery;
-pub mod evdev;
-pub mod gsensor;
-pub mod input;
-pub mod jack;
-pub mod sysfs;
-pub mod sysinfo;
-pub mod usb;
+pub mod adapters;
+pub mod domain;
+
+pub use adapters::{input, sysfs, sysinfo};
+pub use domain::{battery, evdev, gsensor, jack, usb};
 
 use std::path::{Path, PathBuf};
 

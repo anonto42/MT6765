@@ -2,11 +2,14 @@
 //! status.json while the Python device daemon is the runtime).
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
-mod request;
-mod rpc;
+pub mod adapters;
+pub mod domain;
+
+use adapters::rpc;
+use adapters::timeout;
+use domain::request;
 #[cfg(test)]
 mod tests;
-mod timeout;
 
 pub use request::{build_request, USAGE};
 use rpc::{legacy_line, rpc, rpc_wifi, walpad_hex, wifi_scan_text};
