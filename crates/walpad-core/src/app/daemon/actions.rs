@@ -132,6 +132,13 @@ impl Daemon {
                     if let Err(err) = sysfs::write_backlight(&self.root, v) {
                         eprintln!("walpad-core: backlight write failed: {err}");
                     }
+                    // Screen off → powersave governor; screen on → restore schedutil.
+                    // Best-effort: ignore if the kernel has no cpufreq or the path is read-only.
+                    let gov = if v == 0 { "powersave" } else { "schedutil" };
+                    let n = sysfs::write_cpufreq_governor(&self.root, gov);
+                    if n > 0 {
+                        eprintln!("walpad-core: cpufreq governor → {gov} ({n} policies)");
+                    }
                 }
                 Effect::Orientation(o) => {
                     if let Err(err) =

@@ -27,32 +27,40 @@ impl Shell {
         self.poll_overlays(now);
         self.poll_core_events(now);
 
-        self.dirty |= self.app.tick(now);
-        for ev in self.media.poll() {
-            self.dirty |= self.app.on_media(ev);
-        }
-        let queued = self.app.take_cmds();
-        self.send(queued);
-        if Instant::now() >= self.next_minute {
-            let (wall, to_minute) = WallTime::now(self.clock_24h);
-            self.next_minute = Instant::now() + Duration::from_millis(to_minute);
-            if let Some(l) = self.lock.as_mut() {
-                if let Err(e) = l.set_wall(wall.clone(), &mut self.fonts) {
-                    eprintln!("walpad-shell: lock screen: {}", e.0);
-                }
+        // Skip UI ticking, media polling and refresh when the screen is off: none of it
+        // is visible and it wastes CPU (especially the app.tick() timer tree).
+        if !self.screen_off {
+            self.dirty |= self.app.tick(now);
+            for ev in self.media.poll() {
+                self.dirty |= self.app.on_media(ev);
             }
-            self.dirty |= self.app.set_wall(wall);
-            // uptime and memory change: refresh the facts once a minute while Settings/Device is open
-            self.need_refresh |= matches!(
-                self.app.active,
-                walpad_ui::components::Tab::Settings | walpad_ui::components::Tab::Device
-            );
-        }
-        if self.need_refresh {
-            self.reload();
-        }
-        if self.dirty && !self.screen_off {
-            self.redraw()?;
+            let queued = self.app.take_cmds();
+            self.send(queued);
+            if Instant::now() >= self.next_minute {
+                let (wall, to_minute) = WallTime::now(self.clock_24h);
+                self.next_minute = Instant::now() + Duration::from_millis(to_minute);
+                if let Some(l) = self.lock.as_mut() {
+                    if let Err(e) = l.set_wall(wall.clone(), &mut self.fonts) {
+                        eprintln!("walpad-shell: lock screen: {}", e.0);
+                    }
+                }
+                self.dirty |= self.app.set_wall(wall);
+                // uptime and memory change: refresh the facts once a minute while Settings/Device is open
+                self.need_refresh |= matches!(
+                    self.app.active,
+                    walpad_ui::components::Tab::Settings | walpad_ui::components::Tab::Device
+                );
+            }
+            if self.need_refresh {
+                self.reload();
+            }
+            if self.dirty {
+                self.redraw()?;
+            }
+        } else {
+            // Screen is off: still drain any queued core commands so the socket doesn't stall.
+            let queued = self.app.take_cmds();
+            self.send(queued);
         }
 
         let wait = self.next_wait_ms(max_wait, now);

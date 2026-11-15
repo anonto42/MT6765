@@ -17,7 +17,9 @@ impl Shell {
                     let was_off = self.screen_off;
                     self.screen_off = s.screen == walpad_proto::ScreenState::Off;
                     if was_off && !self.screen_off {
+                        // screen just came back on: force a full redraw and refresh stats
                         self.dirty = true;
+                        self.need_refresh = true;
                     }
                     self.on_lock_status(&s.lock);
                     self.on_phone_status(&s.phone);
@@ -126,6 +128,15 @@ impl Shell {
         }
         if self.media.busy() {
             wait = wait.min(100); // thumbnails arrive from the background thread
+        }
+        // When the screen is off, any deadline except urgent retries (reconnect, pending
+        // lock / call window) is irrelevant: we cannot render and input does not reach us.
+        // Floor to 1 s so the shell stops burning a core on 1 ms ppoll timeouts.
+        let urgent = !self.core.connected()
+            || (self.call_wanted() && self.call.is_none())
+            || (self.lock_wanted && self.lock.is_none());
+        if self.screen_off && !urgent {
+            wait = wait.max(1_000);
         }
         wait.max(1)
     }

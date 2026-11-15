@@ -2,6 +2,8 @@ use crate::Root;
 use std::io::Write;
 
 pub const BACKLIGHT: &str = "/sys/class/leds/lcd-backlight/brightness";
+/// cpufreq sysfs directory (all policy clusters share the same prefix on MT6765).
+const CPUFREQ_BASE: &str = "/sys/devices/system/cpu/cpufreq";
 
 /// Read a sysfs/proc file, trimmed. None if missing or unreadable.
 pub fn read_trim(root: &Root, path: &str) -> Option<String> {
@@ -21,6 +23,31 @@ pub fn write_backlight(root: &Root, value: u32) -> std::io::Result<()> {
         .truncate(true)
         .open(root.p(BACKLIGHT))?;
     f.write_all(value.min(255).to_string().as_bytes())
+}
+
+/// Write `governor` (e.g. `"powersave"` / `"schedutil"`) to every cpufreq policy on the SoC.
+/// Best-effort: missing or read-only paths are silently skipped (no kernel governor support, test
+/// root, or read-only mount).  Returns the number of policies updated (0 is not an error).
+pub fn write_cpufreq_governor(root: &Root, governor: &str) -> usize {
+    let base = root.p(CPUFREQ_BASE);
+    let Ok(rd) = std::fs::read_dir(&base) else {
+        return 0;
+    };
+    let mut count = 0usize;
+    for entry in rd.flatten() {
+        if !entry
+            .file_name()
+            .to_str()
+            .is_some_and(|n| n.starts_with("policy"))
+        {
+            continue;
+        }
+        let path = entry.path().join("scaling_governor");
+        if std::fs::write(&path, governor).is_ok() {
+            count += 1;
+        }
+    }
+    count
 }
 
 /// Uptime in seconds from /proc/uptime.
