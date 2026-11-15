@@ -42,10 +42,9 @@ cmd=${1:-}
 case "$cmd" in
   "")
     have_card || { echo "walpad-audio: no sound card"; exit 0; }
-    set_ctl Speaker_Amp_Switch Off
     set_ctl Audio_Amp_L_Switch Off
     set_ctl Audio_Amp_R_Switch Off
-    set_ctl Headset_Speaker_Amp_Switch Off
+    set_ctl Speaker_Amp_Switch On
     set_ctl Headset_Speaker_Amp_Switch On
     set_ctl Ext_Speaker_Amp_Switch On
     set_ctl Lineout_PGAL_GAIN 8   # 0 dB
@@ -71,8 +70,7 @@ case "$cmd" in
       speaker)
         set_ctl Audio_Amp_L_Switch Off
         set_ctl Audio_Amp_R_Switch Off
-        set_ctl Speaker_Amp_Switch Off
-        set_ctl Headset_Speaker_Amp_Switch Off
+        set_ctl Speaker_Amp_Switch On
         set_ctl Headset_Speaker_Amp_Switch On
         set_ctl Ext_Speaker_Amp_Switch On
         set_ctl Lineout_PGAL_GAIN 8

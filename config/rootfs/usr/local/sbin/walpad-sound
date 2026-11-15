@@ -29,8 +29,8 @@ case $1 in
         [ -n "$1" ] && walpad-volume apply "$1" "${2:-0}" >/dev/null 2>&1
       fi
       if command -v parec >/dev/null 2>&1 && command -v aplay >/dev/null 2>&1; then
-        pkill -x parec 2>/dev/null; pkill -x aplay 2>/dev/null
-        ( setsid sh -c 'echo $$ > /run/pulse/bridge.pid; while timeout 3 pactl info >/dev/null 2>&1; do nice -n -11 parec -s unix:/run/pulse/native -d walpad.monitor --raw --rate=44100 --channels=2 --format=s16le --latency-msec=20 | nice -n -11 aplay -D hw:0,0 -f S16_LE -r 44100 -c 2 -t raw --period-size=1024 --buffer-size=6144; sleep 1; done' >> /var/log/walpad-audio-bridge.log 2>&1 < /dev/null & )
+        pkill -f "parec.*walpad.monitor" 2>/dev/null; pkill -x parec 2>/dev/null; pkill -x aplay 2>/dev/null
+        ( setsid sh -c 'echo $$ > /run/pulse/bridge.pid; while timeout 3 pactl info >/dev/null 2>&1; do nice -n -11 parec -s unix:/run/pulse/native -d walpad.monitor --raw --rate=44100 --channels=2 --format=s16le --latency-msec=100 | nice -n -11 aplay -D hw:0,0 -f S16_LE -r 44100 -c 2 -t raw --period-size=1024 --buffer-size=8192; sleep 1; done' >> /var/log/walpad-audio-bridge.log 2>&1 < /dev/null & )
       fi
       echo "walpad-sound: up"
     else
@@ -39,6 +39,7 @@ case $1 in
   stop)
     [ -r /run/pulse/bridge.pid ] && kill "$(cat /run/pulse/bridge.pid)" 2>/dev/null
     rm -f /run/pulse/bridge.pid
+    pkill -f "parec.*walpad.monitor" 2>/dev/null
     pkill -x parec 2>/dev/null; pkill -x aplay 2>/dev/null
     timeout 5 pactl exit 2>/dev/null; sleep 1
     pkill -x pulseaudio 2>/dev/null; echo "walpad-sound: stopped" ;;
