@@ -53,6 +53,11 @@
   fail with "Unknown field period_time", so PulseAudio's sink never loaded (log: "Failed to parse module
   arguments", `mixer_reset` is no alsa-sink argument either) and Firefox had no output. dmix fails too (no
   SysV IPC). Fix: sink on `device=hw:0,0` with rate/format/fragments in system.pa; plain plug in asound.conf.
+- Audio lost after fb0 blank / screen off (2026-11-15): writing `4` to `/sys/class/graphics/fb0/blank`
+  triggers PMIC analog power-down, which resets the MT6357 audio codec and turns off all mixer switches.
+  Never blank fb0 for power saving. Also, WalPad speaker routing requires BOTH `Speaker_Amp_Switch On`
+  (enables internal DAC power) AND `Ext_Speaker_Amp_Switch On` (AW87519 external amplifier). The `parec | aplay`
+  bridge latency must be >=100ms with buffer >=8192 frames; 20ms starved `aplay` during high-CPU video playback.
 - Panel colours (2026-11-11): /dev/fb0 reads a pixel's bytes as R,G,B (not B,G,R): solid red written as BGRA
   showed blue, blue showed red, YouTube's red logo looked purple. fbmirror swaps the R/B bytes (PX macro).
   Anything else drawing straight to fb0 (padui, splash) needs the same order. Test: write solid colours to
