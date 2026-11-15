@@ -1,0 +1,31 @@
+# Walton WalPad 8G Hardware Specification
+
+[soc]
+vendor = "MediaTek"
+model = "MT6765"
+cores = 8
+cpu_arch = "ARM Cortex-A53"
+gpu = "PowerVR GE8320"
+
+[memory]
+ram_size_mb = 3072
+ram_type = "LPDDR4x"
+storage_size_gb = 32
+storage_type = "eMMC 5.1"
+
+[pmic]
+model = "MT6357"
+regulators = ["vproc", "vsram", "vcore", "vldo28"]
+
+[codec]
+model = "MT6357"
+sample_rate_hz = 44100
+channels = 2
+bits = 16
+
+[sensors]
+accelerometer = "mc34xx"
+ambient_light = "none"
+proximity = "none"
+compass = "none"
+gyroscope = "none"

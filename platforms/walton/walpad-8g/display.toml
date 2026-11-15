@@ -1,0 +1,21 @@
+# Walton WalPad 8G Display Specification
+
+[panel]
+width = 800
+height = 1280
+refresh_rate_hz = 60
+default_orientation = "portrait"
+color_depth = 24
+scale_factor = 1.0
+
+[backlight]
+driver = "leds-mt65xx"
+sysfs_path = "/sys/class/leds/lcd-backlight/brightness"
+max_brightness = 255
+min_brightness = 5
+off_value = 0
+
+[framebuffer]
+device = "/dev/fb0"
+virtual_width = 1280
+virtual_height = 1280

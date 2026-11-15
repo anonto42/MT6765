@@ -1,0 +1,44 @@
+# Reference Profile: Lenovo Example Tablet (Tier 2 Candidate)
+
+[device]
+id = "lenovo-example-tablet"
+name = "Lenovo Tab M10 Example"
+manufacturer = "Lenovo"
+model = "Tab M10 Plus"
+codename = "tb125fu"
+architecture = "aarch64"
+soc = "mediatek-helio-g80"
+tier = 2
+
+[display]
+width = 1200
+height = 2000
+orientation = "portrait"
+backlight = "/sys/class/leds/lcd-backlight/brightness"
+
+[input]
+backend = "linux-evdev"
+touch_name_patterns = ["mediatek,touch", "gt9xx", "touchscreen"]
+power_key_name = "mtk-pmic-keys"
+volume_keys_name = "mtk-kpd"
+
+[network]
+wifi_backend = "mediatek-connsys"
+wifi_device = "wlan0"
+bt_device = "hci0"
+
+[power]
+backend = "linux-sysfs"
+battery_capacity = "/sys/class/power_supply/battery/capacity"
+battery_status = "/sys/class/power_supply/battery/status"
+
+[audio]
+codec = "mt6358"
+audio_script = "/usr/local/sbin/lenovo-audio"
+
+[capabilities]
+camera = "unsupported"
+gnss = "supported"
+modem = "unsupported"
+accelerometer = "supported"
+bluetooth = "supported"

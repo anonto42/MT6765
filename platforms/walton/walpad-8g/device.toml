@@ -1,0 +1,44 @@
+# Walton WalPad 8G Device Profile (Tier 1 Reference)
+
+[device]
+id = "walton-walpad-8g"
+name = "Walton WalPad 8G"
+manufacturer = "Walton"
+model = "WalPad 8G"
+codename = "walpad8g"
+architecture = "aarch64"
+soc = "mediatek-mt6765"
+tier = 1
+
+[display]
+width = 800
+height = 1280
+orientation = "portrait"
+backlight = "/sys/class/leds/lcd-backlight/brightness"
+
+[input]
+backend = "linux-evdev"
+touch_name_patterns = ["mtk-tpd", "gsl3670", "touchscreen"]
+power_key_name = "mtk-pmic-keys"
+volume_keys_name = "mtk-kpd"
+
+[network]
+wifi_backend = "mediatek-connsys"
+wifi_device = "wlan0"
+bt_device = "hci0"
+
+[power]
+backend = "linux-sysfs"
+battery_capacity = "/sys/class/power_supply/battery/capacity"
+battery_status = "/sys/class/power_supply/battery/status"
+
+[audio]
+codec = "mt6357"
+audio_script = "/usr/local/sbin/walpad-audio"
+
+[capabilities]
+camera = "unsupported"
+gnss = "supported"
+modem = "supported"
+accelerometer = "supported"
+bluetooth = "unsupported"

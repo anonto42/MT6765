@@ -210,5 +210,12 @@ any otg or other thinks was connected".
   list, newest first, tap a row to mark it read, Clear all button). Day-grouping and swipe-to-clear
   are left out (a plain list and a Clear all button cover the same need, owner: keep it minimal).
 
+## Device Profile & Multi-Device Portability (owner request 2026-11-15, OpenSpec `multi-device-portability`)
+- Profiles live under `/etc/walpad/device.toml` (target device runtime) or `platforms/<vendor>/<model>/device.toml` (source tree).
+- `DeviceProfile` (`walpad_hw::domain::device_profile`) schema: `id`, `name`, `manufacturer`, `model`, `codename`, `architecture`, `soc`, `tier` (1=reference, 2=basic, 3=generic), `display` (width, height, orientation, backlight_path), `input` (backend, touch_name_patterns, power_key_name, volume_keys_name), `network` (wifi_backend, wifi_device, bt_device), `power` (backend, battery_capacity_path, battery_status_path), `audio` (codec, audio_script), and `capabilities` (camera, gnss, modem, accelerometer, bluetooth).
+- Missing profiles or unreadable nodes fall back to safe default profiles (`default_walpad_8g` or `generic_arm64`). Every capability read is `Supported`, `Unsupported`, or `Unknown`; absent hardware is never guessed and never panics.
+- Binary `walpad-device-detect` probes devicetree compatible, cpuinfo, input evdev, display backlight, power supplies, network, audio, and sensors; outputs human-readable report or `--json` audit.
+
 ## Known hardware status
 Working: display, power/volume keys, cover sensor. Touch works, calibration inaccurate. Auto-rotation built, direction unverified. Battery gauge broken (-1), voltage estimate only. Wi-Fi built, unverified after cold boot. Browser/terminal built, unverified. Audio unverified. Bluetooth: HCI up through hci_vhci + walpad-btbridge, UI and IPC built (no device found yet in scans), suspend, SD, USB OTG not working/not attempted. Camera unsupported.
+

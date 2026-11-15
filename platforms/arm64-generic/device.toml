@@ -1,0 +1,44 @@
+# Generic ARM64 Platform Profile (Tier 3 Fallback)
+
+[device]
+id = "arm64-generic"
+name = "Generic ARM64 Device"
+manufacturer = "Generic"
+model = "ARM64 Standard"
+codename = "generic-arm64"
+architecture = "aarch64"
+soc = "generic"
+tier = 3
+
+[display]
+width = 1280
+height = 800
+orientation = "landscape"
+backlight = "/sys/class/backlight"
+
+[input]
+backend = "linux-evdev"
+touch_name_patterns = ["touchscreen", "touch"]
+power_key_name = "power"
+volume_keys_name = "keys"
+
+[network]
+wifi_backend = "generic-nl80211"
+wifi_device = "wlan0"
+bt_device = "hci0"
+
+[power]
+backend = "linux-sysfs"
+battery_capacity = "/sys/class/power_supply/battery/capacity"
+battery_status = "/sys/class/power_supply/battery/status"
+
+[audio]
+codec = "generic-alsa"
+audio_script = ""
+
+[capabilities]
+camera = "unknown"
+gnss = "unknown"
+modem = "unknown"
+accelerometer = "unknown"
+bluetooth = "unknown"

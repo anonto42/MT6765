@@ -1,0 +1,21 @@
+# Walton WalPad 8G Network Specification
+
+[wifi]
+subsystem = "MediaTek CONNSYS"
+chipset = "MT6631 / MT7668"
+interface = "wlan0"
+stack_script = "/usr/local/sbin/walpad-wifi"
+supports_sta = true
+supports_ap = true
+
+[bluetooth]
+subsystem = "MediaTek CONNSYS"
+controller = "hci0"
+bridge_daemon = "walpad-btbridge"
+requires_vhci = true
+
+[cellular]
+modem = "MediaTek MT6765 LTE Telephony (MD1)"
+at_device = "/dev/radio/pttycmd1"
+data_device = "ccmni0"
+daemon = "walpad-modem"

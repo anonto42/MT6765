@@ -1,0 +1,13 @@
+[package]
+name = "walpad-device-detect"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+walpad-hw = { path = "../walpad-hw" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

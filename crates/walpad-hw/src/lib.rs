@@ -7,7 +7,7 @@ pub mod adapters;
 pub mod domain;
 
 pub use adapters::{input, sysfs, sysinfo};
-pub use domain::{battery, evdev, gsensor, jack, usb};
+pub use domain::{battery, capability, device_profile, evdev, gsensor, jack, usb};
 
 use std::path::{Path, PathBuf};
 

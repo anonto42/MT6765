@@ -1,0 +1,20 @@
+# Walton WalPad 8G Power & Battery Specification
+
+[battery]
+capacity_path = "/sys/class/power_supply/battery/capacity"
+status_path = "/sys/class/power_supply/battery/status"
+voltage_path = "/sys/class/power_supply/battery/voltage_now"
+current_path = "/sys/class/power_supply/battery/current_now"
+temp_path = "/sys/class/power_supply/battery/temp"
+min_voltage_mv = 3400
+max_voltage_mv = 4350
+
+[ac_usb]
+charger_path = "/sys/class/power_supply/ac/online"
+usb_path = "/sys/class/power_supply/usb/online"
+
+[governors]
+powersave = "powersave"
+performance = "schedutil"
+sleep_poll_ms = 1000
+awake_poll_ms = 250

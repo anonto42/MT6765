@@ -9,3 +9,5 @@ workspace = true
 
 [dependencies]
 rustix = { version = "1", features = ["fs", "event", "std"] }
+serde = { version = "1", features = ["derive"] }
+

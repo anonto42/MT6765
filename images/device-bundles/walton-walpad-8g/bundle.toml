@@ -1,0 +1,36 @@
+# Walton WalPad 8G Device Bundle Configuration
+
+[bundle]
+device_id = "walton-walpad-8g"
+bundle_version = "1.0.0"
+target_architecture = "aarch64"
+compatibility_tier = 1
+
+[kernel]
+version = "4.19.127"
+source = "vendor-mediatek"
+defconfig = "k65v1_64_bsp_defconfig"
+image_format = "boot.img (Android A/B header v2)"
+
+[devicetree]
+dtb_name = "mt6765-k65v1-64-bsp.dtb"
+dtbo_partition = "dtbo_a"
+
+[bootloader]
+type = "mediatek-preloader-lk"
+slot_mode = "ab"
+boot_partition = "boot_a"
+ramdisk_init = "/sbin/walpad-init"
+
+[firmware]
+blobs = [
+  "mt6631_patch_e2_hdr.bin",
+  "WMT_SOC.cfg",
+  "gsl3670_fw.bin"
+]
+vendor_mount = "/vendor"
+
+[overlays]
+rootfs_overlay = "platforms/walton/walpad-8g/rootfs-overlay"
+profile_source = "platforms/walton/walpad-8g/device.toml"
+destination = "/etc/walpad/device.toml"

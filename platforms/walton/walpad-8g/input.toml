@@ -1,0 +1,16 @@
+# Walton WalPad 8G Input Specification
+
+[touchscreen]
+controller = "Silead GSL3670"
+bus = "i2c"
+match_patterns = ["mtk-tpd", "gsl3670", "touchscreen"]
+max_contacts = 5
+coordinate_max_x = 800
+coordinate_max_y = 1280
+
+[keys]
+power_device = "mtk-pmic-keys"
+volume_device = "mtk-kpd"
+power_code = 116
+volume_up_code = 115
+volume_down_code = 114

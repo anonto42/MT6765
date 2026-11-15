@@ -686,6 +686,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "walpad-device-detect"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "walpad-hw",
+]
+
+[[package]]
 name = "walpad-gnss"
 version = "0.1.0"
 dependencies = [
@@ -699,6 +708,7 @@ name = "walpad-hw"
 version = "0.1.0"
 dependencies = [
  "rustix",
+ "serde",
 ]
 
 [[package]]

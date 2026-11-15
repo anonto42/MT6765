@@ -1,0 +1,44 @@
+# Reference Profile: Samsung Example Tablet (Tier 2 Candidate)
+
+[device]
+id = "samsung-example-tablet"
+name = "Samsung Galaxy Tab Example"
+manufacturer = "Samsung"
+model = "Galaxy Tab A7 / S6 Lite"
+codename = "gta7lite"
+architecture = "aarch64"
+soc = "qualcomm-snapdragon-662"
+tier = 2
+
+[display]
+width = 1200
+height = 2000
+orientation = "portrait"
+backlight = "/sys/class/backlight/panel/brightness"
+
+[input]
+backend = "linux-evdev"
+touch_name_patterns = ["sec_touchscreen", "goodix_ts", "touchscreen"]
+power_key_name = "gpio-keys"
+volume_keys_name = "gpio-keys"
+
+[network]
+wifi_backend = "qualcomm-wcn3990"
+wifi_device = "wlan0"
+bt_device = "hci0"
+
+[power]
+backend = "linux-sysfs"
+battery_capacity = "/sys/class/power_supply/battery/capacity"
+battery_status = "/sys/class/power_supply/battery/status"
+
+[audio]
+codec = "wcd9370"
+audio_script = "/usr/local/sbin/samsung-audio"
+
+[capabilities]
+camera = "unsupported"
+gnss = "supported"
+modem = "supported"
+accelerometer = "supported"
+bluetooth = "supported"
