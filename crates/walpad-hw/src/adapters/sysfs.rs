@@ -2,7 +2,6 @@ use crate::Root;
 use std::io::Write;
 
 pub const BACKLIGHT: &str = "/sys/class/leds/lcd-backlight/brightness";
-pub const FB_BLANK: &str = "/sys/class/graphics/fb0/blank";
 /// cpufreq sysfs directory (all policy clusters share the same prefix on MT6765).
 const CPUFREQ_BASE: &str = "/sys/devices/system/cpu/cpufreq";
 
@@ -24,17 +23,6 @@ pub fn write_backlight(root: &Root, value: u32) -> std::io::Result<()> {
         .truncate(true)
         .open(root.p(BACKLIGHT))?;
     f.write_all(value.min(255).to_string().as_bytes())
-}
-
-/// Blank (4 = powerdown) or unblank (0) the framebuffer display controller.
-/// Best-effort: ignores missing paths on test trees.
-pub fn write_fb_blank(root: &Root, blank: bool) -> std::io::Result<()> {
-    let path = root.p(FB_BLANK);
-    if !path.exists() {
-        return Ok(());
-    }
-    let mut f = std::fs::OpenOptions::new().write(true).open(path)?;
-    f.write_all(if blank { b"4\n" } else { b"0\n" })
 }
 
 /// Write `governor` (e.g. `"powersave"` / `"schedutil"`) to every cpufreq policy on the SoC.
