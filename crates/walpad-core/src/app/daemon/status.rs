@@ -51,6 +51,14 @@ impl Daemon {
                 wifi.ip = live.ip.clone();
             }
         }
+        let is_touch = |n: &str| {
+            self.profile
+                .input
+                .touch_name_patterns
+                .iter()
+                .any(|p| n.to_ascii_lowercase().contains(&p.to_ascii_lowercase()))
+                || input::is_touch(n)
+        };
         let devs = input::discover(&self.root);
         let bt = self.bluetooth.status();
         let ok = |b: bool| if b { "ok" } else { "unavailable" }.to_string();
@@ -74,7 +82,8 @@ impl Daemon {
             lock: self.lock.status(wall_ms()),
             apps: self.apps.status(&self.root),
             hardware: Hardware {
-                touch: ok(input::find(&devs, input::is_touch).is_some()),
+                touch: ok(input::find(&devs, is_touch).is_some()),
+
                 gsensor: ok(read_gsensor(&self.root).is_some()),
                 audio: "unverified".into(),
                 bluetooth: if bt.controller == walpad_proto::BluetoothController::Present {

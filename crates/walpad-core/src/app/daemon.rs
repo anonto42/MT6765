@@ -83,7 +83,9 @@ pub struct Daemon {
     pub(super) shadow: Option<crate::shadow_live::Live>,
     pub(super) live: Option<LiveState>,
     pub(super) apps: Apps,
+    pub(super) profile: walpad_hw::domain::device_profile::DeviceProfile,
     pub(super) wifi: Wifi,
+
     pub(super) hotspot: Hotspot,
     pub(super) gnss: Gnss,
     pub(super) stats: Stats,
@@ -137,6 +139,7 @@ impl Daemon {
             0,
         );
         let apps = Apps::load(&root);
+        let profile = walpad_hw::domain::device_profile::DeviceProfile::detect(&root);
         let mut d = Daemon {
             brain,
             listener,
@@ -159,7 +162,9 @@ impl Daemon {
             shadow: None,
             live: None,
             apps,
+            profile,
             wifi: Wifi::new(&root),
+
             hotspot: Hotspot::new(&root),
             gnss: Gnss::new(&root),
             stats: Stats::new(&root),
@@ -209,6 +214,10 @@ impl Daemon {
     pub fn socket_path(&self) -> &std::path::Path {
         &self.sock_path
     }
+    pub fn profile(&self) -> &walpad_hw::domain::device_profile::DeviceProfile {
+        &self.profile
+    }
+
     pub(super) fn now_ms(&self) -> u64 {
         self.started.elapsed().as_millis() as u64
     }
